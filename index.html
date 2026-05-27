@@ -1,42 +1,615 @@
 <!DOCTYPE html>
-<html>
-	<head>
-		<style>
-			.vertical-menu {
-				width: 200px; /* Set a width if you like */
-			}
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Canvas Lab — Interactive Demos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,700;0,9..144,800;1,9..144,400;1,9..144,700;1,9..144,800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-			.vertical-menu a {
-				background-color: #eee; /* Grey background color */
-				color: black; /* Black text color */
-				display: block; /* Make the links appear below each other */
-				padding: 12px; /* Add some padding */
-				text-decoration: none; /* Remove underline from links */
-				font-family: "Gill Sans", "Gill Sans MT", Calibri, "Trebuchet MS", sans-serif;
-			}
+    /* ─── TOKENS ─── */
+    :root {
+      /* Backgrounds — warm dark chocolate */
+      --bg:      #181210;
+      --bg-card: #231a11;
+      --bg-lift: #2c2116;
 
-			.vertical-menu a:hover {
-				background-color: #ccc; /* Dark grey background on mouse-over */
-			}
+      /* Gold · primary */
+      --gold-hi:  #fdd87a;
+      --gold:     #f5a623;
+      --gold-mid: #c07800;
+      --gold-lo:  #7a4a00;
+      --gold-tint: rgba(245,166,35,0.12);
 
-			.vertical-menu a.active {
-				background-color: #4caf50; /* Add a green color to the "active/current" link */
-				color: white;
-			}
-		</style>
-	</head>
-	<body>
-		<div class="vertical-menu">
-			<a href="index.html" class="active">index</a>
-			<a href="Raycaster/Raycaster.html">Raycaster</a>
-			<a href="Lissajous/Lissajous.html">Lissajous figures</a>
-			<a href="LissajousRotating/LissajousRotating.html">Rotating Lissajous figure</a>
-			<a href="PhaseshiftDemo1/PhaseshiftDemo1.html">Phaseshift Demo 1</a>
-			<a href="CircularMotion/CircularMotion.html">Circular motion</a>
-			<a href="RotatingSquares/RotatingSquares.html">Rotating squares</a>
-			<a href="GravitySimulation/GravitySim.html">Gravity Simulation</a>
-			<a href="Quadtree/Quadtree.html">Quadtree</a>
-			<a href="Bouncink/bouncink.html">Bouncink</a>
-		</div>
-	</body>
+      /* Coral · secondary */
+      --coral-hi:  #ffb599;
+      --coral:     #ff6b47;
+      --coral-mid: #cc3e20;
+      --coral-lo:  #7a1f0a;
+      --coral-tint: rgba(255,107,71,0.12);
+
+      /* Text — warm cream */
+      --tx:    #f5e8d4;
+      --tx-2:  #a08060;
+      --tx-3:  #5a3820;
+      --tx-4:  #3a2210;
+
+      /* Shadows */
+      --shadow-sm: 0 2px 8px rgba(0,0,0,0.25), 0 1px 2px rgba(0,0,0,0.15);
+      --shadow-md: 0 8px 28px rgba(0,0,0,0.35), 0 3px 8px rgba(0,0,0,0.20);
+      --shadow-lg: 0 20px 48px rgba(0,0,0,0.45), 0 6px 14px rgba(0,0,0,0.25);
+    }
+
+    html.light {
+      --bg:      #faf5ee;
+      --bg-card: #ffffff;
+      --bg-lift: #fff9f2;
+
+      --gold-hi:  #7a4a00;
+      --gold:     #c07800;
+      --gold-mid: #e09a00;
+      --gold-lo:  #f5c84a;
+      --gold-tint: rgba(180,110,0,0.09);
+
+      --coral-hi:  #7a1f0a;
+      --coral:     #c83820;
+      --coral-mid: #e05030;
+      --coral-lo:  #f0a080;
+      --coral-tint: rgba(180,50,25,0.09);
+
+      --tx:    #1a1008;
+      --tx-2:  #7a5030;
+      --tx-3:  #a07848;
+      --tx-4:  #d4b888;
+
+      --shadow-sm: 0 2px 8px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.05);
+      --shadow-md: 0 8px 28px rgba(0,0,0,0.10), 0 3px 8px rgba(0,0,0,0.07);
+      --shadow-lg: 0 20px 48px rgba(0,0,0,0.14), 0 6px 14px rgba(0,0,0,0.09);
+    }
+
+    /* ─── BASE ─── */
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--tx);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+      transition: background-color 0.4s ease, color 0.4s ease;
+    }
+
+    /* ─── BACKGROUND BLOBS ─── */
+    .blobs {
+      position: fixed; inset: 0; z-index: 0;
+      pointer-events: none; overflow: hidden;
+    }
+    .blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(90px);
+    }
+    .blob-1 {
+      width: 580px; height: 480px;
+      top: -180px; left: -140px;
+      background: var(--gold);
+      opacity: 0.13;
+    }
+    .blob-2 {
+      width: 420px; height: 420px;
+      bottom: -120px; right: -100px;
+      background: var(--coral);
+      opacity: 0.11;
+    }
+    .blob-3 {
+      width: 300px; height: 260px;
+      top: 45%; left: 55%;
+      background: var(--gold-hi);
+      opacity: 0.07;
+    }
+
+    html.light .blob-1 { opacity: 0.18; }
+    html.light .blob-2 { opacity: 0.14; }
+    html.light .blob-3 { opacity: 0.10; }
+
+    /* ─── LAYOUT ─── */
+    .wrap {
+      position: relative; z-index: 1;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 48px;
+    }
+
+    /* ─── THEME TOGGLE ─── */
+    .theme-toggle {
+      position: fixed;
+      top: 28px; right: 48px;
+      z-index: 300;
+      display: flex; align-items: center; gap: 8px;
+      background: var(--bg-card);
+      border: 1.5px solid var(--tx-4);
+      border-radius: 40px;
+      color: var(--tx-2);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 8px 18px 8px 12px;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: border-color 0.2s, color 0.2s,
+                  background-color 0.4s, box-shadow 0.2s;
+    }
+    .theme-toggle:hover {
+      border-color: var(--gold);
+      color: var(--gold);
+      box-shadow: var(--shadow-md);
+    }
+    .toggle-icon {
+      font-size: 15px; line-height: 1;
+      display: inline-block;
+      transition: transform 0.5s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .theme-toggle:hover .toggle-icon { transform: rotate(30deg) scale(1.1); }
+
+    /* ─── HEADER ─── */
+    header {
+      padding: 100px 0 64px;
+      position: relative;
+    }
+
+    .hdr-eyebrow {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      color: var(--gold);
+      margin-bottom: 24px;
+      opacity: 0;
+      animation: riseIn 0.6s ease 0.05s forwards;
+    }
+    .hdr-eyebrow .pip {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--gold);
+      animation: glow 2.5s ease-in-out infinite;
+    }
+    @keyframes glow {
+      0%,100% { box-shadow: 0 0 0 0 rgba(245,166,35,0.5); opacity: 1; }
+      50%      { box-shadow: 0 0 0 7px rgba(245,166,35,0); opacity: 0.6; }
+    }
+
+    .hdr-title {
+      font-family: 'Fraunces', serif;
+      font-weight: 800;
+      font-size: clamp(60px, 9.5vw, 116px);
+      line-height: 0.92;
+      letter-spacing: -0.02em;
+      color: var(--tx);
+      opacity: 0;
+      animation: riseIn 0.7s ease 0.12s forwards;
+    }
+    .hdr-title em {
+      font-style: italic;
+      color: var(--coral);
+    }
+
+    .hdr-divider {
+      width: 56px; height: 3px;
+      background: linear-gradient(90deg, var(--gold), var(--coral));
+      border-radius: 2px;
+      margin: 36px 0 28px;
+      opacity: 0;
+      animation: riseIn 0.6s ease 0.22s forwards;
+    }
+
+    .hdr-sub {
+      font-size: 16px;
+      font-weight: 400;
+      line-height: 1.7;
+      color: var(--tx-2);
+      max-width: 480px;
+      opacity: 0;
+      animation: riseIn 0.6s ease 0.30s forwards;
+    }
+
+    .hdr-badges {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      margin-top: 28px;
+      opacity: 0;
+      animation: riseIn 0.6s ease 0.38s forwards;
+    }
+    .badge {
+      font-size: 12px;
+      font-weight: 500;
+      padding: 5px 14px;
+      border-radius: 40px;
+      background: var(--gold-tint);
+      color: var(--gold-mid);
+      border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
+    }
+    .badge.coral {
+      background: var(--coral-tint);
+      color: var(--coral-mid);
+      border-color: color-mix(in srgb, var(--coral) 30%, transparent);
+    }
+
+    @keyframes riseIn {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ─── DEMO GRID ─── */
+    .demos { padding: 48px 0 120px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+
+    /* ─── CARD ─── */
+    .card {
+      position: relative;
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 28px 26px 24px;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 200px;
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.28s cubic-bezier(0.34,1.4,0.64,1),
+                  box-shadow 0.28s ease,
+                  background-color 0.4s ease;
+      overflow: hidden;
+
+      opacity: 0;
+      animation: riseIn 0.5s ease forwards;
+    }
+    .card:nth-child(1)  { animation-delay: 0.10s; }
+    .card:nth-child(2)  { animation-delay: 0.17s; }
+    .card:nth-child(3)  { animation-delay: 0.24s; }
+    .card:nth-child(4)  { animation-delay: 0.31s; }
+    .card:nth-child(5)  { animation-delay: 0.38s; }
+    .card:nth-child(6)  { animation-delay: 0.45s; }
+    .card:nth-child(7)  { animation-delay: 0.52s; }
+    .card:nth-child(8)  { animation-delay: 0.59s; }
+    .card:nth-child(9)  { animation-delay: 0.66s; }
+
+    /* Coloured left stripe */
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 20px; bottom: 20px; left: 0;
+      width: 3px;
+      border-radius: 0 3px 3px 0;
+      background: var(--gold);
+      opacity: 0;
+      transition: opacity 0.3s ease, height 0.3s ease;
+    }
+    .card:hover {
+      transform: translateY(-7px);
+      box-shadow: var(--shadow-lg);
+      background: var(--bg-lift);
+    }
+    .card:hover::before       { opacity: 1; }
+    .card:hover .card-arrow   { transform: translate(4px, -4px); opacity: 1; }
+    .card:hover .card-title   { color: var(--gold); }
+
+    /* Wide card */
+    .card-wide             { grid-column: span 2; }
+    .card-wide .card-title { font-size: 40px; }
+    .card-wide::before     { background: linear-gradient(to bottom, var(--gold), var(--coral)); }
+
+    /* Card parts */
+    .card-head {
+      display: flex; justify-content: space-between; align-items: center;
+    }
+
+    .card-tag {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 4px 12px;
+      border-radius: 40px;
+      background: var(--gold-tint);
+      color: var(--gold-mid);
+    }
+    .card-tag.coral {
+      background: var(--coral-tint);
+      color: var(--coral-mid);
+    }
+    .card-tag.green {
+      background: rgba(80,180,100,0.12);
+      color: #40a060;
+    }
+
+    .card-num {
+      font-size: 12px;
+      font-weight: 400;
+      font-style: italic;
+      font-family: 'Fraunces', serif;
+      color: var(--tx-4);
+      transition: color 0.3s;
+    }
+    .card:hover .card-num { color: var(--tx-3); }
+
+    .card-title {
+      font-family: 'Fraunces', serif;
+      font-weight: 700;
+      font-size: 26px;
+      line-height: 1.1;
+      color: var(--tx);
+      flex: 1;
+      transition: color 0.3s ease;
+    }
+
+    .card-desc {
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--tx-2);
+      line-height: 1.65;
+    }
+
+    .card-foot {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: auto;
+      padding-top: 14px;
+      border-top: 1px solid color-mix(in srgb, var(--tx-4) 60%, transparent);
+    }
+
+    .card-launch {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--tx-3);
+      letter-spacing: 0.02em;
+    }
+
+    .card-arrow {
+      font-size: 18px;
+      color: var(--gold);
+      opacity: 0.45;
+      transition: transform 0.28s cubic-bezier(0.34,1.4,0.64,1), opacity 0.25s ease;
+      line-height: 1;
+    }
+
+    /* ─── FOOTER ─── */
+    footer {
+      position: relative; z-index: 1;
+      border-top: 1px solid color-mix(in srgb, var(--tx-4) 50%, transparent);
+      padding: 30px 0;
+      transition: border-color 0.4s;
+    }
+    .foot-inner {
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .foot-text {
+      font-size: 13px; color: var(--tx-3);
+    }
+    .foot-link {
+      font-size: 13px; font-weight: 500;
+      color: var(--gold);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .foot-link:hover { color: var(--coral); }
+
+    /* ─── RESPONSIVE ─── */
+    @media (max-width: 960px) {
+      .wrap            { padding: 0 28px; }
+      .grid            { grid-template-columns: repeat(2, 1fr); }
+      .card-wide       { grid-column: span 1; }
+      .card-wide .card-title { font-size: 26px; }
+      .theme-toggle    { right: 28px; }
+    }
+    @media (max-width: 600px) {
+      .wrap            { padding: 0 20px; }
+      .grid            { grid-template-columns: 1fr; gap: 14px; }
+      .hdr-title       { font-size: 52px; }
+      .theme-toggle    { top: 20px; right: 20px; }
+      header           { padding: 80px 0 48px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Theme toggle -->
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle colour theme">
+    <span class="toggle-icon">☀</span>
+    <span class="toggle-label">Light</span>
+  </button>
+
+  <!-- Atmospheric background -->
+  <div class="blobs" aria-hidden="true">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+
+  <div class="wrap">
+
+    <!-- ── HEADER ── -->
+    <header>
+      <div class="hdr-eyebrow">
+        <span class="pip"></span>
+        Canvas Lab · Interactive Demos
+      </div>
+      <h1 class="hdr-title">Make it<br><em>interactive.</em></h1>
+      <div class="hdr-divider"></div>
+      <p class="hdr-sub">
+        A collection of physics simulations, mathematical visualizations,
+        and rendering experiments — all running live in your browser.
+      </p>
+      <div class="hdr-badges">
+        <span class="badge">Vanilla JS</span>
+        <span class="badge coral">Canvas API</span>
+        <span class="badge">9 demos</span>
+      </div>
+    </header>
+
+    <!-- ── DEMO GRID ── -->
+    <section class="demos" aria-label="Demo list">
+      <div class="grid">
+
+        <a class="card card-wide" href="GravitySimulation/GravitySim.html">
+          <div class="card-head">
+            <span class="card-tag">Physics</span>
+            <span class="card-num">01</span>
+          </div>
+          <div class="card-title">Gravity Simulation</div>
+          <p class="card-desc">N-body gravitational attraction solved via Runge-Kutta 4th-order integration. Particles attract, collide elastically, and form emergent orbits.</p>
+          <div class="card-foot">
+            <span class="card-launch">Open demo</span>
+            <span class="card-arrow">↗</span>
+          </div>
+        </a>
+
+        <a class="card" href="Raycaster/Raycaster.html">
+          <div class="card-head">
+            <span class="card-tag coral">Rendering</span>
+            <span class="card-num">02</span>
+          </div>
+          <div class="card-title">Raycaster</div>
+          <p class="card-desc">2D line-segment ray casting. Rays find the closest wall intersections to simulate light and shadow.</p>
+          <div class="card-foot">
+            <span class="card-launch">Open demo</span>
+            <span class="card-arrow">↗</span>
+          </div>
+        </a>
+
+        <a class="card" href="Quadtree/Quadtree.html">
+          <div class="card-head">
+            <span class="card-tag green">Algorithms</span>
+            <span class="card-num">03</span>
+          </div>
+          <div class="card-title">Quadtree</div>
+          <p class="card-desc">Spatial partitioning tree for efficient 2D proximity queries and collision detection.</p>
+          <div class="card-foot">
+            <span class="card-launch">Open demo</span>
+            <span class="card-arrow">↗</span>
+          </div>
+        </a>
+
+        <a class="card" href="Lissajous/Lissajous.html">
+          <div class="card-head">
+            <span class="card-tag">Mathematics</span>
+            <span class="card-num">04</span>
+          </div>
+          <div class="card-title">Lissajous Figures</div>
+          <p class="card-desc">Parametric curves from two perpendicular oscillations. Frequency ratios produce distinct closed forms.</p>
+          <div class="card-foot">
+            <span class="card-launch">Open demo</span>
+            <span class="card-arrow">↗</span>
+          </div>
+        </a>
+
+        <a class="card" href="LissajousRotating/LissajousRotating.html">
+          <div class="card-head">
+            <span class="card-tag">Mathematics</span>
+            <span class="card-num">05</span>
+          </div>
+          <div class="card-title">Rotating Lissajous</div>
+          <p class="card-desc">Lissajous figure with a continuously evolving phase angle — the curve breathes and morphs over time.</p>
+          <div class="card-foot">
+            <span class="card-launch">Open demo</span>
+            <span class="card-arrow">↗</span>
+          </div>
+        </a>
+
+        <a class="card" href="PhaseshiftDemo1/PhaseshiftDemo1.html">
+          <div class="card-head">
+            <span class="card-tag coral">Waves</span>
+            <span class="card-num">06</span>
+          </div>
+          <div class="card-title">Phaseshift</div>
+          <p class="card-desc">Visualizing how phase offset between two signals transforms their superposition.</p>
+          <div class="card-foot">
+            <span class="card-launch">Open demo</span>
+            <span class="card-arrow">↗</span>
+          </div>
+        </a>
+
+        <a class="card" href="CircularMotion/CircularMotion.html">
+          <div class="card-head">
+            <span class="card-tag">Physics</span>
+            <span class="card-num">07</span>
+          </div>
+          <div class="card-title">Circular Motion</div>
+          <p class="card-desc">Uniform circular motion — angular velocity, centripetal acceleration, and phase projection onto axes.</p>
+          <div class="card-foot">
+            <span class="card-launch">Open demo</span>
+            <span class="card-arrow">↗</span>
+          </div>
+        </a>
+
+        <a class="card" href="RotatingSquares/RotatingSquares.html">
+          <div class="card-head">
+            <span class="card-tag green">Geometry</span>
+            <span class="card-num">08</span>
+          </div>
+          <div class="card-title">Rotating Squares</div>
+          <p class="card-desc">Nested squares rotating at incrementally offset angles — emergent moiré-like interference patterns.</p>
+          <div class="card-foot">
+            <span class="card-launch">Open demo</span>
+            <span class="card-arrow">↗</span>
+          </div>
+        </a>
+
+        <a class="card" href="Bouncink/bouncink.html">
+          <div class="card-head">
+            <span class="card-tag coral">Creative</span>
+            <span class="card-num">09</span>
+          </div>
+          <div class="card-title">Bouncink</div>
+          <p class="card-desc">Physics-driven ink blobs with custom collision response. Chaotic, tactile, and alive.</p>
+          <div class="card-foot">
+            <span class="card-launch">Open demo</span>
+            <span class="card-arrow">↗</span>
+          </div>
+        </a>
+
+      </div>
+    </section>
+
+  </div><!-- /wrap -->
+
+  <footer>
+    <div class="wrap">
+      <div class="foot-inner">
+        <span class="foot-text">Canvas Lab · Built with vanilla JS</span>
+        <a class="foot-link" href="https://github.com/pizzapeepo/pizzapeepo.github.io" target="_blank" rel="noopener">GitHub ↗</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      const root  = document.documentElement;
+      const btn   = document.getElementById('themeToggle');
+      const icon  = btn.querySelector('.toggle-icon');
+      const label = btn.querySelector('.toggle-label');
+
+      function applyTheme(isLight) {
+        root.classList.toggle('light', isLight);
+        icon.textContent  = isLight ? '☾' : '☀';
+        label.textContent = isLight ? 'Dark' : 'Light';
+      }
+
+      applyTheme(localStorage.getItem('theme') === 'light');
+
+      btn.addEventListener('click', function () {
+        const isLight = !root.classList.contains('light');
+        applyTheme(isLight);
+        localStorage.setItem('theme', isLight ? 'light' : 'dark');
+      });
+    })();
+  </script>
+</body>
 </html>
