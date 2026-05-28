@@ -1,177 +1,146 @@
 <!DOCTYPE html>
-<html>
-	<head>
-		<link rel="stylesheet" type="text/css" href="../CSS/Slider.css" />
-		<link rel="stylesheet" type="text/css" href="../CSS/fontStyles.css" />
-		<link rel="stylesheet" type="text/css" href="../CSS/horizontalDiv.css" />
-		<link rel="stylesheet" type="text/css" href="../CSS/radioButton.css" />
-		<style type="text/css">
-			.tg  {border-collapse:collapse;border-spacing:0;border-color:#009999;}
-			.tg td{font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:0px;overflow:hidden;word-break:normal;border-top-width:1px;border-bottom-width:1px;border-color:#009999;color:#002b36;background-color:#FFFFFF;}
-			.tg th{font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;border-style:solid;border-width:0px;overflow:hidden;word-break:normal;border-top-width:1px;border-bottom-width:1px;border-color:#009999;color:#FFFFFF;background-color:#009999;}
-			.tg .tg-c3ow{border-color:inherit;text-align:center;vertical-align:top;background-color:#009999;}
-			.tg .tg-0pky{border-color:inherit;text-align:center;vertical-align:top;}
-		</style>
-		<style>
-			input[type="checkbox"],
-			label {
-				float: left;
-				line-height: 1.4em;
-				height: 1.6em;
-				margin: 0px 4px;
-				padding: 0px;
-				font-size: inherit;
-			}
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gravity Simulation — Canvas Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="../CSS/theme.css">
+  <style>
+    html, body { margin: 0; padding: 0; overflow: hidden; }
+    #backgroundCanvas, #foregroundCanvas { position: fixed; top: 0; left: 0; z-index: 0; }
+  </style>
+</head>
+<body>
 
-			input[type="checkbox"] {
-				clear: left;
-			}
-		</style>
-	</head>
-	<body>
-		<div style="margin-bottom: 20px" class="horizontalDiv">
-			<a href="../index.html">Go back to mainpage</a>
-			<div style="margin-left: 30px;">
-				<span id="fpsValue"></span>
-			</div>
-		</div>
-		<div class="horizontalDiv" style="margin-bottom: 10px">
-			<div>
-				<button id="resetCanvasButton">Manual canvas reset</button>
-			</div>
-			<div style="margin-left: 30px">
-				<label
-					><input type="radio" id="noWallsRadiobutton" name="wallBehave" value="WallBehaviorEnum.none" /> no
-					walls</label
-				><br />
-				<label
-					><input
-						type="radio"
-						id="infiniteWallsRadiobutton"
-						name="wallBehave"
-						value="WallBehaviorEnum.infinite"
-					/>
-					infinite walls</label
-				><br />
-				<label
-					><input
-						type="radio"
-						id="collisionWallsRadiobutton"
-						name="wallBehave"
-						value="WallBehaviorEnum.collision"
-					/>
-					collision walls</label
-				><br />
-			</div>
-			<div style="margin-left: 30px;">
-				<input type="checkbox" id="particleCollisionCheckbox"></input>
-                <label>Enable elastic particle collisions</label>
-			</div>
-            <div style="margin-left: 30px;">
-                <input type="range" min="1" max="400" step="1" class="slider" id="particleCountSlider"></input>
-                <p>particle count: <span id="particleCountValue"></span></p>
-			</div>
-			<div style="margin-left: 30px;">
-                <input type="range" min="0.0001" max="0.05" step="0.0001" class="slider" id="timeStepSlider"></input>
-				<p>timestep value: <span id="timeStepValue"></span></p>
-            </div>
-		</div>
-		<div class="horizontalDiv" id="canvasContainer">
-			<div style="height: 800px; width: 800px;">
-				<canvas id="backgroundCanvas" style="background-color: black; position:absolute; z-index: 1"></canvas>
-				<canvas id="foregroundCanvas" style="background-color: transparent; position:absolute; z-index: 2"></canvas>
-			</div>
-			<div style="margin-left: 10px;">
-				<table class="tg">
-					<tr>
-						<th class="tg-0pky">Property</th>
-						<th class="tg-0pky" style="width: 60px;">Value</th>
-						<th class="tg-0pky">Input</th>
-					</tr>
-					<tr>
-						<td class="tg-0pky">grav. constant</td>
-						<td class="tg-0pky"><span id="gravConstValue"></span></td>
-						<td class="tg-0pky"><input type="range" min="-1000" max="1000" step="1" class="slider" id="gravConstSlider"></input></td>
-					</tr>
-					<tr>
-						<td class="tg-0pky">mass of sun</td>
-						<td class="tg-0pky"><span id="sunMassValue"></span></td>
-						<td class="tg-0pky"><input type="range" min="500" max="1000000" step="100" class="slider" id="sunMassSlider"></input></td>
-					</tr>
-					<tr>
-						<td class="tg-0pky">radius of sun</td>
-						<td class="tg-0pky"><span id="sunRadiusValue"></span></td>
-						<td class="tg-0pky"><input type="range" min="1" max="100" step="1" class="slider" id="sunRadiusSlider"></input></td>
-					</tr>
-					<tr>
-						<th class="tg-0pky" colspan="3">Random Particle Generator Settings<br>(changes apply on manual canvas reset)</td>
-					</tr>
-					<tr>
-						<td class="tg-0pky">x-min</td>
-						<td class="tg-0pky"><span id="xminValue"></span></td>
-						<td class="tg-0pky"><input type="range" class="slider" id="xminSlider"></input></td>
-					</tr>
-					<tr>
-						<td class="tg-0pky">x-max</td>
-						<td class="tg-0pky"><span id="xmaxValue"></span></td>
-						<td class="tg-0pky"><input type="range" class="slider" id="xmaxSlider"></input></td>
-					</tr>
-					<tr>
-						<td class="tg-0pky">y-min</td>
-						<td class="tg-0pky"><span id="yminValue"></span></td>
-						<td class="tg-0pky"><input type="range" class="slider" id="yminSlider"></input></td>
-					</tr>
-					<tr>
-						<td class="tg-0pky">y-max</td>
-						<td class="tg-0pky"><span id="ymaxValue"></span></td>
-						<td class="tg-0pky"><input type="range" class="slider" id="ymaxSlider"></input></td>
-					</tr>
-					<tr>
-						<td class="tg-0pky">vx-min</td>
-						<td class="tg-0pky"><span id="vxminValue"></span></td>
-						<td class="tg-0pky"><input type="range" class="slider" id="vxminSlider"></input></td>
-					</tr>
-					<tr>
-						<td class="tg-0pky">vx-max</td>
-						<td class="tg-0pky"><span id="vxmaxValue"></span></td>
-						<td class="tg-0pky"><input type="range" class="slider" id="vxmaxSlider"></input></td>
-					</tr>
-					<tr>
-						<td class="tg-0pky">vy-min</td>
-						<td class="tg-0pky"><span id="vyminValue"></span></td>
-						<td class="tg-0pky"><input type="range"  class="slider" id="vyminSlider"></input></td>
-					</tr>
-					<tr>
-						<td class="tg-0pky">vy-max</td>
-						<td class="tg-0pky"><span id="vymaxValue"></span></td>
-						<td class="tg-0pky"><input type="range" class="slider" id="vymaxSlider"></input></td>
-					</tr>
-					<tr>
-						<td class="tg-0pky">radius-min</td>
-						<td class="tg-0pky"><span id="radiusMinValue"></span></td>
-						<td class="tg-0pky"><input type="range" step="1" class="slider" id="radiusMinSlider"></input></td>
-					</tr>
-					<tr>
-						<td class="tg-0pky">radius-max</td>
-						<td class="tg-0pky"><span id="radiusMaxValue"></span></td>
-						<td class="tg-0pky"><input type="range" step="1" class="slider" id="radiusMaxSlider"></input></td>
-					</tr>
-					<tr>
-						<td class="tg-0pky">mass-min</td>
-						<td class="tg-0pky"><span id="massMinValue"></span></td>
-						<td class="tg-0pky"><input type="range" class="slider" id="massMinSlider"></input></td>
-					</tr>
-					<tr>
-						<td class="tg-0pky">mass-max</td>
-						<td class="tg-0pky"><span id="massMaxValue"></span></td>
-						<td class="tg-0pky"><input type="range" class="slider" id="massMaxSlider"></input></td>
-					</tr>
-				  </table>
-				  <div>
-					<button id="resetSettingsButton" style="margin-top: 10px;">Reset Values</button>
-				</div>
-            </div>
-		</div>
-		<script type="module" src="./main.js"></script>
-	</body>
+  <canvas id="backgroundCanvas"></canvas>
+  <canvas id="foregroundCanvas"></canvas>
+
+  <!-- Top-left navigation pill -->
+  <div class="hud hud-nav">
+    <a class="back-link" href="../index.html">← Home</a>
+    <h1 class="demo-title">Gravity Simulation</h1>
+  </div>
+
+  <!-- Right-side controls panel: fades to ghost at rest, fully opaque on hover -->
+  <aside class="hud hud-panel" id="hudPanel">
+
+    <div class="hud-panel-header">
+      <span class="fps-badge"><span id="fpsValue">—</span></span>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <span class="toggle-icon">☀</span>
+        <span class="toggle-label">Light</span>
+      </button>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Actions</span>
+      <button id="resetCanvasButton">Reset canvas</button>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Wall behavior</span>
+      <div class="radio-group">
+        <label><input type="radio" id="noWallsRadiobutton" name="wallBehave"> No walls</label>
+        <label><input type="radio" id="infiniteWallsRadiobutton" name="wallBehave"> Infinite walls</label>
+        <label><input type="radio" id="collisionWallsRadiobutton" name="wallBehave"> Collision walls</label>
+      </div>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Collisions</span>
+      <label><input type="checkbox" id="particleCollisionCheckbox"> Elastic particle collisions</label>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Particle count: <span id="particleCountValue"></span></span>
+      <input type="range" min="1" max="400" step="1" class="slider" id="particleCountSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Timestep: <span id="timeStepValue"></span></span>
+      <input type="range" min="0.0001" max="0.05" step="0.0001" class="slider" id="timeStepSlider">
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Grav. constant: <span id="gravConstValue"></span></span>
+      <input type="range" min="-1000" max="1000" step="1" class="slider" id="gravConstSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Sun mass: <span id="sunMassValue"></span></span>
+      <input type="range" min="500" max="1000000" step="100" class="slider" id="sunMassSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Sun radius: <span id="sunRadiusValue"></span></span>
+      <input type="range" min="1" max="100" step="1" class="slider" id="sunRadiusSlider">
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <details class="hud-details">
+      <summary>Particle generator <small>(apply on reset)</small></summary>
+
+      <div class="hud-section">
+        <span class="ctrl-label">x-min: <span id="xminValue"></span></span>
+        <input type="range" class="slider" id="xminSlider">
+      </div>
+      <div class="hud-section">
+        <span class="ctrl-label">x-max: <span id="xmaxValue"></span></span>
+        <input type="range" class="slider" id="xmaxSlider">
+      </div>
+      <div class="hud-section">
+        <span class="ctrl-label">y-min: <span id="yminValue"></span></span>
+        <input type="range" class="slider" id="yminSlider">
+      </div>
+      <div class="hud-section">
+        <span class="ctrl-label">y-max: <span id="ymaxValue"></span></span>
+        <input type="range" class="slider" id="ymaxSlider">
+      </div>
+      <div class="hud-section">
+        <span class="ctrl-label">vx-min: <span id="vxminValue"></span></span>
+        <input type="range" class="slider" id="vxminSlider">
+      </div>
+      <div class="hud-section">
+        <span class="ctrl-label">vx-max: <span id="vxmaxValue"></span></span>
+        <input type="range" class="slider" id="vxmaxSlider">
+      </div>
+      <div class="hud-section">
+        <span class="ctrl-label">vy-min: <span id="vyminValue"></span></span>
+        <input type="range" class="slider" id="vyminSlider">
+      </div>
+      <div class="hud-section">
+        <span class="ctrl-label">vy-max: <span id="vymaxValue"></span></span>
+        <input type="range" class="slider" id="vymaxSlider">
+      </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Radius min: <span id="radiusMinValue"></span></span>
+        <input type="range" step="1" class="slider" id="radiusMinSlider">
+      </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Radius max: <span id="radiusMaxValue"></span></span>
+        <input type="range" step="1" class="slider" id="radiusMaxSlider">
+      </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Mass min: <span id="massMinValue"></span></span>
+        <input type="range" class="slider" id="massMinSlider">
+      </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Mass max: <span id="massMaxValue"></span></span>
+        <input type="range" class="slider" id="massMaxSlider">
+      </div>
+    </details>
+
+    <div class="hud-divider"></div>
+    <button id="resetSettingsButton">Reset values</button>
+
+  </aside>
+
+  <script type="module" src="./main.js"></script>
+  <script src="../JS/theme.js"></script>
+</body>
 </html>

@@ -1,51 +1,49 @@
 <!DOCTYPE html>
-<html>
-    <head>
-            <script type="module" src="../Utils/Vector2D.js"></script>
-            <script type="module" src="./Line2D.js"></script>
-            <script type="module" src="../Utils/helpers.js"></script>
-            <script type="module" src="./Raycaster.js"></script>
-            <script src="../Utils/simplexNoise.js"></script>
-            <link rel="stylesheet" type="text/css" href="../CSS/Slider.css">
-            <link rel="stylesheet" type="text/css" href="../CSS/fontStyles.css">
-            <style>
-              #slidersContainer {
-              height: 100%;
-              width: 100%;
-              display: flex;
-            }
-            #space{
-              width: 10%;
-            }
-            #rayCountSlidercontainer {
-              width: 25%;
-            }
-            #wallCountSlidercontainer {
-              width: 25%;
-            }
-            </style>
-    </head>
-    <body>
-        <div id="canvasContainer">
-            <canvas id="myCanvas" style="background-color: black;"></canvas>
-        </div>
-        <div id="slidersContainer">
-          <div id="rayCountSlidercontainer">
-            <input type="range" min="1" max="600" class="slider" id="rayCountSlider"></input>
-            <p>Rays: <span id="rayCountValue"></span></p>
-        </div>
-        <div id="space">
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Raycaster — Canvas Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="../CSS/theme.css">
+</head>
+<body>
 
-        </div>
-            <div id="wallCountSlidercontainer">
-            <input type="range" min="1" max="20" class="slider" id="wallCountSlider"></input>
-            <p>Walls: <span id="wallCountValue"></span></p>
-            </div>
-        </div>
-        <div style="margin-top: 10px">
-            <a href="../index.html">Go back to mainpage</a>
-        </div>
-        <!-- main js file has to be loaded after initializing the canvas, else the reference in the main.js doesn't find the container-->
-        <script type="module" src="./main.js"></script>
-    </body>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+    <span class="toggle-icon">☀</span>
+    <span class="toggle-label">Light</span>
+  </button>
+
+  <div class="blobs" aria-hidden="true">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+  </div>
+
+  <div class="page">
+
+    <div class="topbar">
+      <a class="back-link" href="../index.html">← Home</a>
+      <h1 class="demo-title">Raycaster</h1>
+    </div>
+
+    <div class="controls">
+      <div class="ctrl-group">
+        <span class="ctrl-label">Rays: <span id="rayCountValue"></span></span>
+        <input type="range" min="1" max="600" class="slider" id="rayCountSlider">
+      </div>
+      <div class="ctrl-group">
+        <span class="ctrl-label">Walls: <span id="wallCountValue"></span></span>
+        <input type="range" min="1" max="20" class="slider" id="wallCountSlider">
+      </div>
+    </div>
+
+    <canvas id="myCanvas" class="canvas-single" style="--cw:800px;--ch:500px;"></canvas>
+
+  </div>
+
+  <script src="../Utils/simplexNoise.js"></script>
+  <script type="module" src="./main.js"></script>
+  <script src="../JS/theme.js"></script>
+</body>
 </html>

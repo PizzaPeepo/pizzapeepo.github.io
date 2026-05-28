@@ -4,30 +4,40 @@ import Particle from "./particle.js";
 import Vector2D from "../Utils/Vector2D.js";
 
 // #region global variables
-var canvasHeight = 800;
-var canvasWidth = 800;
+var canvasHeight = window.innerHeight;
+var canvasWidth = window.innerWidth;
 const whiteLineStrokeStyle = "rgba(255, 255, 255, 1.0)";
 var resetCanvas = false;
 var stop = false;
-var frameCount = 0;
-var fps, fpsInterval, startTime, now, then, elapsed;
+var fpsInterval, now, then, elapsed;
+const FPS_BUFFER_SIZE = 60;
+const fpsBuffer = new Float32Array(FPS_BUFFER_SIZE);
+let fpsBufferIdx = 0;
+let fpsBufferCount = 0;
+let fpsLastDrawTime = 0;
 
 var particleCount = 20;
 var particles = [];
 var dt = 0.01;
 
 let repullsionColors = [];
-repullsionColors.push(helpers.HexToRGBA("#FFFFFF"));
-repullsionColors.push(helpers.HexToRGBA("#6fe9ff"));
-repullsionColors.push(helpers.HexToRGBA("#6fe9ff"));
-repullsionColors.push(helpers.HexToRGBA("#0066ff"));
 let attractionColors = [];
-attractionColors.push(helpers.HexToRGBA("#FFFFFF"));
-attractionColors.push(helpers.HexToRGBA("#ffbbde"));
-attractionColors.push(helpers.HexToRGBA("#ffbbde"));
-attractionColors.push(helpers.HexToRGBA("#ff3ba0"));
+let sunColor;
 
-let sunColor = helpers.HexToRGBA("#FFFF00");
+const themeColors = {
+	dark: {
+		bg:         '#18140e',
+		sun:        '#FFFF00',
+		attraction: ['#FFFFFF', '#ffbbde', '#ffbbde', '#ff3ba0'],
+		repulsion:  ['#FFFFFF', '#6fe9ff', '#6fe9ff', '#0066ff'],
+	},
+	light: {
+		bg:         '#f5ede0',
+		sun:        '#ff9000',
+		attraction: ['#3a2810', '#8a1530', '#c04060', '#ff70a0'],
+		repulsion:  ['#3a2810', '#1050b0', '#3090d0', '#50d0ff'],
+	},
+};
 
 const WallBehaviorEnum = Object.freeze({ none: 1, infinite: 2, collision: 3 });
 let wallBehavior = WallBehaviorEnum.collision;
@@ -105,17 +115,45 @@ GenerateRandomizedParticles(particleCount);
 
 // #region getting canvas and context of fore- and background
 var backgroundCanvas = document.getElementById("backgroundCanvas");
-backgroundCanvas.width = canvasWidth;
-backgroundCanvas.height = canvasHeight;
 var bgCtx = backgroundCanvas.getContext("2d");
-bgCtx.strokeStyle = whiteLineStrokeStyle;
-bgCtx.lineWidth = 2;
 var foregroundCanvas = document.getElementById("foregroundCanvas");
-foregroundCanvas.width = canvasWidth;
-foregroundCanvas.height = canvasHeight;
 var fgCtx = foregroundCanvas.getContext("2d");
-fgCtx.strokeStyle = whiteLineStrokeStyle;
-fgCtx.lineWidth = 2;
+
+function applyCanvasSize() {
+	backgroundCanvas.width  = canvasWidth;
+	backgroundCanvas.height = canvasHeight;
+	backgroundCanvas.style.width  = canvasWidth  + 'px';
+	backgroundCanvas.style.height = canvasHeight + 'px';
+	bgCtx.strokeStyle = whiteLineStrokeStyle;
+	bgCtx.lineWidth = 2;
+	foregroundCanvas.width  = canvasWidth;
+	foregroundCanvas.height = canvasHeight;
+	foregroundCanvas.style.width  = canvasWidth  + 'px';
+	foregroundCanvas.style.height = canvasHeight + 'px';
+	fgCtx.strokeStyle = whiteLineStrokeStyle;
+	fgCtx.lineWidth = 2;
+}
+applyCanvasSize();
+
+window.addEventListener('resize', function () {
+	canvasWidth  = window.innerWidth;
+	canvasHeight = window.innerHeight;
+	applyCanvasSize();
+	resetCanvas = true;
+});
+
+function applyThemeColors(isLight) {
+	const t = isLight ? themeColors.light : themeColors.dark;
+	backgroundCanvas.style.background = t.bg;
+	sunColor        = helpers.HexToRGBA(t.sun);
+	attractionColors = t.attraction.map(c => helpers.HexToRGBA(c));
+	repullsionColors = t.repulsion.map(c => helpers.HexToRGBA(c));
+	bgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+}
+applyThemeColors(document.documentElement.classList.contains('light'));
+document.addEventListener('themechange', function (e) {
+	applyThemeColors(e.detail.isLight);
+});
 // #endregion
 
 // #region Inputs
@@ -309,7 +347,6 @@ timeStepSlider.oninput = function () {
 
 // #region fps value
 var fpsValue = document.getElementById("fpsValue");
-fpsValue.innerHTML = fps; // Display the default slider value
 // #endregion
 
 // #region gravitational constant slider
@@ -734,7 +771,6 @@ foregroundCanvas.addEventListener("mousemove", function (event) {
 function startAnimating(fps) {
 	fpsInterval = 1000 / fps;
 	then = Date.now();
-	startTime = then;
 	draw();
 }
 
@@ -750,8 +786,6 @@ function draw() {
 	if (resetCanvas) {
 		GenerateRandomizedParticles(particleCount);
 		then = Date.now();
-		startTime = then;
-		frameCount = 0;
 		resetCanvas = false;
 	}
 
@@ -935,14 +969,15 @@ function draw() {
 		}
 
 		// TESTING...Report #seconds since start and achieved fps.
-		var sinceStart = now - startTime;
-		var currentFps = Math.round(Math.round((1000 / (sinceStart / ++frameCount)) * 100) / 100);
-		fpsValue.innerHTML =
-			"Elapsed time= " +
-			Math.round(Math.round((sinceStart / 1000) * 100) / 100) +
-			" s with " +
-			currentFps +
-			" fps.";
+		if (fpsLastDrawTime > 0) {
+			fpsBuffer[fpsBufferIdx] = now - fpsLastDrawTime;
+			fpsBufferIdx = (fpsBufferIdx + 1) % FPS_BUFFER_SIZE;
+			if (fpsBufferCount < FPS_BUFFER_SIZE) fpsBufferCount++;
+			let sum = 0;
+			for (let i = 0; i < fpsBufferCount; i++) sum += fpsBuffer[i];
+			fpsValue.innerHTML = Math.round(1000 / (sum / fpsBufferCount)) + " fps";
+		}
+		fpsLastDrawTime = now;
 	}
 }
 

@@ -1,41 +1,47 @@
 <!DOCTYPE html>
-<html>
-	<head>
-		<link rel="stylesheet" type="text/css" href="../CSS/fontStyles.css" />
-		<link rel="stylesheet" type="text/css" href="../CSS/Slider.css" />
-		<link rel="stylesheet" type="text/css" href="../CSS/horizontalDiv.css" />
-		<style>
-			input[type="checkbox"],
-			label {
-				float: left;
-				line-height: 1.4em;
-				height: 1.6em;
-				margin: 0px 4px;
-				padding: 0px;
-				font-size: inherit;
-			}
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quadtree — Canvas Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="../CSS/theme.css">
+</head>
+<body>
 
-			input[type="checkbox"] {
-				clear: left;
-			}
-		</style>
-	</head>
-	<body>
-		<div class="horizontalDiv" style="margin-bottom: 10px;">
-			<a href="../index.html">Go back to mainpage</a>
-		</div>
-		<div class="horizontalDiv" style="margin-bottom: 10px;">
-			<div>
-				<button id="resetCanvasButton">Manual canvas reset</button>
-			</div>
-		</div>
-		<div id="canvasContainer">
-			<canvas id="backgroundCanvas" style="background-color: black; position: absolute; z-index: 1;"></canvas>
-			<canvas
-				id="foregroundCanvas"
-				style="background-color: transparent; position: absolute; z-index: 2;"
-			></canvas>
-		</div>
-		<script type="module" src="main.js"></script>
-	</body>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+    <span class="toggle-icon">☀</span>
+    <span class="toggle-label">Light</span>
+  </button>
+
+  <div class="blobs" aria-hidden="true">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+  </div>
+
+  <div class="page">
+
+    <div class="topbar">
+      <a class="back-link" href="../index.html">← Home</a>
+      <h1 class="demo-title">Quadtree</h1>
+    </div>
+
+    <div class="controls">
+      <div class="ctrl-group">
+        <span class="ctrl-label">Actions</span>
+        <button id="resetCanvasButton">Reset canvas</button>
+      </div>
+    </div>
+
+    <div class="canvas-wrap" style="--cw:800px;--ch:800px;">
+      <canvas id="backgroundCanvas"></canvas>
+      <canvas id="foregroundCanvas"></canvas>
+    </div>
+
+  </div>
+
+  <script type="module" src="main.js"></script>
+  <script src="../JS/theme.js"></script>
+</body>
 </html>
