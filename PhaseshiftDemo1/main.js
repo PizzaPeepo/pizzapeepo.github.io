@@ -3,94 +3,90 @@ import Vector2D from "../Utils/Vector2D.js";
 import Line2D from "../Raycaster/Line2D.js";
 
 // #region global variables
-var canvasHeight = 500;
-var canvasWidth = 500;
-const whiteLineStrokeStyle = "rgba(255, 255, 255, 1.0)";
-var fadeAway = false;
-var liveResetCanvas = false;
-var resetCanvas = false;
+var canvasHeight = window.innerHeight;
+var canvasWidth = window.innerWidth;
 var numberOfDots = 9;
 var shift_angle = (2 * Math.PI) / numberOfDots;
-let figureSize = 400;
-const origin = new Vector2D(Math.floor(canvasHeight / 2), Math.floor(canvasWidth / 2));
-const initialDirectionVec = new Vector2D(0, -Math.floor(figureSize / 2));
+let figureSize = Math.min(canvasWidth, canvasHeight) * 0.75;
+let origin = new Vector2D(Math.floor(canvasWidth / 2), Math.floor(canvasHeight / 2));
 let lines = [];
-for (let i = 0; i < numberOfDots; i++) {
-	lines.push(new Line2D(origin, initialDirectionVec.RotateCCW(i * shift_angle)));
+let lineColor = 'rgba(255,255,255,0.5)';
+
+function initLines() {
+	origin = new Vector2D(Math.floor(canvasWidth / 2), Math.floor(canvasHeight / 2));
+	figureSize = Math.min(canvasWidth, canvasHeight) * 0.75;
+	const baseVec = new Vector2D(0, -Math.floor(figureSize / 2));
+	lines = [];
+	for (let i = 0; i < numberOfDots; i++) {
+		lines.push(new Line2D(origin, baseVec.RotateCCW(i * shift_angle)));
+	}
 }
+initLines();
+
 let t = helpers.range(0, 6.28, 0.02);
-
 // #endregion
 
-// #region getting canvas and context of fore- and background
+// #region canvas setup
 var backgroundCanvas = document.getElementById("backgroundCanvas");
-backgroundCanvas.width = canvasWidth;
-backgroundCanvas.height = canvasHeight;
 var bgCtx = backgroundCanvas.getContext("2d");
-bgCtx.strokeStyle = whiteLineStrokeStyle;
-bgCtx.lineWidth = 2;
 var foregroundCanvas = document.getElementById("foregroundCanvas");
-foregroundCanvas.width = canvasWidth;
-foregroundCanvas.height = canvasHeight;
 var fgCtx = foregroundCanvas.getContext("2d");
-fgCtx.strokeStyle = whiteLineStrokeStyle;
-fgCtx.lineWidth = 2;
-// #endregion
 
-// #region Inputs
-// #region slider
-// var mySlider = document.getElementById("");
-// mySlider.value = myValue;
-// var mySliderValue = document.getElementById("");
-// mySliderValue.innerHTML = mySlider.value; // Display the default slider value
-
-// // Update the current slider value (each time you drag the slider handle)
-// mySlider.oninput = function() {
-// 	mySliderValue.innerHTML = this.value;
-// 	myValue = this.value;
-// 	if (liveResetCanvas) {
-// 		resetCanvas = true;
-// 	}
-// };
-// #endregion
-
-// #region Checkbox
-// var myCheckbox = document.getElementById("");
-// myCheckbox.checked = myBool;
-
-// myCheckbox.onclick = function() {
-// 	myBool = this.checked;
-// };
-// // #endregion
-
-// // #region liveReset Checkbox
-// var liveResetCheckbox = document.getElementById("liveResetCheckbox");
-// liveResetCheckbox.checked = liveResetCanvas;
-
-// liveResetCheckbox.onclick = function() {
-// 	liveResetCanvas = this.checked;
-// };
-// // #endregion
-
-// // #region reset canvas button
-// var resetCanvasButton = document.getElementById("resetCanvasButton");
-
-// resetCanvasButton.onclick = function() {
-// 	resetCanvas = true;
-// };
-// #endregion
-// #endregion
-
-bgCtx.strokeStyle = "rgba(255,255,255, 0.5)";
-bgCtx.setLineDash([1, 4]);
-bgCtx.beginPath();
-for (let k = 0; k < lines.length; k++) {
-	let temp = new Line2D(lines[k].offset, lines[k].direction);
-	temp.Draw(bgCtx);
-	temp.direction = temp.direction.Negative();
-	temp.Draw(bgCtx);
+function applyCanvasSize() {
+	backgroundCanvas.width  = canvasWidth;
+	backgroundCanvas.height = canvasHeight;
+	backgroundCanvas.style.width  = canvasWidth + 'px';
+	backgroundCanvas.style.height = canvasHeight + 'px';
+	bgCtx.lineWidth = 2;
+	foregroundCanvas.width  = canvasWidth;
+	foregroundCanvas.height = canvasHeight;
+	foregroundCanvas.style.width  = canvasWidth + 'px';
+	foregroundCanvas.style.height = canvasHeight + 'px';
+	fgCtx.lineWidth = 2;
 }
-bgCtx.stroke();
+applyCanvasSize();
+// #endregion
+
+// #region static lines drawing
+function drawStaticLines() {
+	bgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+	bgCtx.save();
+	bgCtx.strokeStyle = lineColor;
+	bgCtx.setLineDash([1, 4]);
+	bgCtx.beginPath();
+	for (let k = 0; k < lines.length; k++) {
+		let temp = new Line2D(lines[k].offset, lines[k].direction);
+		temp.Draw(bgCtx);
+		temp.direction = temp.direction.Negative();
+		temp.Draw(bgCtx);
+	}
+	bgCtx.stroke();
+	bgCtx.restore();
+}
+drawStaticLines();
+// #endregion
+
+// #region theme
+function applyThemeColors(isLight) {
+	backgroundCanvas.style.background = isLight ? '#f5ede0' : '#18140e';
+	lineColor = isLight ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.5)';
+	drawStaticLines();
+}
+applyThemeColors(document.documentElement.classList.contains('light'));
+document.addEventListener('themechange', function(e) {
+	applyThemeColors(e.detail.isLight);
+});
+// #endregion
+
+// #region resize
+window.addEventListener('resize', function() {
+	canvasWidth  = window.innerWidth;
+	canvasHeight = window.innerHeight;
+	applyCanvasSize();
+	initLines();
+	drawStaticLines();
+});
+// #endregion
 
 let i = 0;
 let hue = 0;
@@ -107,7 +103,6 @@ function draw() {
 
 	for (let j = 0; j < lines.length; j++) {
 		const pointOrigin = lines[j].GetPointOnLine(Math.sin(t[i] + j * shift_angle));
-		//const hueTemp = hue + Math.floor() // makes sure rainbowcolors are repeating
 		const strokeStyle = "hsl(" + hue + ", 100%,  70%)";
 		fgCtx.beginPath();
 		fgCtx.save();

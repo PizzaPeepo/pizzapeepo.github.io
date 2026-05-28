@@ -4,60 +4,76 @@ import { Rectangle } from "../Utils/rectangle.js";
 import { Quadtree } from "./Quadtree.js";
 
 // #region global variables
-var canvasHeight = 800;
-var canvasWidth = 800;
+const HUD_PANEL_WIDTH = 280;
+var canvasHeight = window.innerHeight;
+var canvasWidth = window.innerWidth - HUD_PANEL_WIDTH;
 const whiteLineStrokeStyle = "rgba(255, 255, 255, 1.0)";
-var fadeAway = false;
-var liveResetCanvas = false;
 var resetCanvas = false;
-var fadeAwaySpeed = 0.01;
-var myValue = 0;
 // #endregion
 
-// #region getting canvas and context of fore- and background
+// #region canvas setup
 var backgroundCanvas = document.getElementById("backgroundCanvas");
-backgroundCanvas.width = canvasWidth;
-backgroundCanvas.height = canvasHeight;
 var bgCtx = backgroundCanvas.getContext("2d");
-bgCtx.strokeStyle = whiteLineStrokeStyle;
-bgCtx.lineWidth = 1;
 var foregroundCanvas = document.getElementById("foregroundCanvas");
-foregroundCanvas.width = canvasWidth;
-foregroundCanvas.height = canvasHeight;
 var fgCtx = foregroundCanvas.getContext("2d");
-fgCtx.strokeStyle = whiteLineStrokeStyle;
-fgCtx.lineWidth = 1;
+
+function applyCanvasSize() {
+	backgroundCanvas.width  = canvasWidth;
+	backgroundCanvas.height = canvasHeight;
+	backgroundCanvas.style.width  = canvasWidth + 'px';
+	backgroundCanvas.style.height = canvasHeight + 'px';
+	bgCtx.strokeStyle = whiteLineStrokeStyle;
+	bgCtx.lineWidth = 1;
+	foregroundCanvas.width  = canvasWidth;
+	foregroundCanvas.height = canvasHeight;
+	foregroundCanvas.style.width  = canvasWidth + 'px';
+	foregroundCanvas.style.height = canvasHeight + 'px';
+	fgCtx.strokeStyle = whiteLineStrokeStyle;
+	fgCtx.lineWidth = 1;
+}
+applyCanvasSize();
 // #endregion
 
-// #region Inputs
-// #region slider
-// var mySlider = document.getElementById("");
-// mySlider.value = myValue;
-// var mySliderValue = document.getElementById("");
-// mySliderValue.innerHTML = mySlider.value; // Display the default slider value
+// #region theme
+let drawColor = whiteLineStrokeStyle;
 
-// // Update the current slider value (each time you drag the slider handle)
-// mySlider.oninput = function () {
-// 	mySliderValue.innerHTML = this.value;
-// 	myValue = this.value;
-// 	if (liveResetCanvas) {
-// 		resetCanvas = true;
-// 	}
-// };
+function applyThemeColors(isLight) {
+	backgroundCanvas.style.background = isLight ? '#f5ede0' : '#18140e';
+	drawColor = isLight ? 'rgba(20, 10, 0, 1.0)' : 'rgba(255, 255, 255, 1.0)';
+	fgCtx.strokeStyle = drawColor;
+	bgCtx.strokeStyle = drawColor;
+}
+applyThemeColors(document.documentElement.classList.contains('light'));
+document.addEventListener('themechange', function(e) {
+	applyThemeColors(e.detail.isLight);
+});
 // #endregion
-// #region reset canvas button
+
+// #region resize
+window.addEventListener('resize', function() {
+	canvasWidth  = window.innerWidth - HUD_PANEL_WIDTH;
+	canvasHeight = window.innerHeight;
+	applyCanvasSize();
+	boundary = new Rectangle(0, 0, canvasWidth, canvasHeight);
+	quadtree = new Quadtree(boundary, 4);
+	for (let i = 0; i < 10; i++) {
+		quadtree.insert(new helpers.Point2D(helpers.GetRandomInt(canvasWidth), helpers.GetRandomInt(canvasHeight)));
+	}
+});
+// #endregion
+
+// #region reset button
 var resetCanvasButton = document.getElementById("resetCanvasButton");
-
 resetCanvasButton.onclick = function () {
 	resetCanvas = true;
 };
 // #endregion
 
-// #region Handle mouse events
+// #region mouse events
 let pointerOnCanvas = false;
-let isLeftMouseDown = false; // button 0
-let isMiddleMouseDown = false; // button 1
-let isRightMouseDown = false; // button 2
+let isLeftMouseDown = false;
+let isMiddleMouseDown = false;
+let isRightMouseDown = false;
 let mouse = new Vector2D(0, 0);
 
 function SetPointerOnCanvas(myBool) {
@@ -78,8 +94,8 @@ foregroundCanvas.addEventListener("touchend", function (event) {
 
 foregroundCanvas.addEventListener("touchmove", function (event) {
 	let touchobj = event.changedTouches[0];
-	particles[0].position.x = touchobj.clientX;
-	particles[0].position.y = touchobj.clientY;
+	mouse.x = touchobj.clientX;
+	mouse.y = touchobj.clientY;
 	event.preventDefault();
 });
 
@@ -93,43 +109,23 @@ foregroundCanvas.addEventListener("mouseleave", function (event) {
 
 foregroundCanvas.addEventListener("mousedown", function (event) {
 	switch (event.button) {
-		case 0: {
-			isLeftMouseDown = true;
-			break;
-		}
-		case 1: {
-			isMiddleMouseDown = true;
-			break;
-		}
-		case 2: {
-			isRightMouseDown = true;
-			break;
-		}
+		case 0: { isLeftMouseDown = true; break; }
+		case 1: { isMiddleMouseDown = true; break; }
+		case 2: { isRightMouseDown = true; break; }
 	}
 });
 
 foregroundCanvas.addEventListener("mouseup", function (event) {
 	switch (event.button) {
-		case 0: {
-			isLeftMouseDown = false;
-			break;
-		}
-		case 1: {
-			isMiddleMouseDown = false;
-			break;
-		}
-		case 2: {
-			isRightMouseDown = false;
-			break;
-		}
+		case 0: { isLeftMouseDown = false; break; }
+		case 1: { isMiddleMouseDown = false; break; }
+		case 2: { isRightMouseDown = false; break; }
 	}
 });
 
 foregroundCanvas.addEventListener("mousemove", function (event) {
 	mouse = helpers.GetMousePos(foregroundCanvas, event);
 });
-//#endregion
-
 // #endregion
 
 let boundary = new Rectangle(0, 0, canvasWidth, canvasHeight);
@@ -159,7 +155,7 @@ function draw() {
 	}
 
 	let querried = quadtree.queryArea(area);
-	quadtree.draw(fgCtx, whiteLineStrokeStyle);
+	quadtree.draw(fgCtx, drawColor);
 
 	fgCtx.beginPath();
 	helpers.drawRectangle(fgCtx, area, "rgba(0,255,0,1.0)");

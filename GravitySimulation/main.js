@@ -4,8 +4,9 @@ import Particle from "./particle.js";
 import Vector2D from "../Utils/Vector2D.js";
 
 // #region global variables
+const HUD_PANEL_WIDTH = 280;
 var canvasHeight = window.innerHeight;
-var canvasWidth = window.innerWidth;
+var canvasWidth = window.innerWidth - HUD_PANEL_WIDTH;
 const whiteLineStrokeStyle = "rgba(255, 255, 255, 1.0)";
 var resetCanvas = false;
 var stop = false;
@@ -136,7 +137,7 @@ function applyCanvasSize() {
 applyCanvasSize();
 
 window.addEventListener('resize', function () {
-	canvasWidth  = window.innerWidth;
+	canvasWidth  = window.innerWidth - HUD_PANEL_WIDTH;
 	canvasHeight = window.innerHeight;
 	applyCanvasSize();
 	resetCanvas = true;

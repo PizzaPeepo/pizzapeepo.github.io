@@ -4,10 +4,11 @@ import Lissajous from "./LissajousFigure.js";
 import LissajousTable from "./LissajousTable.js";
 
 // #region global variables
-var canvasHeight = 800;
-var canvasWidth = 800;
+const HUD_PANEL_WIDTH = 280;
+var canvasHeight = window.innerHeight;
+var canvasWidth = window.innerWidth - HUD_PANEL_WIDTH;
 const whiteLineStrokeStyle = "rgba(255, 255, 255, 1.0)";
-var delta_t = 0.015; // determines the speed of the animation
+var delta_t = 0.015;
 var t = helpers.range(0, 500, delta_t);
 var lissFigureSize = 100;
 var fadeAway = false;
@@ -16,21 +17,51 @@ var lissajousTable = new LissajousTable(canvasWidth, canvasHeight, lissFigureSiz
 var liveResetCanvas = false;
 var resetCanvas = false;
 var i = 0;
+let fadeColor = 'rgba(24,18,14,';
 // #endregion
 
-// #region getting canvas and context of fore- and background
+// #region canvas setup
 var backgroundCanvas = document.getElementById("backgroundCanvas");
-backgroundCanvas.width = canvasWidth;
-backgroundCanvas.height = canvasHeight;
 var bgCtx = backgroundCanvas.getContext("2d");
-bgCtx.strokeStyle = whiteLineStrokeStyle;
-bgCtx.lineWidth = 2;
 var foregroundCanvas = document.getElementById("foregroundCanvas");
-foregroundCanvas.width = canvasWidth;
-foregroundCanvas.height = canvasHeight;
 var fgCtx = foregroundCanvas.getContext("2d");
-fgCtx.strokeStyle = whiteLineStrokeStyle;
-fgCtx.lineWidth = 2;
+
+function applyCanvasSize() {
+	backgroundCanvas.width  = canvasWidth;
+	backgroundCanvas.height = canvasHeight;
+	backgroundCanvas.style.width  = canvasWidth + 'px';
+	backgroundCanvas.style.height = canvasHeight + 'px';
+	bgCtx.strokeStyle = whiteLineStrokeStyle;
+	bgCtx.lineWidth = 2;
+	foregroundCanvas.width  = canvasWidth;
+	foregroundCanvas.height = canvasHeight;
+	foregroundCanvas.style.width  = canvasWidth + 'px';
+	foregroundCanvas.style.height = canvasHeight + 'px';
+	fgCtx.strokeStyle = whiteLineStrokeStyle;
+	fgCtx.lineWidth = 2;
+}
+applyCanvasSize();
+// #endregion
+
+// #region theme
+function applyThemeColors(isLight) {
+	backgroundCanvas.style.background = isLight ? '#f5ede0' : '#18140e';
+	fadeColor = isLight ? 'rgba(245,237,224,' : 'rgba(24,18,14,';
+}
+applyThemeColors(document.documentElement.classList.contains('light'));
+document.addEventListener('themechange', function(e) {
+	applyThemeColors(e.detail.isLight);
+});
+// #endregion
+
+// #region resize
+window.addEventListener('resize', function() {
+	canvasWidth  = window.innerWidth - HUD_PANEL_WIDTH;
+	canvasHeight = window.innerHeight;
+	applyCanvasSize();
+	lissajousTable = new LissajousTable(canvasWidth, canvasHeight, lissFigureSize);
+	resetCanvas = true;
+});
 // #endregion
 
 // #region drawing functions
@@ -67,13 +98,11 @@ function drawFilledCircle(origin, radius, rgbaStroke, rgbaFill) {
 // #endregion
 
 // #region Inputs
-// #region figureSize slider
 var figureSizeSlider = document.getElementById("figureSizeSlider");
 figureSizeSlider.value = lissFigureSize;
 var figureSizeValue = document.getElementById("figureSizeValue");
-figureSizeValue.innerHTML = figureSizeSlider.value; // Display the default slider value
+figureSizeValue.innerHTML = figureSizeSlider.value;
 
-// Update the current slider value (each time you drag the slider handle)
 figureSizeSlider.oninput = function() {
 	figureSizeValue.innerHTML = this.value;
 	lissFigureSize = this.value;
@@ -82,15 +111,12 @@ figureSizeSlider.oninput = function() {
 		resetCanvas = true;
 	}
 };
-// #endregion
 
-// #region drawingSpeed slider
 var drawingSpeedSlider = document.getElementById("drawingSpeedSlider");
 drawingSpeedSlider.value = delta_t;
 var drawingSpeedValue = document.getElementById("drawingSpeedValue");
-drawingSpeedValue.innerHTML = drawingSpeedSlider.value * 1000; // Display the default slider value
+drawingSpeedValue.innerHTML = drawingSpeedSlider.value * 1000;
 
-// Update the current slider value (each time you drag the slider handle)
 drawingSpeedSlider.oninput = function() {
 	drawingSpeedValue.innerHTML = this.value * 1000;
 	delta_t = this.value;
@@ -99,54 +125,35 @@ drawingSpeedSlider.oninput = function() {
 		resetCanvas = true;
 	}
 };
-// #endregion
 
-// #region fadeaway slider
 var fadeAwaySpeedSlider = document.getElementById("fadeAwaySpeedSlider");
 fadeAwaySpeedSlider.value = fadeAwaySpeed;
 var fadeAwaySpeedValue = document.getElementById("fadeAwaySpeedValue");
-fadeAwaySpeedValue.innerHTML = fadeAwaySpeedSlider.value * 1000; // Display the default slider value
+fadeAwaySpeedValue.innerHTML = fadeAwaySpeedSlider.value * 1000;
 
-// Update the current slider value (each time you drag the slider handle)
 fadeAwaySpeedSlider.oninput = function() {
 	fadeAwaySpeedValue.innerHTML = this.value * 1000;
 	fadeAwaySpeed = this.value;
 };
-// #endregion
 
-// #region fadeAway Checkbox
 var fadeAwayCheckbox = document.getElementById("fadeAwayCheckbox");
 fadeAwayCheckbox.checked = fadeAway;
+fadeAwayCheckbox.onclick = function() { fadeAway = this.checked; };
 
-fadeAwayCheckbox.onclick = function() {
-	fadeAway = this.checked;
-};
-// #endregion
-
-// #region liveReset Checkbox
 var liveResetCheckbox = document.getElementById("liveResetCheckbox");
 liveResetCheckbox.checked = liveResetCanvas;
+liveResetCheckbox.onclick = function() { liveResetCanvas = this.checked; };
 
-liveResetCheckbox.onclick = function() {
-	liveResetCanvas = this.checked;
-};
-// #endregion
-
-// #region reset canvas button
 var resetCanvasButton = document.getElementById("resetCanvasButton");
-
-resetCanvasButton.onclick = function() {
-	resetCanvas = true;
-};
-// #endregion
+resetCanvasButton.onclick = function() { resetCanvas = true; };
 // #endregion
 
-// #region animation function
+// #region animation
 function draw() {
 	fgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 	if (fadeAway) {
 		bgCtx.save();
-		bgCtx.fillStyle = "rgba(0, 0, 0," + fadeAwaySpeed + ")";
+		bgCtx.fillStyle = fadeColor + fadeAwaySpeed + ")";
 		bgCtx.fillRect(0, 0, canvasWidth, canvasHeight);
 		bgCtx.restore();
 	}
@@ -161,7 +168,7 @@ function draw() {
 		for (let col = 0; col < lissajousTable.cols; col++) {
 			if ((row === 0) & (col === 0)) {
 				continue;
-			} // skip the very first figure
+			}
 			lissajousTable.figures[row][col].Draw(bgCtx, fgCtx, t[i], t[i + 1]);
 		}
 	}

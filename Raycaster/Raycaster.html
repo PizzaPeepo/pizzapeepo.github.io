@@ -7,40 +7,42 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../CSS/theme.css">
+  <style>
+    html, body { margin: 0; padding: 0; overflow: hidden; }
+    #myCanvas { position: fixed; top: 0; left: 0; z-index: 0; }
+  </style>
 </head>
 <body>
 
-  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
-    <span class="toggle-icon">☀</span>
-    <span class="toggle-label">Light</span>
-  </button>
+  <canvas id="myCanvas"></canvas>
 
-  <div class="blobs" aria-hidden="true">
-    <div class="blob blob-1"></div>
-    <div class="blob blob-2"></div>
+  <!-- Top-left navigation pill -->
+  <div class="hud hud-nav">
+    <a class="back-link" href="../index.html">← Home</a>
+    <h1 class="demo-title">Raycaster</h1>
   </div>
 
-  <div class="page">
+  <!-- Right-side controls panel -->
+  <aside class="hud hud-panel" id="hudPanel">
 
-    <div class="topbar">
-      <a class="back-link" href="../index.html">← Home</a>
-      <h1 class="demo-title">Raycaster</h1>
+    <div class="hud-panel-header">
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <span class="toggle-icon">☀</span>
+        <span class="toggle-label">Light</span>
+      </button>
     </div>
 
-    <div class="controls">
-      <div class="ctrl-group">
-        <span class="ctrl-label">Rays: <span id="rayCountValue"></span></span>
-        <input type="range" min="1" max="600" class="slider" id="rayCountSlider">
-      </div>
-      <div class="ctrl-group">
-        <span class="ctrl-label">Walls: <span id="wallCountValue"></span></span>
-        <input type="range" min="1" max="20" class="slider" id="wallCountSlider">
-      </div>
+    <div class="hud-section">
+      <span class="ctrl-label">Rays: <span id="rayCountValue"></span></span>
+      <input type="range" min="1" max="600" class="slider" id="rayCountSlider">
     </div>
 
-    <canvas id="myCanvas" class="canvas-single" style="--cw:800px;--ch:500px;"></canvas>
+    <div class="hud-section">
+      <span class="ctrl-label">Walls: <span id="wallCountValue"></span></span>
+      <input type="range" min="1" max="20" class="slider" id="wallCountSlider">
+    </div>
 
-  </div>
+  </aside>
 
   <script src="../Utils/simplexNoise.js"></script>
   <script type="module" src="./main.js"></script>

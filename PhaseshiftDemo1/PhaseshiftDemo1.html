@@ -7,31 +7,24 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../CSS/theme.css">
+  <style>
+    html, body { margin: 0; padding: 0; overflow: hidden; }
+    #backgroundCanvas, #foregroundCanvas { position: fixed; top: 0; left: 0; z-index: 0; }
+  </style>
 </head>
 <body>
 
-  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
-    <span class="toggle-icon">☀</span>
-    <span class="toggle-label">Light</span>
-  </button>
+  <canvas id="backgroundCanvas"></canvas>
+  <canvas id="foregroundCanvas"></canvas>
 
-  <div class="blobs" aria-hidden="true">
-    <div class="blob blob-1"></div>
-    <div class="blob blob-2"></div>
-  </div>
-
-  <div class="page">
-
-    <div class="topbar">
-      <a class="back-link" href="../index.html">← Home</a>
-      <h1 class="demo-title">Phaseshift Demo</h1>
-    </div>
-
-    <div class="canvas-wrap" style="--cw:500px;--ch:500px;">
-      <canvas id="backgroundCanvas"></canvas>
-      <canvas id="foregroundCanvas"></canvas>
-    </div>
-
+  <!-- Top-left navigation pill (theme toggle inline since no controls panel) -->
+  <div class="hud hud-nav">
+    <a class="back-link" href="../index.html">← Home</a>
+    <h1 class="demo-title">Phaseshift Demo</h1>
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+      <span class="toggle-icon">☀</span>
+      <span class="toggle-label">Light</span>
+    </button>
   </div>
 
   <script type="module" src="main.js"></script>

@@ -3,8 +3,9 @@ import Vector2D from "../Utils/Vector2D.js";
 import Circle from "./circle.js";
 
 // #region global variables
-var canvasHeight = 600;
-var canvasWidth = 600;
+const HUD_PANEL_WIDTH = 280;
+var canvasHeight = window.innerHeight;
+var canvasWidth = window.innerWidth - HUD_PANEL_WIDTH;
 const whiteLineStrokeStyle = "rgba(255, 255, 255, 1.0)";
 var fadeAway = false;
 var liveResetCanvas = false;
@@ -16,13 +17,13 @@ var pointCount = 49;
 var velocity = 0.0015;
 var deltaCircleRadius = Math.floor(canvasHeight / 2.1 / pointCount);
 var pointRadius = 5;
-const origin = new Vector2D(Math.floor(canvasHeight / 2), Math.floor(canvasWidth / 2));
+let origin = new Vector2D(Math.floor(canvasWidth / 2), Math.floor(canvasHeight / 2));
+let fadeColor = 'rgba(24,18,14,';
 
 let circles = [];
 FillArrayOfCircles();
 
 let t = helpers.range(0, 2 * Math.PI, velocity);
-
 // #endregion
 
 // #region functions
@@ -36,38 +37,61 @@ function FillArrayOfCircles() {
 }
 // #endregion
 
-// #region getting canvas and context of fore- and background
+// #region canvas setup
 var blackbackgroundCanvas = document.getElementById("blackbackgroundCanvas");
-blackbackgroundCanvas.width = canvasWidth;
-blackbackgroundCanvas.height = canvasHeight;
 var backgroundCanvas = document.getElementById("backgroundCanvas");
-backgroundCanvas.width = canvasWidth;
-backgroundCanvas.height = canvasHeight;
 var bgCtx = backgroundCanvas.getContext("2d");
-bgCtx.strokeStyle = whiteLineStrokeStyle;
-bgCtx.lineWidth = 2;
 var middlegroundCanvas = document.getElementById("middlegroundCanvas");
-middlegroundCanvas.width = canvasWidth;
-middlegroundCanvas.height = canvasHeight;
 var mgCtx = middlegroundCanvas.getContext("2d");
-mgCtx.strokeStyle = whiteLineStrokeStyle;
-mgCtx.lineWidth = 2;
 var foregroundCanvas = document.getElementById("foregroundCanvas");
-foregroundCanvas.width = canvasWidth;
-foregroundCanvas.height = canvasHeight;
 var fgCtx = foregroundCanvas.getContext("2d");
-fgCtx.strokeStyle = whiteLineStrokeStyle;
-fgCtx.lineWidth = 2;
+
+function applyCanvasSize() {
+	[blackbackgroundCanvas, backgroundCanvas, middlegroundCanvas, foregroundCanvas].forEach(function(c) {
+		c.width = canvasWidth;
+		c.height = canvasHeight;
+		c.style.width = canvasWidth + 'px';
+		c.style.height = canvasHeight + 'px';
+	});
+	bgCtx.strokeStyle = whiteLineStrokeStyle;
+	bgCtx.lineWidth = 2;
+	mgCtx.strokeStyle = whiteLineStrokeStyle;
+	mgCtx.lineWidth = 2;
+	fgCtx.strokeStyle = whiteLineStrokeStyle;
+	fgCtx.lineWidth = 2;
+}
+applyCanvasSize();
+// #endregion
+
+// #region theme
+function applyThemeColors(isLight) {
+	blackbackgroundCanvas.style.background = isLight ? '#f5ede0' : '#18140e';
+	fadeColor = isLight ? 'rgba(245,237,224,' : 'rgba(24,18,14,';
+}
+applyThemeColors(document.documentElement.classList.contains('light'));
+document.addEventListener('themechange', function(e) {
+	applyThemeColors(e.detail.isLight);
+});
+// #endregion
+
+// #region resize
+window.addEventListener('resize', function() {
+	canvasWidth = window.innerWidth - HUD_PANEL_WIDTH;
+	canvasHeight = window.innerHeight;
+	applyCanvasSize();
+	origin = new Vector2D(Math.floor(canvasWidth / 2), Math.floor(canvasHeight / 2));
+	deltaCircleRadius = Math.floor(canvasHeight / 2.1 / pointCount);
+	FillArrayOfCircles();
+	resetCanvas = true;
+});
 // #endregion
 
 // #region Inputs
-//#region point Count Slider
 var pointCountSlider = document.getElementById("pointCountSlider");
 pointCountSlider.value = pointCount;
 var pointCountValue = document.getElementById("pointCountValue");
-pointCountValue.innerHTML = pointCountSlider.value; // Display the default slider value
+pointCountValue.innerHTML = pointCountSlider.value;
 
-// Update the current slider value (each time you drag the slider handle)
 pointCountSlider.oninput = function() {
 	pointCountValue.innerHTML = this.value;
 	pointCount = this.value;
@@ -77,15 +101,12 @@ pointCountSlider.oninput = function() {
 		resetCanvas = true;
 	}
 };
-//#endregion
 
-//#region speed Slider
 var drawingSpeedSlider = document.getElementById("drawingSpeedSlider");
 drawingSpeedSlider.value = velocity;
 var drawingSpeedValue = document.getElementById("drawingSpeedValue");
-drawingSpeedValue.innerHTML = Math.floor(drawingSpeedSlider.value * 10000); // Display the default slider value
+drawingSpeedValue.innerHTML = Math.floor(drawingSpeedSlider.value * 10000);
 
-// Update the current slider value (each time you drag the slider handle)
 drawingSpeedSlider.oninput = function() {
 	drawingSpeedValue.innerHTML = Math.floor(this.value * 10000);
 	velocity = this.value;
@@ -94,64 +115,35 @@ drawingSpeedSlider.oninput = function() {
 		resetCanvas = true;
 	}
 };
-//#endregion
 
-// #region fadeaway slider
 var fadeAwaySpeedSlider = document.getElementById("fadeAwaySpeedSlider");
 fadeAwaySpeedSlider.value = fadeAwaySpeed;
 var fadeAwaySpeedValue = document.getElementById("fadeAwaySpeedValue");
-fadeAwaySpeedValue.innerHTML = fadeAwaySpeedSlider.value * 1000; // Display the default slider value
+fadeAwaySpeedValue.innerHTML = fadeAwaySpeedSlider.value * 1000;
 
-// Update the current slider value (each time you drag the slider handle)
 fadeAwaySpeedSlider.oninput = function() {
 	fadeAwaySpeedValue.innerHTML = this.value * 1000;
 	fadeAwaySpeed = this.value;
 };
-// #endregion
 
-// #region fadeAway Checkbox
 var fadeAwayCheckbox = document.getElementById("fadeAwayCheckbox");
 fadeAwayCheckbox.checked = fadeAway;
+fadeAwayCheckbox.onclick = function() { fadeAway = this.checked; };
 
-fadeAwayCheckbox.onclick = function() {
-	fadeAway = this.checked;
-};
-// #endregion
-
-// #region liveReset Checkbox
 var liveResetCheckbox = document.getElementById("liveResetCheckbox");
 liveResetCheckbox.checked = liveResetCanvas;
+liveResetCheckbox.onclick = function() { liveResetCanvas = this.checked; };
 
-liveResetCheckbox.onclick = function() {
-	liveResetCanvas = this.checked;
-};
-// #endregion
-
-// #region show white Lines Checkbox
 var showWhiteLinesCheckbox = document.getElementById("showWhiteLinesCheckbox");
 showWhiteLinesCheckbox.checked = showWhiteLines;
+showWhiteLinesCheckbox.onclick = function() { showWhiteLines = this.checked; };
 
-showWhiteLinesCheckbox.onclick = function() {
-	showWhiteLines = this.checked;
-};
-// #endregion
-
-// #region show white Lines Checkbox
 var showBlackBorderAroundPointsCheckbox = document.getElementById("showBlackBorderAroundPointsCheckbox");
 showBlackBorderAroundPointsCheckbox.checked = showBlackBorderAroundPoints;
+showBlackBorderAroundPointsCheckbox.onclick = function() { showBlackBorderAroundPoints = this.checked; };
 
-showBlackBorderAroundPointsCheckbox.onclick = function() {
-	showBlackBorderAroundPoints = this.checked;
-};
-// #endregion
-
-// #region reset canvas button
 var resetCanvasButton = document.getElementById("resetCanvasButton");
-
-resetCanvasButton.onclick = function() {
-	resetCanvas = true;
-};
-// #endregion
+resetCanvasButton.onclick = function() { resetCanvas = true; };
 // #endregion
 
 let i = 0;
@@ -162,7 +154,7 @@ function draw() {
 
 	if (fadeAway) {
 		mgCtx.save();
-		mgCtx.fillStyle = "rgba(0, 0, 0," + fadeAwaySpeed + ")";
+		mgCtx.fillStyle = fadeColor + fadeAwaySpeed + ")";
 		mgCtx.fillRect(0, 0, canvasWidth, canvasHeight);
 		mgCtx.restore();
 	} else {
@@ -201,7 +193,6 @@ function draw() {
 		fgCtx.restore();
 
 		if (showWhiteLines && j < circles.length) {
-			// - 1 da letzte linie zu keinem anderen punkt führen kann
 			const tempPoint1 = circles[j].GetPointOnCircle(angle);
 			bgCtx.lineTo(tempPoint1.x, tempPoint1.y);
 		}

@@ -550,7 +550,8 @@ label {
   border-bottom: 1px solid color-mix(in srgb, var(--tx-4) 40%, transparent);
   flex-shrink: 0;
 }
-.hud-panel .theme-toggle {
+.hud-panel .theme-toggle,
+.hud-nav .theme-toggle {
   position: static;
   box-shadow: none;
   flex: 1;

@@ -5,33 +5,67 @@ import "../Utils/simplexNoise.js";
 import * as helpers from "../Utils/helpers.js";
 
 // #region global variables
-var canvas_width = 800;
-var canvas_height = 500;
+const HUD_PANEL_WIDTH = 280;
+var canvas_width = window.innerWidth - HUD_PANEL_WIDTH;
+var canvas_height = window.innerHeight;
 
 var numberOfRandomWalls = 6;
 var raycount = 80;
 var walls = [];
-const canvasWalls = Line2D.GetWallLines2D(canvas_width, canvas_height);
+let canvasWalls = Line2D.GetWallLines2D(canvas_width, canvas_height);
 var initialRaycasterPosition = new Vector2D(Math.floor(canvas_width / 2), Math.floor(canvas_height / 2));
 var rayCaster = new Raycaster(initialRaycasterPosition, raycount);
 
 var simplex = new SimplexNoise(Date.now());
-// set arbitrary initial values for the simplexNoise
 var simplexOffsetX = 0;
 var simplexOffsetY = 500;
 var pointerOnCanvas = false;
-// automatic wall creation every 5 seconds
 window.setInterval(GetNewRandomLines, 5000);
 GetAndSetRandomLinesAndWalls();
 // #endregion
 
-// Get canvas and context of canvas
+// #region canvas setup
 var canvas = document.getElementById("myCanvas");
-canvas.width = canvas_width;
-canvas.height = canvas_height;
-var ctx = canvas.getContext("2d");
 
-// #region method to get/set new RANDOM walls or clear them
+function applyCanvasSize() {
+	canvas.width = canvas_width;
+	canvas.height = canvas_height;
+	canvas.style.width = canvas_width + 'px';
+	canvas.style.height = canvas_height + 'px';
+}
+applyCanvasSize();
+
+var ctx = canvas.getContext("2d");
+// #endregion
+
+// #region theme
+let wallColor = 'rgba(255, 255, 255, 1.0)';
+let rayColor  = 'rgba(255, 255, 255, 0.6)';
+
+function applyThemeColors(isLight) {
+	canvas.style.background = isLight ? '#f5ede0' : '#18140e';
+	wallColor = isLight ? 'rgba(20, 10, 0, 1.0)'  : 'rgba(255, 255, 255, 1.0)';
+	rayColor  = isLight ? 'rgba(20, 10, 0, 0.5)'  : 'rgba(255, 255, 255, 0.6)';
+}
+applyThemeColors(document.documentElement.classList.contains('light'));
+document.addEventListener('themechange', function(e) {
+	applyThemeColors(e.detail.isLight);
+});
+// #endregion
+
+// #region resize
+window.addEventListener('resize', function() {
+	canvas_width  = window.innerWidth - HUD_PANEL_WIDTH;
+	canvas_height = window.innerHeight;
+	applyCanvasSize();
+	canvasWalls = Line2D.GetWallLines2D(canvas_width, canvas_height);
+	rayCaster.position.x = Math.floor(canvas_width / 2);
+	rayCaster.position.y = Math.floor(canvas_height / 2);
+	GetNewRandomLines();
+});
+// #endregion
+
+// #region walls
 function GetAndSetRandomLinesAndWalls() {
 	walls = Line2D.GetRandomLines2D(numberOfRandomWalls, 100, canvas_width - 100, 100, canvas_height - 100);
 	for (let wall of canvasWalls) {
@@ -52,32 +86,26 @@ function GetNewRandomLines() {
 // #endregion
 
 // #region Sliders
-// #region WallCount slider
 var wallCountSlider = document.getElementById("wallCountSlider");
 wallCountSlider.value = numberOfRandomWalls;
 var wallCountValue = document.getElementById("wallCountValue");
-wallCountValue.innerHTML = wallCountSlider.value; // Display the default slider value
+wallCountValue.innerHTML = wallCountSlider.value;
 
-// Update the current slider value (each time you drag the slider handle)
 wallCountSlider.oninput = function () {
 	wallCountValue.innerHTML = this.value;
 	numberOfRandomWalls = this.value;
 	GetNewRandomLines();
 };
-// #endregion
 
-// #region RayCount slider
 var rayCountSlider = document.getElementById("rayCountSlider");
 rayCountSlider.value = raycount;
 var rayCountVal = document.getElementById("rayCountValue");
-rayCountVal.innerHTML = rayCountSlider.value; // Display the default slider value
+rayCountVal.innerHTML = rayCountSlider.value;
 
-// Update the current slider value (each time you drag the slider handle)
 rayCountSlider.oninput = function () {
 	rayCountVal.innerHTML = this.value;
 	rayCaster.rayCount = this.value;
 };
-// #endregion
 // #endregion
 
 // #region Draw functions
@@ -113,7 +141,7 @@ function drawCircle(origin, radius, rgba) {
 
 function drawLines(lines) {
 	ctx.save();
-	ctx.strokeStyle = "rgba(255, 255, 255, 1.0)";
+	ctx.strokeStyle = wallColor;
 	ctx.lineWidth = 2;
 	ctx.beginPath();
 	for (let i = 0; i < lines.length; i++) {
@@ -125,7 +153,7 @@ function drawLines(lines) {
 
 function drawRays(Raycaster) {
 	ctx.save();
-	ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
+	ctx.strokeStyle = rayColor;
 	ctx.lineWidth = 1;
 	ctx.beginPath();
 	Raycaster.Draw(ctx);
@@ -134,7 +162,7 @@ function drawRays(Raycaster) {
 }
 // #endregion
 
-// #region Handle mouse events
+// #region mouse events
 function SetPointerOnCanvas(myBool) {
 	if (pointerOnCanvas === !myBool) {
 		pointerOnCanvas = myBool;
@@ -171,24 +199,19 @@ canvas.addEventListener("mousemove", function (event) {
 	rayCaster.position.x = mouse.x;
 	rayCaster.position.y = mouse.y;
 });
-//#endregion
+// #endregion
 
-// #region animation function
+// #region animation
 function draw() {
-	// handle random motion with simplexNoise when no pointer on the canvas
 	if (pointerOnCanvas === false) {
-		// if mouse leaves => set it back to mid
 		rayCaster.position.x = Math.floor(canvas_width / 2);
 		rayCaster.position.y = Math.floor(canvas_height / 2);
 
-		// perlin noise creates random but smooth movement
 		let tempx = rayCaster.position.x + simplex.noise2D(simplexOffsetX, simplexOffsetY) * 200;
 		let tempy = rayCaster.position.y + simplex.noise2D(simplexOffsetY, simplexOffsetX) * 200;
-		// change variables to get new point on next draw
 		simplexOffsetX += 0.0005;
 		simplexOffsetY += 0.0005;
 
-		// out of bounds checks
 		if (tempx < 0 || tempx > canvas_width || tempy < 0 || tempy > canvas_height) {
 			rayCaster.position.x = Math.floor(canvas_width / 2);
 			rayCaster.position.y = Math.floor(canvas_height / 2);
@@ -197,13 +220,10 @@ function draw() {
 			rayCaster.position.y = tempy;
 		}
 	}
-	//clear the whole canvas
 	ctx.clearRect(0, 0, canvas_width, canvas_height);
 	drawLines(walls);
-	// Draw white dot at the center of the rays
-	drawCircle(rayCaster.position, 2, "rgba(255, 255, 255, 1.0)");
+	drawCircle(rayCaster.position, 2, wallColor);
 
-	// update raycaster position
 	rayCaster.UpdateRays();
 	const intersectionPoints = rayCaster.FindAllClosestIntersectionPoints(walls);
 	rayCaster.CutRaysAtClosestIntersectionPoint(intersectionPoints);
