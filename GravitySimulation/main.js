@@ -2,6 +2,7 @@ import * as helpers from "../Utils/helpers.js";
 import * as RungeKutta from "../Utils/RungeKutta.js";
 import Particle from "./particle.js";
 import Vector2D from "../Utils/Vector2D.js";
+import { BarnesHutTree } from "./BarnesHutTree.js";
 
 // #region global variables
 const HUD_PANEL_WIDTH = 280;
@@ -20,8 +21,8 @@ let fpsLastDrawTime = 0;
 var particleCount = 20;
 var particles = [];
 var dt = 0.01;
-const TRAIL_LENGTH = 80;;
-const MAX_TRAIL_SPEED = 80;
+const TRAIL_LENGTH = 60;
+const MAX_TRAIL_SPEED = 60;
 
 let repullsionColors = [];
 let attractionColors = [];
@@ -46,8 +47,10 @@ const WallBehaviorEnum = Object.freeze({ none: 1, infinite: 2, collision: 3 });
 let wallBehavior = WallBehaviorEnum.collision;
 var wallFrictionFactor = 0.8;
 let particleCollisionsEnabled = true;
+let barnesHutEnabled = false;
+let bhTheta = 0.5;
 
-var initial_gravitationalConst = 10;
+var initial_gravitationalConst = 50;
 let initial_sunMass = 10000;
 let initial_sunRadius = 15;
 
@@ -111,6 +114,19 @@ function GenerateRandomizedParticles(particleCount) {
 		massMin,
 		massMax
 	);
+
+	if (gravitationalConst > 0) {
+		const sunPos = particles[0].position;
+		for (let i = 1; i < particles.length; i++) {
+			const dx = particles[i].position.x - sunPos.x;
+			const dy = particles[i].position.y - sunPos.y;
+			const r = Math.sqrt(dx * dx + dy * dy);
+			if (r > 0) {
+				const orbitalSpeed = Math.sqrt(gravitationalConst * sunMass / r);
+				particles[i].velocity = new Vector2D(-dy / r * orbitalSpeed, dx / r * orbitalSpeed);
+			}
+		}
+	}
 }
 
 GenerateRandomizedParticles(particleCount);
@@ -280,6 +296,23 @@ particleCollisionCheckbox.checked = particleCollisionsEnabled;
 
 particleCollisionCheckbox.onclick = function () {
 	particleCollisionsEnabled = this.checked;
+};
+// #endregion
+
+// #region barnes-hut controls
+var barnesHutCheckbox = document.getElementById("barnesHutCheckbox");
+barnesHutCheckbox.checked = barnesHutEnabled;
+barnesHutCheckbox.onclick = function () {
+	barnesHutEnabled = this.checked;
+};
+
+var bhThetaSlider = document.getElementById("bhThetaSlider");
+bhThetaSlider.value = bhTheta;
+var bhThetaValue = document.getElementById("bhThetaValue");
+bhThetaValue.innerHTML = bhTheta.toFixed(2);
+bhThetaSlider.oninput = function () {
+	bhTheta = parseFloat(this.value);
+	bhThetaValue.innerHTML = bhTheta.toFixed(2);
 };
 // #endregion
 
@@ -819,10 +852,28 @@ function draw() {
 
 	const savedTrails = particles.map(p => p.trail || []);
 
+	let bhTree = null;
+	if (barnesHutEnabled && particles.length > 0) {
+		let minX = particles[0].position.x, maxX = minX;
+		let minY = particles[0].position.y, maxY = minY;
+		for (const p of particles) {
+			if (p.position.x < minX) minX = p.position.x;
+			else if (p.position.x > maxX) maxX = p.position.x;
+			if (p.position.y < minY) minY = p.position.y;
+			else if (p.position.y > maxY) maxY = p.position.y;
+		}
+		const margin = Math.max((maxX - minX) * 0.1, (maxY - minY) * 0.1, 100);
+		bhTree = new BarnesHutTree(minX - margin, minY - margin, maxX - minX + 2 * margin, maxY - minY + 2 * margin, bhTheta);
+		for (const p of particles) bhTree.insert(p);
+	}
+
 	let tempParticles = [];
-	// use Runge-Kutta-Integration to update position / velocity of particles
 	for (let k = 0; k < particles.length; k++) {
-		tempParticles.push(RungeKutta.RK4_ParticlesInGravField(k, particles, dt, gravitationalConst));
+		tempParticles.push(
+			barnesHutEnabled && bhTree
+				? RungeKutta.RK4_ParticlesInGravField_BH(k, particles, dt, gravitationalConst, bhTree)
+				: RungeKutta.RK4_ParticlesInGravField(k, particles, dt, gravitationalConst)
+		);
 	}
 
 	// Collision handling
@@ -851,7 +902,7 @@ function draw() {
 					const v2y = tempParticles[k].velocity.y;
 
 					const approach = (v1x - v2x) * nx + (v1y - v2y) * ny;
-					if (approach > 0) {
+					if (approach < 0) {
 						const massFac1 = (2 * tempParticles[k].mass) / totalMass;
 						const massFac2 = (2 * tempParticles[i].mass) / totalMass;
 						tempParticles[i].velocity.x = v1x - massFac1 * approach * nx;

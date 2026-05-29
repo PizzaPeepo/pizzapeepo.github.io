@@ -143,3 +143,51 @@ export function RK4_ParticlesInGravField(targetParticleIndex, particles, dt, gra
 		initial.mass
 	);
 }
+
+// Barnes-Hut variant: uses a pre-built BH tree for O(n log n) force approximation.
+// Tree is built from k1 positions; k2/k3/k4 substeps query it from updated positions while
+// excluding the original particle object to prevent self-force.
+export function RK4_ParticlesInGravField_BH(targetParticleIndex, particles, dt, gravConst, bhTree) {
+	const initial = particles[targetParticleIndex].DeepCopy();
+	const originalParticle = particles[targetParticleIndex];
+
+	function accel(px, py) {
+		return bhTree.computeAccelAt(px, py, originalParticle, gravConst);
+	}
+
+	const [ax1, ay1] = accel(initial.position.x, initial.position.y);
+	const vx1 = initial.velocity.x, vy1 = initial.velocity.y;
+
+	const x2  = initial.position.x + 0.5 * vx1 * dt;
+	const y2  = initial.position.y + 0.5 * vy1 * dt;
+	const vx2 = initial.velocity.x + 0.5 * ax1 * dt;
+	const vy2 = initial.velocity.y + 0.5 * ay1 * dt;
+	const [ax2, ay2] = accel(x2, y2);
+
+	const x3  = initial.position.x + 0.5 * vx2 * dt;
+	const y3  = initial.position.y + 0.5 * vy2 * dt;
+	const vx3 = initial.velocity.x + 0.5 * ax2 * dt;
+	const vy3 = initial.velocity.y + 0.5 * ay2 * dt;
+	const [ax3, ay3] = accel(x3, y3);
+
+	const x4  = initial.position.x + vx3 * dt;
+	const y4  = initial.position.y + vy3 * dt;
+	const vx4 = initial.velocity.x + ax3 * dt;
+	const vy4 = initial.velocity.y + ay3 * dt;
+	const [ax4, ay4] = accel(x4, y4);
+
+	const xf  = initial.position.x + (dt / 6) * (vx1 + 2*vx2 + 2*vx3 + vx4);
+	const yf  = initial.position.y + (dt / 6) * (vy1 + 2*vy2 + 2*vy3 + vy4);
+	const vxf = initial.velocity.x + (dt / 6) * (ax1 + 2*ax2 + 2*ax3 + ax4);
+	const vyf = initial.velocity.y + (dt / 6) * (ay1 + 2*ay2 + 2*ay3 + ay4);
+	const axf = (1 / 6) * (ax1 + 2*ax2 + 2*ax3 + ax4);
+	const ayf = (1 / 6) * (ay1 + 2*ay2 + 2*ay3 + ay4);
+
+	return new Particle(
+		new Vector2D(xf, yf),
+		new Vector2D(vxf, vyf),
+		new Vector2D(axf, ayf),
+		initial.radius,
+		initial.mass
+	);
+}
