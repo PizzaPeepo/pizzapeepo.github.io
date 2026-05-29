@@ -20,6 +20,8 @@ let fpsLastDrawTime = 0;
 var particleCount = 20;
 var particles = [];
 var dt = 0.01;
+const TRAIL_LENGTH = 80;;
+const MAX_TRAIL_SPEED = 80;
 
 let repullsionColors = [];
 let attractionColors = [];
@@ -697,6 +699,7 @@ let isLeftMouseDown = false; // button 0
 let isMiddleMouseDown = false; // button 1
 let isRightMouseDown = false; // button 2
 let mouse = new Vector2D(0, 0);
+let dragStart = null;
 
 function SetPointerOnCanvas(myBool) {
 	if (pointerOnCanvas === !myBool) {
@@ -721,6 +724,10 @@ foregroundCanvas.addEventListener("touchmove", function (event) {
 	event.preventDefault();
 });
 
+foregroundCanvas.addEventListener("contextmenu", function (event) {
+	event.preventDefault();
+});
+
 foregroundCanvas.addEventListener("mouseenter", function (event) {
 	SetPointerOnCanvas(true);
 });
@@ -733,6 +740,7 @@ foregroundCanvas.addEventListener("mousedown", function (event) {
 	switch (event.button) {
 		case 0: {
 			isLeftMouseDown = true;
+			dragStart = { x: mouse.x, y: mouse.y };
 			break;
 		}
 		case 1: {
@@ -750,6 +758,25 @@ foregroundCanvas.addEventListener("mouseup", function (event) {
 	switch (event.button) {
 		case 0: {
 			isLeftMouseDown = false;
+			if (dragStart) {
+				const dx = mouse.x - dragStart.x;
+				const dy = mouse.y - dragStart.y;
+				if (Math.sqrt(dx * dx + dy * dy) > 5) {
+					const r = Math.max(radiusMin, Math.min(radiusMax, (radiusMin + radiusMax) / 2));
+					const m = Math.max(massMin, Math.min(massMax, (massMin + massMax) / 2));
+					const newParticle = new Particle(
+						new Vector2D(dragStart.x, dragStart.y),
+						new Vector2D(dx, dy),
+						new Vector2D(0, 0),
+						r, m
+					);
+					particles.push(newParticle);
+					particleCount++;
+					particleCountSlider.value = particleCount;
+					particleCountValue.innerHTML = particleCount;
+				}
+				dragStart = null;
+			}
 			break;
 		}
 		case 1: {
@@ -790,6 +817,8 @@ function draw() {
 		resetCanvas = false;
 	}
 
+	const savedTrails = particles.map(p => p.trail || []);
+
 	let tempParticles = [];
 	// use Runge-Kutta-Integration to update position / velocity of particles
 	for (let k = 0; k < particles.length; k++) {
@@ -799,70 +828,36 @@ function draw() {
 	// Collision handling
 	if (particleCollisionsEnabled) {
 		for (let i = 0; i < tempParticles.length; i++) {
-			for (let k = 0; k < tempParticles.length; k++) {
-				if (i != k) {
-					if (tempParticles[i].Overlaps(tempParticles[k])) {
-						// resolve the issue when particles overlap by pushing them away from eachother sothat they don't overlap
-						let distance = tempParticles[i].position.DistanceTo(tempParticles[k].position);
-						let overlap = tempParticles[i].radius + tempParticles[k].radius - distance;
-						let massRatio = tempParticles[i].mass / tempParticles[k].mass;
-						if (massRatio > 100) {
-							// particle 1 much more massive than particle 2 => only move particle 2
-							tempParticles[k].position.x -=
-								(overlap * (tempParticles[i].position.x - tempParticles[k].position.x)) / distance;
-							tempParticles[k].position.y -=
-								(overlap * (tempParticles[i].position.y - tempParticles[k].position.y)) / distance;
-						}
-						// else if (massRatio < 0.01) {
-						// 	// particle 2 much more massive than particle 1 => only move particle 1
-						// 	tempParticles[i].position.x +=
-						// 		(overlap * (tempParticles[i].position.x - tempParticles[k].position.x)) / distance;
-						// 	tempParticles[i].position.y +=
-						// 		(overlap * (tempParticles[i].position.y - tempParticles[k].position.y)) / distance;
-						// }
-						else {
-							// particles are not insanely different in mass => move both
-							tempParticles[i].position.x +=
-								((overlap / 2) * (tempParticles[i].position.x - tempParticles[k].position.x)) /
-								distance;
-							tempParticles[i].position.y +=
-								((overlap / 2) * (tempParticles[i].position.y - tempParticles[k].position.y)) /
-								distance;
+			for (let k = i + 1; k < tempParticles.length; k++) {
+				if (tempParticles[i].Overlaps(tempParticles[k])) {
+					let distance = tempParticles[i].position.DistanceTo(tempParticles[k].position);
+					if (distance < 0.001) distance = 0.001;
+					const overlap = tempParticles[i].radius + tempParticles[k].radius - distance;
 
-							tempParticles[k].position.x -=
-								((overlap / 2) * (tempParticles[i].position.x - tempParticles[k].position.x)) /
-								distance;
-							tempParticles[k].position.y -=
-								((overlap / 2) * (tempParticles[i].position.y - tempParticles[k].position.y)) /
-								distance;
-						}
+					const nx = (tempParticles[i].position.x - tempParticles[k].position.x) / distance;
+					const ny = (tempParticles[i].position.y - tempParticles[k].position.y) / distance;
 
-						// elastic scattering
-						const massFac1 = (2 * tempParticles[k].mass) / (tempParticles[i].mass + tempParticles[k].mass);
-						const normalFac1 =
-							(massFac1 *
-								tempParticles[i].velocity
-									.Add(tempParticles[k].velocity.Negative())
-									.DotProduct(tempParticles[i].position.Add(tempParticles[k].position.Negative()))) /
-							tempParticles[i].position.DistanceTo(tempParticles[k].position) ** 2;
-						tempParticles[i].velocity = tempParticles[i].velocity.Add(
-							tempParticles[i].position
-								.Add(tempParticles[k].position.Negative())
-								.Multiply(-1 * normalFac1)
-						);
+					const totalMass = tempParticles[i].mass + tempParticles[k].mass;
+					const f_i = tempParticles[k].mass / totalMass;
+					const f_k = tempParticles[i].mass / totalMass;
+					tempParticles[i].position.x += f_i * overlap * nx;
+					tempParticles[i].position.y += f_i * overlap * ny;
+					tempParticles[k].position.x -= f_k * overlap * nx;
+					tempParticles[k].position.y -= f_k * overlap * ny;
 
-						const massFac2 = (2 * tempParticles[i].mass) / (tempParticles[i].mass + tempParticles[k].mass);
-						const normalFac2 =
-							(massFac2 *
-								tempParticles[k].velocity
-									.Add(tempParticles[i].velocity.Negative())
-									.DotProduct(tempParticles[k].position.Add(tempParticles[i].position.Negative()))) /
-							tempParticles[k].position.DistanceTo(tempParticles[i].position) ** 2;
-						tempParticles[k].velocity = tempParticles[k].velocity.Add(
-							tempParticles[k].position
-								.Add(tempParticles[i].position.Negative())
-								.Multiply(-1 * normalFac2)
-						);
+					const v1x = tempParticles[i].velocity.x;
+					const v1y = tempParticles[i].velocity.y;
+					const v2x = tempParticles[k].velocity.x;
+					const v2y = tempParticles[k].velocity.y;
+
+					const approach = (v1x - v2x) * nx + (v1y - v2y) * ny;
+					if (approach > 0) {
+						const massFac1 = (2 * tempParticles[k].mass) / totalMass;
+						const massFac2 = (2 * tempParticles[i].mass) / totalMass;
+						tempParticles[i].velocity.x = v1x - massFac1 * approach * nx;
+						tempParticles[i].velocity.y = v1y - massFac1 * approach * ny;
+						tempParticles[k].velocity.x = v2x + massFac2 * approach * nx;
+						tempParticles[k].velocity.y = v2y + massFac2 * approach * ny;
 					}
 				}
 			}
@@ -871,6 +866,11 @@ function draw() {
 
 	for (let j = 0; j < particles.length; j++) {
 		particles[j] = tempParticles[j].DeepCopy();
+		particles[j].trail = savedTrails[j] || [];
+		if (!particles[j].isHeavyParticle) {
+			particles[j].trail.push({ x: particles[j].position.x, y: particles[j].position.y, speed: particles[j].velocity.length });
+			if (particles[j].trail.length > TRAIL_LENGTH) particles[j].trail.shift();
+		}
 	}
 
 	// Wall behavior handling
@@ -937,7 +937,30 @@ function draw() {
 		then = now - (elapsed % fpsInterval);
 
 		fgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
-		// draw stuff here
+
+		// draw trails
+		particles.forEach((particle) => {
+			if (!particle.isHeavyParticle && particle.trail && particle.trail.length > 1) {
+				const trail = particle.trail;
+				fgCtx.save();
+				fgCtx.lineWidth = 1;
+				for (let t = 1; t < trail.length; t++) {
+					const age = t / trail.length;
+					const speedPct = Math.min(1, trail[t].speed / MAX_TRAIL_SPEED);
+					const clr = gravitationalConst >= 0
+						? helpers.ColorRGBA.LinearInterpolateColors(attractionColors, speedPct)
+						: helpers.ColorRGBA.LinearInterpolateColors(repullsionColors, speedPct);
+					fgCtx.beginPath();
+					fgCtx.strokeStyle = 'rgba(' + clr.R + ',' + clr.G + ',' + clr.B + ',' + (age * 0.6).toFixed(3) + ')';
+					fgCtx.moveTo(trail[t - 1].x, trail[t - 1].y);
+					fgCtx.lineTo(trail[t].x, trail[t].y);
+					fgCtx.stroke();
+				}
+				fgCtx.restore();
+			}
+		});
+
+		// draw particles
 		particles.forEach((particle) => {
 			if (!particle.isHeavyParticle) {
 				let clr = new helpers.ColorRGBA(255, 255, 255, 1.0);
@@ -962,11 +985,39 @@ function draw() {
 			}
 		});
 
-		if (isLeftMouseDown) {
+		if (isRightMouseDown) {
 			particles[0].lastMousePos.x += (mouse.x - particles[0].lastMousePos.x) * 0.05;
 			particles[0].lastMousePos.y += (mouse.y - particles[0].lastMousePos.y) * 0.05;
 			particles[0].position.x = particles[0].lastMousePos.x;
 			particles[0].position.y = particles[0].lastMousePos.y;
+		}
+
+		if (isLeftMouseDown && dragStart) {
+			const dx = mouse.x - dragStart.x;
+			const dy = mouse.y - dragStart.y;
+			fgCtx.save();
+			fgCtx.strokeStyle = 'rgba(255,255,255,0.8)';
+			fgCtx.fillStyle = 'rgba(255,255,255,0.8)';
+			fgCtx.lineWidth = 2;
+			fgCtx.beginPath();
+			fgCtx.arc(dragStart.x, dragStart.y, 4, 0, Math.PI * 2);
+			fgCtx.fill();
+			const dist = Math.sqrt(dx * dx + dy * dy);
+			if (dist > 5) {
+				const angle = Math.atan2(dy, dx);
+				const headLen = 10;
+				fgCtx.beginPath();
+				fgCtx.moveTo(dragStart.x, dragStart.y);
+				fgCtx.lineTo(mouse.x, mouse.y);
+				fgCtx.stroke();
+				fgCtx.beginPath();
+				fgCtx.moveTo(mouse.x, mouse.y);
+				fgCtx.lineTo(mouse.x - headLen * Math.cos(angle - Math.PI / 6), mouse.y - headLen * Math.sin(angle - Math.PI / 6));
+				fgCtx.lineTo(mouse.x - headLen * Math.cos(angle + Math.PI / 6), mouse.y - headLen * Math.sin(angle + Math.PI / 6));
+				fgCtx.closePath();
+				fgCtx.fill();
+			}
+			fgCtx.restore();
 		}
 
 		// TESTING...Report #seconds since start and achieved fps.
