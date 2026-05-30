@@ -49,8 +49,9 @@ const WallBehaviorEnum = Object.freeze({ none: 1, infinite: 2, collision: 3 });
 let wallBehavior = WallBehaviorEnum.collision;
 var wallFrictionFactor = 0.8;
 let particleCollisionsEnabled = true;
-let barnesHutEnabled = false;
-let bhTheta = 0.5;
+let barnesHutEnabled = true;
+let bhTheta = 1.5;
+let particleSizeScale = 1.0;
 const bhTree = new BarnesHutTree(bhTheta);
 let accelBuf = new Float64Array(6000 * 2);
 let _sh = null, _shCellSize = 0;
@@ -131,6 +132,9 @@ function GenerateRandomizedParticles(particleCount) {
 				particles[i].velocity = new Vector2D(-dy / r * orbitalSpeed, dx / r * orbitalSpeed);
 			}
 		}
+	}
+	if (particleSizeScale !== 1.0) {
+		for (let i = 1; i < particles.length; i++) particles[i].radius *= particleSizeScale;
 	}
 	computeInitialAccelerations();
 }
@@ -335,6 +339,19 @@ bhThetaSlider.oninput = function () {
 };
 // #endregion
 
+// #region particle size slider
+var particleSizeSlider = document.getElementById("particleSizeSlider");
+var particleSizeValue = document.getElementById("particleSizeValue");
+
+particleSizeSlider.oninput = function () {
+	const newScale = parseInt(this.value) / 100;
+	const ratio = newScale / particleSizeScale;
+	particleSizeScale = newScale;
+	particleSizeValue.innerHTML = this.value + '%';
+	for (let i = 1; i < particles.length; i++) particles[i].radius *= ratio;
+};
+// #endregion
+
 // #region particle count slider
 var particleCountSlider = document.getElementById("particleCountSlider");
 particleCountSlider.value = particleCount;
@@ -343,45 +360,60 @@ particleCountValue.innerHTML = particleCountSlider.value; // Display the default
 
 // Update the current slider value (each time you drag the slider handle)
 particleCountSlider.oninput = function () {
-	particleCountValue.innerHTML = this.value;
+	const targetCount = parseInt(this.value);
+	particleCountValue.innerHTML = targetCount;
+
+	// Removing: just pop
+	while (particleCount > targetCount) {
+		particles.pop();
+		particleCount--;
+	}
+
+	if (particleCount >= targetCount) return;
+
+	// Adding: build spatial hash from existing particles for O(1) overlap checks
+	const cellSize = Math.max(radiusMax * particleSizeScale, sunRadius) * 2;
+	const addSH = new SpatialHash(cellSize);
+	for (let i = 0; i < particles.length; i++) {
+		addSH.insert(i, particles[i].position.x, particles[i].position.y);
+	}
+
 	let overlappingCounter = 0;
-	while (particleCount != this.value) {
-		if (particleCount > this.value) {
-			particles.pop();
-			particleCount--;
-		} else if (particleCount < this.value) {
-			let particle = Particle.GenerateRandomParticle(
-				xmin,
-				xmax,
-				ymin,
-				ymax,
-				vxMin,
-				vxMax,
-				vyMin,
-				vyMax,
-				radiusMin,
-				radiusMax,
-				massMin,
-				massMax
-			);
-			// check if no other particle overlap with the to be added particle
-			let twoParticlesOverlap = false;
-			for (let j = 0; j < particles.length; j++) {
-				if (particle.Overlaps(particles[j])) {
-					twoParticlesOverlap = true;
-					overlappingCounter++;
-					break;
-				}
-			}
-			if (overlappingCounter > 150000) {
-				alert("The radius min/max are probably too large and/or the x/y ranges are too small.");
+	while (particleCount < targetCount) {
+		const particle = Particle.GenerateRandomParticle(
+			xmin, xmax, ymin, ymax,
+			vxMin, vxMax, vyMin, vyMax,
+			radiusMin, radiusMax, massMin, massMax
+		);
+		// check neighbors only — O(1) average instead of O(n)
+		const neighbors = addSH.queryNeighbors(particle.position.x, particle.position.y);
+		let twoParticlesOverlap = false;
+		for (const k of neighbors) {
+			if (particle.Overlaps(particles[k])) {
+				twoParticlesOverlap = true;
+				overlappingCounter++;
 				break;
 			}
-			if (!twoParticlesOverlap) {
-				particles.push(particle);
-				//console.log(particle.mass);
-				particleCount++;
+		}
+		if (overlappingCounter > 150000) {
+			alert("The radius min/max are probably too large and/or the x/y ranges are too small.");
+			break;
+		}
+		if (!twoParticlesOverlap) {
+			if (gravitationalConst > 0) {
+				const sunPos = particles[0].position;
+				const dx = particle.position.x - sunPos.x;
+				const dy = particle.position.y - sunPos.y;
+				const r = Math.sqrt(dx * dx + dy * dy);
+				if (r > 0) {
+					const orbitalSpeed = Math.sqrt(gravitationalConst * sunMass / r);
+					particle.velocity = new Vector2D(-dy / r * orbitalSpeed, dx / r * orbitalSpeed);
+				}
 			}
+			if (particleSizeScale !== 1.0) particle.radius *= particleSizeScale;
+			particles.push(particle);
+			addSH.insert(particles.length - 1, particle.position.x, particle.position.y);
+			particleCount++;
 		}
 	}
 };
@@ -814,7 +846,7 @@ foregroundCanvas.addEventListener("mouseup", function (event) {
 				const dx = mouse.x - dragStart.x;
 				const dy = mouse.y - dragStart.y;
 				if (Math.sqrt(dx * dx + dy * dy) > 5) {
-					const r = Math.max(radiusMin, Math.min(radiusMax, (radiusMin + radiusMax) / 2));
+					const r = Math.max(radiusMin, Math.min(radiusMax, (radiusMin + radiusMax) / 2)) * particleSizeScale;
 					const m = Math.max(massMin, Math.min(massMax, (massMin + massMax) / 2));
 					const newParticle = new Particle(
 						new Vector2D(dragStart.x, dragStart.y),
@@ -847,6 +879,29 @@ foregroundCanvas.addEventListener("mousemove", function (event) {
 });
 //#endregion
 // #endregion
+
+function resolveCollision(i, k) {
+	const pi = particles[i], pk = particles[k];
+	const dx = pi.position.x - pk.position.x;
+	const dy = pi.position.y - pk.position.y;
+	let dist = Math.sqrt(dx * dx + dy * dy);
+	if (dist < 0.001) dist = 0.001;
+	const overlap = pi.radius + pk.radius - dist;
+	if (overlap <= 0) return;
+	const nx = dx / dist, ny = dy / dist;
+	const totalMass = pi.mass + pk.mass;
+	const fi = pk.mass / totalMass, fk = pi.mass / totalMass;
+	pi.position.x += fi * overlap * nx; pi.position.y += fi * overlap * ny;
+	pk.position.x -= fk * overlap * nx; pk.position.y -= fk * overlap * ny;
+	const v1x = pi.velocity.x, v1y = pi.velocity.y;
+	const v2x = pk.velocity.x, v2y = pk.velocity.y;
+	const approach = (v1x - v2x) * nx + (v1y - v2y) * ny;
+	if (approach < 0) {
+		const m1 = (2 * pk.mass) / totalMass, m2 = (2 * pi.mass) / totalMass;
+		pi.velocity.x = v1x - m1 * approach * nx; pi.velocity.y = v1y - m1 * approach * ny;
+		pk.velocity.x = v2x + m2 * approach * nx; pk.velocity.y = v2y + m2 * approach * ny;
+	}
+}
 
 function startAnimating(fps) {
 	fpsInterval = 1000 / fps;
@@ -882,43 +937,24 @@ function draw() {
 
 	// Collision + wall BEFORE force recomputation — prevents huge forces from overlapping pairs
 	if (particleCollisionsEnabled) {
-		const cellSize = Math.max(radiusMax, sunRadius) * 2;
-		if (!_sh || _shCellSize !== cellSize) { _sh = new SpatialHash(cellSize); _shCellSize = cellSize; }
+		// Phase 1: particle-particle — cell size based on particle radii only (NOT sun radius).
+		// Keeps cells small so clusters near the sun don't collapse into one giant cell → O(n²).
+		const ppCellSize = Math.max(radiusMax * particleSizeScale * 2, 1);
+		if (!_sh || _shCellSize !== ppCellSize) { _sh = new SpatialHash(ppCellSize); _shCellSize = ppCellSize; }
 		else _sh.clear();
-		for (let i = 0; i < particles.length; i++) {
+		for (let i = 1; i < particles.length; i++) {
 			_sh.insert(i, particles[i].position.x, particles[i].position.y);
 		}
-		for (let i = 0; i < particles.length; i++) {
+		for (let i = 1; i < particles.length; i++) {
 			const neighbors = _sh.queryNeighbors(particles[i].position.x, particles[i].position.y);
 			for (const k of neighbors) {
 				if (k <= i) continue;
-				if (!particles[i].Overlaps(particles[k])) continue;
-				let distance = particles[i].position.DistanceTo(particles[k].position);
-				if (distance < 0.001) distance = 0.001;
-				const overlap = particles[i].radius + particles[k].radius - distance;
-				const nx = (particles[i].position.x - particles[k].position.x) / distance;
-				const ny = (particles[i].position.y - particles[k].position.y) / distance;
-				const totalMass = particles[i].mass + particles[k].mass;
-				const f_i = particles[k].mass / totalMass;
-				const f_k = particles[i].mass / totalMass;
-				particles[i].position.x += f_i * overlap * nx;
-				particles[i].position.y += f_i * overlap * ny;
-				particles[k].position.x -= f_k * overlap * nx;
-				particles[k].position.y -= f_k * overlap * ny;
-				const v1x = particles[i].velocity.x;
-				const v1y = particles[i].velocity.y;
-				const v2x = particles[k].velocity.x;
-				const v2y = particles[k].velocity.y;
-				const approach = (v1x - v2x) * nx + (v1y - v2y) * ny;
-				if (approach < 0) {
-					const massFac1 = (2 * particles[k].mass) / totalMass;
-					const massFac2 = (2 * particles[i].mass) / totalMass;
-					particles[i].velocity.x = v1x - massFac1 * approach * nx;
-					particles[i].velocity.y = v1y - massFac1 * approach * ny;
-					particles[k].velocity.x = v2x + massFac2 * approach * nx;
-					particles[k].velocity.y = v2y + massFac2 * approach * ny;
-				}
+				if (particles[i].Overlaps(particles[k])) resolveCollision(i, k);
 			}
+		}
+		// Phase 2: particle-sun — direct O(n), sun radius is large so spatial hash can't help here.
+		for (let i = 1; i < particles.length; i++) {
+			if (particles[i].Overlaps(particles[0])) resolveCollision(0, i);
 		}
 	}
 

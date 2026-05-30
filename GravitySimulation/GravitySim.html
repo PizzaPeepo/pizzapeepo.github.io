@@ -55,13 +55,18 @@
 
     <div class="hud-section">
       <span class="ctrl-label">N-body algorithm</span>
-      <label><input type="checkbox" id="barnesHutCheckbox"> Barnes-Hut (θ = <span id="bhThetaValue">0.50</span>)</label>
-      <input type="range" min="0.1" max="1.5" step="0.05" value="0.5" class="slider" id="bhThetaSlider">
+      <label><input type="checkbox" id="barnesHutCheckbox" checked> Barnes-Hut (θ = <span id="bhThetaValue">1.50</span>)</label>
+      <input type="range" min="0.1" max="1.5" step="0.05" value="1.5" class="slider" id="bhThetaSlider">
     </div>
 
     <div class="hud-section">
       <span class="ctrl-label">Particle count: <span id="particleCountValue"></span></span>
       <input type="range" min="1" max="5000" step="1" class="slider" id="particleCountSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Particle size: <span id="particleSizeValue">100%</span></span>
+      <input type="range" min="1" max="200" step="1" value="100" class="slider" id="particleSizeSlider">
     </div>
 
     <div class="hud-section">
