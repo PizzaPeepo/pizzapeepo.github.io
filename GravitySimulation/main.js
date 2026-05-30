@@ -3,6 +3,7 @@ import * as RungeKutta from "../Utils/RungeKutta.js";
 import Particle from "./particle.js";
 import Vector2D from "../Utils/Vector2D.js";
 import { BarnesHutTree } from "./BarnesHutTree.js";
+import { SpatialHash } from "./SpatialHash.js";
 
 // #region global variables
 const HUD_PANEL_WIDTH = 280;
@@ -21,12 +22,13 @@ let fpsLastDrawTime = 0;
 var particleCount = 20;
 var particles = [];
 var dt = 0.01;
-const TRAIL_LENGTH = 60;
+const TRAIL_FADE = 0.04;
 const MAX_TRAIL_SPEED = 60;
 
 let repullsionColors = [];
 let attractionColors = [];
 let sunColor;
+let fadeColor = 'rgba(24,18,14,' + TRAIL_FADE + ')';
 
 const themeColors = {
 	dark: {
@@ -49,6 +51,9 @@ var wallFrictionFactor = 0.8;
 let particleCollisionsEnabled = true;
 let barnesHutEnabled = false;
 let bhTheta = 0.5;
+const bhTree = new BarnesHutTree(bhTheta);
+let accelBuf = new Float64Array(6000 * 2);
+let _sh = null, _shCellSize = 0;
 
 var initial_gravitationalConst = 50;
 let initial_sunMass = 10000;
@@ -127,6 +132,18 @@ function GenerateRandomizedParticles(particleCount) {
 			}
 		}
 	}
+	computeInitialAccelerations();
+}
+
+// Computes and stores gravitational acceleration on every particle (direct O(n²)).
+// Called on reset and after G changes — leapfrog needs correct stored accelerations.
+function computeInitialAccelerations() {
+	if (accelBuf.length < particles.length * 2) accelBuf = new Float64Array(particles.length * 2);
+	RungeKutta.computeAllAccelerationsInto(particles, gravitationalConst, accelBuf);
+	for (let i = 0; i < particles.length; i++) {
+		particles[i].acceleration.x = accelBuf[2 * i];
+		particles[i].acceleration.y = accelBuf[2 * i + 1];
+	}
 }
 
 GenerateRandomizedParticles(particleCount);
@@ -167,6 +184,9 @@ function applyThemeColors(isLight) {
 	sunColor        = helpers.HexToRGBA(t.sun);
 	attractionColors = t.attraction.map(c => helpers.HexToRGBA(c));
 	repullsionColors = t.repulsion.map(c => helpers.HexToRGBA(c));
+	fadeColor = isLight
+		? 'rgba(245,237,224,' + TRAIL_FADE + ')'
+		: 'rgba(24,18,14,' + TRAIL_FADE + ')';
 	bgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 }
 applyThemeColors(document.documentElement.classList.contains('light'));
@@ -850,81 +870,60 @@ function draw() {
 		resetCanvas = false;
 	}
 
-	const savedTrails = particles.map(p => p.trail || []);
-
-	let bhTree = null;
-	if (barnesHutEnabled && particles.length > 0) {
-		let minX = particles[0].position.x, maxX = minX;
-		let minY = particles[0].position.y, maxY = minY;
-		for (const p of particles) {
-			if (p.position.x < minX) minX = p.position.x;
-			else if (p.position.x > maxX) maxX = p.position.x;
-			if (p.position.y < minY) minY = p.position.y;
-			else if (p.position.y > maxY) maxY = p.position.y;
-		}
-		const margin = Math.max((maxX - minX) * 0.1, (maxY - minY) * 0.1, 100);
-		bhTree = new BarnesHutTree(minX - margin, minY - margin, maxX - minX + 2 * margin, maxY - minY + 2 * margin, bhTheta);
-		for (const p of particles) bhTree.insert(p);
+	// Leapfrog velocity Verlet: half-kick → drift → recompute accel → half-kick
+	// 1 force evaluation per step (vs RK4's 4), symplectic → conserves energy for orbits
+	for (const p of particles) {
+		p.velocity.x += p.acceleration.x * (dt * 0.5);
+		p.velocity.y += p.acceleration.y * (dt * 0.5);
+	}
+	for (const p of particles) {
+		p.position.x += p.velocity.x * dt;
+		p.position.y += p.velocity.y * dt;
 	}
 
-	let tempParticles = [];
-	for (let k = 0; k < particles.length; k++) {
-		tempParticles.push(
-			barnesHutEnabled && bhTree
-				? RungeKutta.RK4_ParticlesInGravField_BH(k, particles, dt, gravitationalConst, bhTree)
-				: RungeKutta.RK4_ParticlesInGravField(k, particles, dt, gravitationalConst)
-		);
-	}
-
-	// Collision handling
+	// Collision + wall BEFORE force recomputation — prevents huge forces from overlapping pairs
 	if (particleCollisionsEnabled) {
-		for (let i = 0; i < tempParticles.length; i++) {
-			for (let k = i + 1; k < tempParticles.length; k++) {
-				if (tempParticles[i].Overlaps(tempParticles[k])) {
-					let distance = tempParticles[i].position.DistanceTo(tempParticles[k].position);
-					if (distance < 0.001) distance = 0.001;
-					const overlap = tempParticles[i].radius + tempParticles[k].radius - distance;
-
-					const nx = (tempParticles[i].position.x - tempParticles[k].position.x) / distance;
-					const ny = (tempParticles[i].position.y - tempParticles[k].position.y) / distance;
-
-					const totalMass = tempParticles[i].mass + tempParticles[k].mass;
-					const f_i = tempParticles[k].mass / totalMass;
-					const f_k = tempParticles[i].mass / totalMass;
-					tempParticles[i].position.x += f_i * overlap * nx;
-					tempParticles[i].position.y += f_i * overlap * ny;
-					tempParticles[k].position.x -= f_k * overlap * nx;
-					tempParticles[k].position.y -= f_k * overlap * ny;
-
-					const v1x = tempParticles[i].velocity.x;
-					const v1y = tempParticles[i].velocity.y;
-					const v2x = tempParticles[k].velocity.x;
-					const v2y = tempParticles[k].velocity.y;
-
-					const approach = (v1x - v2x) * nx + (v1y - v2y) * ny;
-					if (approach < 0) {
-						const massFac1 = (2 * tempParticles[k].mass) / totalMass;
-						const massFac2 = (2 * tempParticles[i].mass) / totalMass;
-						tempParticles[i].velocity.x = v1x - massFac1 * approach * nx;
-						tempParticles[i].velocity.y = v1y - massFac1 * approach * ny;
-						tempParticles[k].velocity.x = v2x + massFac2 * approach * nx;
-						tempParticles[k].velocity.y = v2y + massFac2 * approach * ny;
-					}
+		const cellSize = Math.max(radiusMax, sunRadius) * 2;
+		if (!_sh || _shCellSize !== cellSize) { _sh = new SpatialHash(cellSize); _shCellSize = cellSize; }
+		else _sh.clear();
+		for (let i = 0; i < particles.length; i++) {
+			_sh.insert(i, particles[i].position.x, particles[i].position.y);
+		}
+		for (let i = 0; i < particles.length; i++) {
+			const neighbors = _sh.queryNeighbors(particles[i].position.x, particles[i].position.y);
+			for (const k of neighbors) {
+				if (k <= i) continue;
+				if (!particles[i].Overlaps(particles[k])) continue;
+				let distance = particles[i].position.DistanceTo(particles[k].position);
+				if (distance < 0.001) distance = 0.001;
+				const overlap = particles[i].radius + particles[k].radius - distance;
+				const nx = (particles[i].position.x - particles[k].position.x) / distance;
+				const ny = (particles[i].position.y - particles[k].position.y) / distance;
+				const totalMass = particles[i].mass + particles[k].mass;
+				const f_i = particles[k].mass / totalMass;
+				const f_k = particles[i].mass / totalMass;
+				particles[i].position.x += f_i * overlap * nx;
+				particles[i].position.y += f_i * overlap * ny;
+				particles[k].position.x -= f_k * overlap * nx;
+				particles[k].position.y -= f_k * overlap * ny;
+				const v1x = particles[i].velocity.x;
+				const v1y = particles[i].velocity.y;
+				const v2x = particles[k].velocity.x;
+				const v2y = particles[k].velocity.y;
+				const approach = (v1x - v2x) * nx + (v1y - v2y) * ny;
+				if (approach < 0) {
+					const massFac1 = (2 * particles[k].mass) / totalMass;
+					const massFac2 = (2 * particles[i].mass) / totalMass;
+					particles[i].velocity.x = v1x - massFac1 * approach * nx;
+					particles[i].velocity.y = v1y - massFac1 * approach * ny;
+					particles[k].velocity.x = v2x + massFac2 * approach * nx;
+					particles[k].velocity.y = v2y + massFac2 * approach * ny;
 				}
 			}
 		}
 	}
 
-	for (let j = 0; j < particles.length; j++) {
-		particles[j] = tempParticles[j].DeepCopy();
-		particles[j].trail = savedTrails[j] || [];
-		if (!particles[j].isHeavyParticle) {
-			particles[j].trail.push({ x: particles[j].position.x, y: particles[j].position.y, speed: particles[j].velocity.length });
-			if (particles[j].trail.length > TRAIL_LENGTH) particles[j].trail.shift();
-		}
-	}
-
-	// Wall behavior handling
+	// Wall behavior
 	switch (wallBehavior) {
 		case WallBehaviorEnum.none: {
 			for(let i = particles.length - 1; i >= 0; i--){
@@ -977,6 +976,41 @@ function draw() {
 		}
 	}
 
+	// Force recomputation at corrected (post-collision, post-wall) positions
+	if (barnesHutEnabled && particles.length > 0) {
+		let minX = particles[0].position.x, maxX = minX;
+		let minY = particles[0].position.y, maxY = minY;
+		for (const p of particles) {
+			if (p.position.x < minX) minX = p.position.x;
+			else if (p.position.x > maxX) maxX = p.position.x;
+			if (p.position.y < minY) minY = p.position.y;
+			else if (p.position.y > maxY) maxY = p.position.y;
+		}
+		const margin = Math.max((maxX - minX) * 0.1, (maxY - minY) * 0.1, 100);
+		bhTree.theta = bhTheta;
+		bhTree.reset(minX - margin, minY - margin, maxX - minX + 2 * margin, maxY - minY + 2 * margin);
+		for (const p of particles) bhTree.insert(p);
+	}
+
+	if (accelBuf.length < particles.length * 2) accelBuf = new Float64Array(particles.length * 2);
+	if (barnesHutEnabled && particles.length > 0) {
+		for (let i = 0; i < particles.length; i++) {
+			const p = particles[i];
+			const [ax, ay] = bhTree.computeAccelAt(p.position.x, p.position.y, p, gravitationalConst);
+			accelBuf[2 * i] = ax; accelBuf[2 * i + 1] = ay;
+		}
+	} else {
+		RungeKutta.computeAllAccelerationsInto(particles, gravitationalConst, accelBuf);
+	}
+
+	for (let i = 0; i < particles.length; i++) {
+		const ax = accelBuf[2 * i], ay = accelBuf[2 * i + 1];
+		particles[i].velocity.x += ax * (dt * 0.5);
+		particles[i].velocity.y += ay * (dt * 0.5);
+		particles[i].acceleration.x = ax;
+		particles[i].acceleration.y = ay;
+	}
+
 	// calc elapsed time since last loop
 	now = Date.now();
 	elapsed = now - then;
@@ -989,25 +1023,18 @@ function draw() {
 
 		fgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-		// draw trails
+		// fade bg canvas toward background color, then stamp current positions as trail dots
+		bgCtx.fillStyle = fadeColor;
+		bgCtx.fillRect(0, 0, canvasWidth, canvasHeight);
 		particles.forEach((particle) => {
-			if (!particle.isHeavyParticle && particle.trail && particle.trail.length > 1) {
-				const trail = particle.trail;
-				fgCtx.save();
-				fgCtx.lineWidth = 1;
-				for (let t = 1; t < trail.length; t++) {
-					const age = t / trail.length;
-					const speedPct = Math.min(1, trail[t].speed / MAX_TRAIL_SPEED);
-					const clr = gravitationalConst >= 0
-						? helpers.ColorRGBA.LinearInterpolateColors(attractionColors, speedPct)
-						: helpers.ColorRGBA.LinearInterpolateColors(repullsionColors, speedPct);
-					fgCtx.beginPath();
-					fgCtx.strokeStyle = 'rgba(' + clr.R + ',' + clr.G + ',' + clr.B + ',' + (age * 0.6).toFixed(3) + ')';
-					fgCtx.moveTo(trail[t - 1].x, trail[t - 1].y);
-					fgCtx.lineTo(trail[t].x, trail[t].y);
-					fgCtx.stroke();
-				}
-				fgCtx.restore();
+			if (!particle.isHeavyParticle) {
+				const vx = particle.velocity.x, vy = particle.velocity.y;
+				const speedPct = Math.min(1, Math.sqrt(vx * vx + vy * vy) / MAX_TRAIL_SPEED);
+				const clr = gravitationalConst >= 0
+					? helpers.ColorRGBA.LinearInterpolateColors(attractionColors, speedPct)
+					: helpers.ColorRGBA.LinearInterpolateColors(repullsionColors, speedPct);
+				bgCtx.fillStyle = clr.RGBA;
+				bgCtx.fillRect(particle.position.x - 1, particle.position.y - 1, 2, 2);
 			}
 		});
 

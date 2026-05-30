@@ -28,22 +28,55 @@ export function RK4_2D(r, t, dt, diffEq) {
 	return resultVec;
 }
 
+const SOFTENING_SQ = 25; // 5px Plummer softening — prevents force singularity at close range
+
 function CalcGravForce(targetParticleIndex, particles, gravConst) {
 	let forceVec = new Vector2D(0, 0);
+	const tp = particles[targetParticleIndex];
 	for (let i = 0; i < particles.length; i++) {
-		if (i != targetParticleIndex) {
-			// TODO: need to prevent distance to be zero!
-			forceVec.x +=
-				(particles[i].mass * (particles[i].position.x - particles[targetParticleIndex].position.x)) /
-				particles[i].position.DistanceTo(particles[targetParticleIndex].position) ** 3;
-			forceVec.y +=
-				(particles[i].mass * (particles[i].position.y - particles[targetParticleIndex].position.y)) /
-				particles[i].position.DistanceTo(particles[targetParticleIndex].position) ** 3;
+		if (i !== targetParticleIndex) {
+			const dx = particles[i].position.x - tp.position.x;
+			const dy = particles[i].position.y - tp.position.y;
+			const r2 = dx * dx + dy * dy + SOFTENING_SQ;
+			const r3 = r2 * Math.sqrt(r2);
+			forceVec.x += particles[i].mass * dx / r3;
+			forceVec.y += particles[i].mass * dy / r3;
 		}
 	}
 	forceVec = forceVec.Multiply(gravConst);
-	forceVec = forceVec.Multiply(particles[targetParticleIndex].mass);
+	forceVec = forceVec.Multiply(tp.mass);
 	return forceVec;
+}
+
+// Returns array of [ax, ay] for every particle — used by leapfrog integrator
+export function computeAllAccelerations(particles, gravConst) {
+	return particles.map((_, i) => {
+		const a = CalcGravAcceleration(i, particles, gravConst);
+		return [a.x, a.y];
+	});
+}
+
+// Zero-allocation variant: writes [ax, ay, ax, ay, ...] directly into a pre-allocated Float64Array.
+// buf must have length >= particles.length * 2.
+export function computeAllAccelerationsInto(particles, gravConst, buf) {
+	const n = particles.length;
+	for (let i = 0; i < n; i++) {
+		const tp = particles[i];
+		const tpx = tp.position.x, tpy = tp.position.y;
+		let ax = 0, ay = 0;
+		for (let j = 0; j < n; j++) {
+			if (j !== i) {
+				const dx = particles[j].position.x - tpx;
+				const dy = particles[j].position.y - tpy;
+				const r2 = dx * dx + dy * dy + SOFTENING_SQ;
+				const r3 = r2 * Math.sqrt(r2);
+				ax += particles[j].mass * dx / r3;
+				ay += particles[j].mass * dy / r3;
+			}
+		}
+		buf[2 * i]     = gravConst * ax;
+		buf[2 * i + 1] = gravConst * ay;
+	}
 }
 
 function CalcGravAcceleration(targetParticleIndex, particles, gravConst) {
