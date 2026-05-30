@@ -1080,7 +1080,6 @@ function draw() {
 				if (gravitationalConst >= 0) {
 					let percentage = particle.acceleration.length / 100 > 1 ? 1 : particle.acceleration.length / 100;
 					clr = helpers.ColorRGBA.LinearInterpolateColors(attractionColors, percentage);
-					particle.Draw(fgCtx, clr.RGBA, clr.RGBA);
 				} else {
 					let percentage = particle.acceleration.length / 100 > 1 ? 1 : particle.acceleration.length / 100;
 					clr = helpers.ColorRGBA.LinearInterpolateColors(repullsionColors, percentage);

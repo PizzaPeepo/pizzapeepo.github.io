@@ -1,3 +1,11 @@
+// Plummer softening length (px). Gravity is smoothed below this scale, so the tree gains
+// nothing by subdividing finer — leaves bottom out here. Without this floor, dense clumps
+// (e.g. tiny particles that never collide) split to sub-pixel leaves, exploding node count
+// and force-eval traversal cost → severe slowdown.
+const BH_SOFTENING = 5;
+const BH_SOFTENING2 = BH_SOFTENING * BH_SOFTENING; // 25
+const BH_MIN_CELL = BH_SOFTENING;
+
 class BHNode {
 	constructor() {
 		this.x = 0; this.y = 0; this.w = 0; this.h = 0;
@@ -23,8 +31,8 @@ class BHNode {
 		}
 
 		if (this.children === null) {
-			if (this.w < 0.5 || this.h < 0.5) {
-				// cell too small to subdivide — accumulate mass in place
+			if (this.w < BH_MIN_CELL || this.h < BH_MIN_CELL) {
+				// cell at/below softening length — accumulate mass in place (resolving finer is pointless)
 				const m = this.totalMass + particle.mass;
 				this.cx = (this.cx * this.totalMass + particle.position.x * particle.mass) / m;
 				this.cy = (this.cy * this.totalMass + particle.position.y * particle.mass) / m;
@@ -64,7 +72,7 @@ class BHNode {
 		if (this.children === null) {
 			if (this.particle === excludeParticle) return [0, 0];
 			const dx = this.cx - px, dy = this.cy - py;
-			const r2s = dx * dx + dy * dy + 25; // +5² Plummer softening
+			const r2s = dx * dx + dy * dy + BH_SOFTENING2; // Plummer softening
 			const r3s = r2s * Math.sqrt(r2s);
 			return [gravConst * this.totalMass * dx / r3s, gravConst * this.totalMass * dy / r3s];
 		}
@@ -75,7 +83,7 @@ class BHNode {
 			const r = Math.sqrt(r2);
 			const s = this.w > this.h ? this.w : this.h;
 			if (s / r < theta) {
-				const sr2 = r2 + 25; // +5² Plummer softening
+				const sr2 = r2 + BH_SOFTENING2; // Plummer softening
 				const r3 = sr2 * Math.sqrt(sr2);
 				return [gravConst * this.totalMass * dx / r3, gravConst * this.totalMass * dy / r3];
 			}
