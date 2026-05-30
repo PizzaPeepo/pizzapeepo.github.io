@@ -65,39 +65,40 @@ class BHNode {
 		this.children[idx].insert(particle, tree);
 	}
 
-	// px, py — query position; excludeParticle — original particle object to skip (prevents self-force)
-	computeAccel(px, py, gravConst, theta, excludeParticle) {
-		if (this.totalMass === 0) return [0, 0];
+	// Accumulates the acceleration at (px,py) into tree._ax / tree._ay. Writing to shared
+	// fields (instead of returning [ax,ay]) avoids one array allocation per visited node —
+	// with n particles each walking many nodes, that was the dominant GC source.
+	// theta2 = theta² so the opening-angle test stays sqrt/division-free.
+	// excludeParticle — original particle object to skip (prevents self-force).
+	computeAccel(px, py, gravConst, theta2, excludeParticle, tree) {
+		if (this.totalMass === 0) return;
 
 		if (this.children === null) {
-			if (this.particle === excludeParticle) return [0, 0];
+			if (this.particle === excludeParticle) return;
 			const dx = this.cx - px, dy = this.cy - py;
 			const r2s = dx * dx + dy * dy + BH_SOFTENING2; // Plummer softening
-			const r3s = r2s * Math.sqrt(r2s);
-			return [gravConst * this.totalMass * dx / r3s, gravConst * this.totalMass * dy / r3s];
+			const f = gravConst * this.totalMass / (r2s * Math.sqrt(r2s));
+			tree._ax += f * dx; tree._ay += f * dy;
+			return;
 		}
 
 		const dx = this.cx - px, dy = this.cy - py;
 		const r2 = dx * dx + dy * dy;
 		if (r2 > 0) {
-			const r = Math.sqrt(r2);
 			const s = this.w > this.h ? this.w : this.h;
-			if (s / r < theta) {
+			// s/r < theta  ⇔  s² < theta²·r²  (both sides positive) — avoids sqrt + division
+			if (s * s < theta2 * r2) {
 				const sr2 = r2 + BH_SOFTENING2; // Plummer softening
-				const r3 = sr2 * Math.sqrt(sr2);
-				return [gravConst * this.totalMass * dx / r3, gravConst * this.totalMass * dy / r3];
+				const f = gravConst * this.totalMass / (sr2 * Math.sqrt(sr2));
+				tree._ax += f * dx; tree._ay += f * dy;
+				return;
 			}
 		}
 
-		let ax = 0, ay = 0;
+		const c = this.children;
 		for (let i = 0; i < 4; i++) {
-			const child = this.children[i];
-			if (child.totalMass > 0) {
-				const [cax, cay] = child.computeAccel(px, py, gravConst, theta, excludeParticle);
-				ax += cax; ay += cay;
-			}
+			if (c[i].totalMass > 0) c[i].computeAccel(px, py, gravConst, theta2, excludeParticle, tree);
 		}
-		return [ax, ay];
 	}
 }
 
@@ -109,6 +110,7 @@ export class BarnesHutTree {
 		for (let i = 0; i < poolSize; i++) this._pool[i] = new BHNode();
 		this._ptr = 0;
 		this.root = null;
+		this._ax = 0; this._ay = 0; // accumulator written by BHNode.computeAccel
 	}
 
 	_alloc(x, y, w, h) {
@@ -126,8 +128,11 @@ export class BarnesHutTree {
 		this.root.insert(particle, this);
 	}
 
-	// Query acceleration at (px,py), excluding originalParticle's contribution (self-force prevention)
+	// Computes acceleration at (px,py) into this._ax / this._ay, excluding excludeParticle's
+	// contribution (self-force prevention). Read the result from _ax/_ay after the call.
 	computeAccelAt(px, py, excludeParticle, gravConst) {
-		return this.root.computeAccel(px, py, gravConst, this.theta, excludeParticle);
+		this._ax = 0; this._ay = 0;
+		const theta2 = this.theta * this.theta;
+		this.root.computeAccel(px, py, gravConst, theta2, excludeParticle, this);
 	}
 }

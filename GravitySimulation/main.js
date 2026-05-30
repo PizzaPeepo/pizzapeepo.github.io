@@ -27,6 +27,9 @@ const MAX_TRAIL_SPEED = 60;
 
 let repullsionColors = [];
 let attractionColors = [];
+const LUT_SIZE = 64;
+let attractionLUT = [];
+let repulsionLUT = [];
 let sunColor;
 let fadeColor = 'rgba(24,18,14,' + TRAIL_FADE + ')';
 
@@ -181,12 +184,25 @@ window.addEventListener('resize', function () {
 	resetCanvas = true;
 });
 
+// Bake a palette into LUT_SIZE ready-to-use rgba strings, indexed by a clamped [0,1] value.
+// Lets the hot draw/trail loops index a string instead of allocating a ColorRGBA (+ its string)
+// per particle per frame. 64 steps is visually continuous.
+function buildColorLUT(palette) {
+	const lut = new Array(LUT_SIZE);
+	for (let i = 0; i < LUT_SIZE; i++) {
+		lut[i] = helpers.ColorRGBA.LinearInterpolateColors(palette, i / (LUT_SIZE - 1)).RGBA;
+	}
+	return lut;
+}
+
 function applyThemeColors(isLight) {
 	const t = isLight ? themeColors.light : themeColors.dark;
 	backgroundCanvas.style.background = t.bg;
 	sunColor        = helpers.HexToRGBA(t.sun);
 	attractionColors = t.attraction.map(c => helpers.HexToRGBA(c));
 	repullsionColors = t.repulsion.map(c => helpers.HexToRGBA(c));
+	attractionLUT = buildColorLUT(attractionColors);
+	repulsionLUT = buildColorLUT(repullsionColors);
 	fadeColor = isLight
 		? 'rgba(245,237,224,' + TRAIL_FADE + ')'
 		: 'rgba(24,18,14,' + TRAIL_FADE + ')';
@@ -973,7 +989,8 @@ function draw() {
 			break;
 		}
 		case WallBehaviorEnum.infinite: {
-			particles.forEach((particle) => {
+			for (let i = 0; i < particles.length; i++) {
+				const particle = particles[i];
 				if (particle.position.x < 0) {
 					particle.position.x = canvasWidth;
 				}
@@ -986,11 +1003,12 @@ function draw() {
 				if (particle.position.y > canvasHeight) {
 					particle.position.y = 0;
 				}
-			});
+			}
 			break;
 		}
 		case WallBehaviorEnum.collision: {
-			particles.forEach((particle) => {
+			for (let i = 0; i < particles.length; i++) {
+				const particle = particles[i];
 				if (particle.position.x <= particle.radius) {
 					particle.position.x = particle.radius;
 					particle.velocity.x *= -1 * wallFrictionFactor;
@@ -1006,7 +1024,7 @@ function draw() {
 					particle.position.y = canvasHeight - particle.radius;
 					particle.velocity.y *= -1 * wallFrictionFactor;
 				}
-			});
+			}
 			break;
 		}
 	}
@@ -1031,8 +1049,8 @@ function draw() {
 	if (barnesHutEnabled && particles.length > 0) {
 		for (let i = 0; i < particles.length; i++) {
 			const p = particles[i];
-			const [ax, ay] = bhTree.computeAccelAt(p.position.x, p.position.y, p, gravitationalConst);
-			accelBuf[2 * i] = ax; accelBuf[2 * i + 1] = ay;
+			bhTree.computeAccelAt(p.position.x, p.position.y, p, gravitationalConst);
+			accelBuf[2 * i] = bhTree._ax; accelBuf[2 * i + 1] = bhTree._ay;
 		}
 	} else {
 		RungeKutta.computeAllAccelerationsInto(particles, gravitationalConst, accelBuf);
@@ -1060,41 +1078,36 @@ function draw() {
 		// fade bg canvas toward background color, then stamp current positions as trail dots
 		bgCtx.fillStyle = fadeColor;
 		bgCtx.fillRect(0, 0, canvasWidth, canvasHeight);
-		particles.forEach((particle) => {
-			if (!particle.isHeavyParticle) {
-				const vx = particle.velocity.x, vy = particle.velocity.y;
-				const speedPct = Math.min(1, Math.sqrt(vx * vx + vy * vy) / MAX_TRAIL_SPEED);
-				const clr = gravitationalConst >= 0
-					? helpers.ColorRGBA.LinearInterpolateColors(attractionColors, speedPct)
-					: helpers.ColorRGBA.LinearInterpolateColors(repullsionColors, speedPct);
-				bgCtx.fillStyle = clr.RGBA;
-				bgCtx.fillRect(particle.position.x - 1, particle.position.y - 1, 2, 2);
-			}
-		});
+		const trailLUT = gravitationalConst >= 0 ? attractionLUT : repulsionLUT;
+		for (let pi = 0; pi < particles.length; pi++) {
+			const particle = particles[pi];
+			if (particle.isHeavyParticle) continue;
+			const vx = particle.velocity.x, vy = particle.velocity.y;
+			const speedPct = Math.min(1, Math.sqrt(vx * vx + vy * vy) / MAX_TRAIL_SPEED);
+			bgCtx.fillStyle = trailLUT[(speedPct * (LUT_SIZE - 1)) | 0];
+			bgCtx.fillRect(particle.position.x - 1, particle.position.y - 1, 2, 2);
+		}
 
 		// draw particles
-		particles.forEach((particle) => {
+		const drawLUT = gravitationalConst >= 0 ? attractionLUT : repulsionLUT;
+		const sunRGBA = sunColor.RGBA;
+		for (let pi = 0; pi < particles.length; pi++) {
+			const particle = particles[pi];
 			if (!particle.isHeavyParticle) {
-				let clr = new helpers.ColorRGBA(255, 255, 255, 1.0);
-				//particle.Draw(fgCtx, whiteLineStrokeStyle, whiteLineStrokeStyle);
-				if (gravitationalConst >= 0) {
-					let percentage = particle.acceleration.length / 100 > 1 ? 1 : particle.acceleration.length / 100;
-					clr = helpers.ColorRGBA.LinearInterpolateColors(attractionColors, percentage);
-				} else {
-					let percentage = particle.acceleration.length / 100 > 1 ? 1 : particle.acceleration.length / 100;
-					clr = helpers.ColorRGBA.LinearInterpolateColors(repullsionColors, percentage);
-				}
-				particle.Draw(fgCtx, clr.RGBA, clr.RGBA);
+				const accLen = particle.acceleration.length;
+				const percentage = accLen > 100 ? 1 : accLen / 100;
+				const rgba = drawLUT[(percentage * (LUT_SIZE - 1)) | 0];
+				particle.Draw(fgCtx, rgba, rgba);
 			} else {
-				let dist = Math.floor(helpers.Distance(particle.position.x, particle.position.y, mouse.x, mouse.y));
+				const dist = Math.floor(helpers.Distance(particle.position.x, particle.position.y, mouse.x, mouse.y));
 				if (dist < 50 && particle.radius < sunRadius * 1.2) {
 					particle.radius += 0.2;
 				} else if (particle.radius > sunRadius) {
 					particle.radius -= 0.2;
 				}
-				particle.Draw(fgCtx, sunColor.RGBA, sunColor.RGBA);
+				particle.Draw(fgCtx, sunRGBA, sunRGBA);
 			}
-		});
+		}
 
 		if (isRightMouseDown) {
 			particles[0].lastMousePos.x += (mouse.x - particles[0].lastMousePos.x) * 0.05;
