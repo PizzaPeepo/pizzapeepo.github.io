@@ -950,7 +950,7 @@ function resolveCollision(i, k) {
 			const mx = (pi.position.x + pk.position.x) * 0.5;
 			const my = (pi.position.y + pk.position.y) * 0.5;
 			const intensity = Math.min(1, Math.abs(approach) / 150);
-			const flashR = (pi.radius + pk.radius) * (1 + intensity * 2);
+			const flashR = (pi.radius + pk.radius) * (1 + intensity * 0.6);
 			const savedOp = bgCtx.globalCompositeOperation;
 			bgCtx.globalCompositeOperation = 'lighter';
 			const grad = bgCtx.createRadialGradient(mx, my, 0, mx, my, flashR);
@@ -1019,30 +1019,24 @@ function syncPresetUI() {
 	particleCount = particles.length;
 	particleCountSlider.value = particleCount;
 	particleCountValue.innerHTML = particleCount;
+	if (particleSizeScale !== 1.0) {
+		for (let i = 1; i < particles.length; i++) particles[i].radius *= particleSizeScale;
+	}
 	then = Date.now();
 }
 
 function applyPreset(name) {
 	switch (name) {
 		case 'orbital': {
-			gravitationalConst = 50;
-			sunMass = 10000;
-			sunRadius = 15;
-			particles[0].mass = sunMass;
-			particles[0].radius = sunRadius;
-			wallBehavior = WallBehaviorEnum.none;
-			noWallsRadiobutton.checked = true;
 			resetCanvas = true;
 			syncPresetUI();
 			break;
 		}
 		case 'ring': {
-			gravitationalConst = 50;
-			sunMass = 10000;
 			particles = [];
 			particles.push(new Particle(
 				new Vector2D(canvasWidth / 2, canvasHeight / 2),
-				new Vector2D(0, 0), new Vector2D(0, 0), 15, sunMass
+				new Vector2D(0, 0), new Vector2D(0, 0), sunRadius, sunMass
 			));
 			const ringR = Math.min(canvasWidth, canvasHeight) * 0.35;
 			const ringN = Math.max(particleCount - 1, 30);
@@ -1055,15 +1049,12 @@ function applyPreset(name) {
 					new Vector2D(0, 0), 3, 1.5
 				));
 			}
-			wallBehavior = WallBehaviorEnum.none;
-			noWallsRadiobutton.checked = true;
 			computeInitialAccelerations();
 			syncPresetUI();
 			break;
 		}
 		case 'galaxy-collision': {
-			gravitationalConst = 50;
-			const gSunMass = 8000, gSunR = 18;
+			const gSunMass = sunMass, gSunR = sunRadius;
 			particles = [];
 			const cx1 = canvasWidth * 0.27, cy1 = canvasHeight * 0.5;
 			const cx2 = canvasWidth * 0.73, cy2 = canvasHeight * 0.5;
@@ -1073,19 +1064,15 @@ function applyPreset(name) {
 			const nEach = Math.floor(Math.max(particleCount, 60) / 2);
 			spawnDisk(cx1, cy1,  cv,  12, nEach, gSunMass);
 			spawnDisk(cx2, cy2, -cv, -12, nEach, gSunMass);
-			wallBehavior = WallBehaviorEnum.none;
-			noWallsRadiobutton.checked = true;
 			computeInitialAccelerations();
 			syncPresetUI();
 			break;
 		}
 		case 'collapse': {
-			gravitationalConst = 80;
-			sunMass = 500;
 			particles = [];
 			particles.push(new Particle(
 				new Vector2D(canvasWidth / 2, canvasHeight / 2),
-				new Vector2D(0, 0), new Vector2D(0, 0), 10, sunMass
+				new Vector2D(0, 0), new Vector2D(0, 0), sunRadius, sunMass
 			));
 			const spread = Math.min(canvasWidth, canvasHeight) * 0.42;
 			const colN = Math.max(particleCount - 1, 80);
@@ -1097,8 +1084,6 @@ function applyPreset(name) {
 					new Vector2D(0, 0), new Vector2D(0, 0), 2, 1
 				));
 			}
-			wallBehavior = WallBehaviorEnum.collision;
-			collisionWallsRadiobutton.checked = true;
 			computeInitialAccelerations();
 			syncPresetUI();
 			break;
@@ -1364,7 +1349,7 @@ function draw() {
 				let sx = dragStart.x, sy = dragStart.y;
 				let svx = dx, svy = dy;
 				fgCtx.fillStyle = 'rgba(255,255,255,0.22)';
-				for (let step = 0; step < 150; step++) {
+				for (let step = 0; step < 600; step++) {
 					const sun = particles[0];
 					const gdx = sun.position.x - sx;
 					const gdy = sun.position.y - sy;
@@ -1374,7 +1359,7 @@ function draw() {
 					svy += gdy * gf * simDt2;
 					sx  += svx * simDt2;
 					sy  += svy * simDt2;
-					if (step % 3 === 0) fgCtx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
+					if (step % 4 === 0) fgCtx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
 				}
 			}
 			fgCtx.restore();
