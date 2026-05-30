@@ -1,20 +1,19 @@
-// Barnes-Hut N-body — CPU tree, GPU render.
+// Barnes-Hut N-body galaxy — CPU tree, GPU render, full 3D.
 //
-// Force evaluation uses the project's existing, tested Barnes-Hut quadtree
-// (../GravitySimulation/BarnesHutTree.js): O(n log n) instead of the brute-force
-// O(n²) all-pairs the first GPU version used. The tree is built and walked on the
-// CPU each frame; the GPU's job is to draw the result — particle positions are
+// Each frame the CPU builds a Barnes-Hut octree (./Octree.js), flattens it to typed
+// arrays, and walks it with a stackless skip-pointer traversal to get 3D forces —
+// O(n log n) instead of brute-force O(n²). The GPU only draws: particle positions are
 // streamed into an InstancedMesh via a dynamic instanced attribute (one-way upload,
-// no GPU→CPU readback). Physics is 2D (the tree is a quadtree); z is a fixed thin
-// scatter so the disk reads as 3D when you orbit it.
+// no GPU→CPU readback). Self-gravity acts on all three axes, so an initially puffy
+// cloud collapses toward a midplane and flattens into a disk on its own.
 //
-// The tree's softening/min-cell constants are tuned for ~800px space, so we simulate
-// in that pixel-scale and frame the camera to it — that lets us reuse the tree as-is.
+// Softening/min-cell constants are tuned for ~800px space, so we simulate in that
+// pixel-scale and frame the camera to it.
 
 import * as THREE from 'three/webgpu';
 import { Fn, attribute, positionLocal, uniform, color } from 'three/tsl';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { BarnesHutTree } from '../GravitySimulation/BarnesHutTree.js';
+import { Octree } from './Octree.js';
 
 // ── config ──
 const MAX = 65536;            // array capacity = largest selectable count
@@ -34,14 +33,37 @@ let massEach = BASE_DISK_MASS / count;
 
 // ── CPU particle state (structure-of-arrays) ──
 const px = new Float32Array(MAX), py = new Float32Array(MAX), pz = new Float32Array(MAX);
-const vx = new Float32Array(MAX), vy = new Float32Array(MAX);
+const vx = new Float32Array(MAX), vy = new Float32Array(MAX), vz = new Float32Array(MAX);
 
 // persistent particle views the tree consumes ({ position:{x,y}, mass }); reused, no per-frame alloc
 const parts = new Array(MAX);
-for (let i = 0; i < MAX; i++) parts[i] = { position: { x: 0, y: 0 }, mass: 0 };
+for (let i = 0; i < MAX; i++) parts[i] = { position: { x: 0, y: 0, z: 0 }, mass: 0 };
 
-// pool sized for ~2 nodes/particle at max count, so the tree never grows mid-run
-const tree = new BarnesHutTree(THETA, MAX * 2);
+// pool sized for ~2 nodes/particle at max count; grows lazily if ever exceeded
+const tree = new Octree(MAX * 2);
+
+// Flattened tree (DFS pre-order, skip pointers). Node count is bounded by the
+// min-cell floor (not particle count); flat arrays sized generously for 3D.
+// tSize[idx] = cube side for internal nodes, -1 for leaves.
+const MAXNODES = MAX * 3;
+const tComX = new Float32Array(MAXNODES), tComY = new Float32Array(MAXNODES), tComZ = new Float32Array(MAXNODES);
+const tMass = new Float32Array(MAXNODES), tSize = new Float32Array(MAXNODES);
+const tSkip = new Int32Array(MAXNODES);
+let nNodes = 0;
+
+function flattenNode(node) {
+	const idx = nNodes++;
+	tComX[idx] = node.cx; tComY[idx] = node.cy; tComZ[idx] = node.cz; tMass[idx] = node.totalMass;
+	if (node.children === null) {
+		tSize[idx] = -1; // leaf
+	} else {
+		tSize[idx] = node.s; // cubic cell side
+		const c = node.children;
+		for (let k = 0; k < 8; k++) if (c[k].totalMass > 0) flattenNode(c[k]);
+	}
+	tSkip[idx] = nNodes; // index just past this node's whole subtree
+}
+function flattenTree() { nNodes = 0; flattenNode(tree.root); }
 
 // ── render uniforms ──
 const sizeU = uniform(4.0);        // sphere radius, render (= sim) units
@@ -51,48 +73,82 @@ const speedScale = uniform(0.0125); // maps speed → color ramp
 let renderer, scene, camera, controls, mesh;
 let instPos, instSpeed; // InstancedBufferAttributes streamed each frame
 
+// standard normal (Box-Muller)
+function gauss() {
+	let u = 0, v = 0;
+	while (u === 0) u = Math.random();
+	while (v === 0) v = Math.random();
+	return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
 function initDisk() {
-	const rMin = DISK_R * 0.04;
+	const sigmaXY = DISK_R * 0.5;    // in-plane bell spread (≈ DISK_R at 2σ)
+	const zThin = DISK_R * 0.025;    // thin disk thickness (≈ radius / 40)
+	const zBulge = DISK_R * 0.10;    // extra height in the central bulge
+	const sigmaBulge = DISK_R * 0.3; // radial extent of the bulge
 	for (let i = 0; i < count; i++) {
-		const r = Math.sqrt(Math.random()) * (DISK_R - rMin) + rMin;
-		const a = Math.random() * Math.PI * 2;
-		const cs = Math.cos(a), sn = Math.sin(a);
-		px[i] = cs * r; py[i] = sn * r;
-		pz[i] = (Math.random() - 0.5) * DISK_R * 0.06;
-		// circular orbital speed around the core, tangential, + small jitter
-		const vc = Math.sqrt(G * coreMass / (r + coreSoft)) * spin;
-		vx[i] = -sn * vc + (Math.random() - 0.5) * vc * 0.05;
-		vy[i] = cs * vc + (Math.random() - 0.5) * vc * 0.05;
+		// bell-shaped (Gaussian) blob: dense core, sparse edges
+		const gx = gauss() * sigmaXY, gy = gauss() * sigmaXY;
+		const r = Math.sqrt(gx * gx + gy * gy);
+		px[i] = gx; py[i] = gy;
+		// thin disk + rounder central bulge → galaxy profile
+		const bulge = Math.exp(-r * r / (2 * sigmaBulge * sigmaBulge));
+		pz[i] = gauss() * (zThin + zBulge * bulge);
+		const rDir = r < 0.001 ? 0.001 : r;            // avoid div-by-zero at the center
+		const rVel = Math.max(r, DISK_R * 0.05);        // floor speed near the center
+		// circular orbital speed around the core, tangential (-y, x)/r, + small jitter
+		const vc = Math.sqrt(G * coreMass / (rVel + coreSoft)) * spin;
+		vx[i] = (-gy / rDir) * vc + gauss() * vc * 0.03;
+		vy[i] = (gx / rDir) * vc + gauss() * vc * 0.03;
+		vz[i] = gauss() * vc * 0.02; // small vertical dispersion
 		parts[i].mass = massEach;
 	}
 }
 
 function step() {
-	// bounds (square, with margin) so every particle sits inside the tree root
-	let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
+	// cubic bounds (with margin) so every particle sits inside the tree root
+	let mnx = Infinity, mny = Infinity, mnz = Infinity, mxx = -Infinity, mxy = -Infinity, mxz = -Infinity;
 	for (let i = 0; i < count; i++) {
-		const x = px[i], y = py[i];
+		const x = px[i], y = py[i], z = pz[i];
 		if (x < mnx) mnx = x; if (x > mxx) mxx = x;
 		if (y < mny) mny = y; if (y > mxy) mxy = y;
-		parts[i].position.x = x; parts[i].position.y = y;
+		if (z < mnz) mnz = z; if (z > mxz) mxz = z;
+		parts[i].position.x = x; parts[i].position.y = y; parts[i].position.z = z;
 	}
-	const cx = (mnx + mxx) * 0.5, cy = (mny + mxy) * 0.5;
-	const s = Math.max(mxx - mnx, mxy - mny) * 0.5 + 10;
-	tree.reset(cx - s, cy - s, 2 * s, 2 * s);
+	const cx = (mnx + mxx) * 0.5, cy = (mny + mxy) * 0.5, cz = (mnz + mxz) * 0.5;
+	const half = Math.max(mxx - mnx, mxy - mny, mxz - mnz) * 0.5 + 10;
+	tree.reset(cx - half, cy - half, cz - half, 2 * half);
 	for (let i = 0; i < count; i++) tree.insert(parts[i]);
+	flattenTree();
 
-	const soft2 = coreSoft * coreSoft;
+	const coreSoft2 = coreSoft * coreSoft;
+	const theta2 = THETA * THETA;
+	const n = nNodes;
 	for (let i = 0; i < count; i++) {
-		tree.computeAccelAt(px[i], py[i], parts[i], G);
-		let ax = tree._ax, ay = tree._ay;
+		const xi = px[i], yi = py[i], zi = pz[i];
+		let ax = 0, ay = 0, az = 0, idx = 0;
+		// stackless Barnes-Hut walk: accept a node (leaf, or far enough by θ) and skip
+		// its subtree; otherwise open it (first child is the next array entry).
+		while (idx < n) {
+			const dx = tComX[idx] - xi, dy = tComY[idx] - yi, dz = tComZ[idx] - zi;
+			const d2 = dx * dx + dy * dy + dz * dz;
+			const sz = tSize[idx]; // < 0 marks a leaf
+			if (sz < 0 || sz * sz < theta2 * d2) {
+				const r2s = d2 + 25; // BH softening² (matches the tree's 5px)
+				const f = G * tMass[idx] / (r2s * Math.sqrt(r2s));
+				ax += f * dx; ay += f * dy; az += f * dz;
+				idx = tSkip[idx];
+			} else {
+				idx++;
+			}
+		}
 		// central core at the origin
-		const x = px[i], y = py[i];
-		const inv = 1 / Math.sqrt(x * x + y * y + soft2);
-		const f = G * coreMass * inv * inv * inv;
-		ax -= f * x; ay -= f * y;
+		const inv = 1 / Math.sqrt(xi * xi + yi * yi + zi * zi + coreSoft2);
+		const cf = G * coreMass * inv * inv * inv;
+		ax -= cf * xi; ay -= cf * yi; az -= cf * zi;
 		// symplectic Euler: kick then drift
-		vx[i] += ax * dt; vy[i] += ay * dt;
-		px[i] += vx[i] * dt; py[i] += vy[i] * dt;
+		vx[i] += ax * dt; vy[i] += ay * dt; vz[i] += az * dt;
+		px[i] += vx[i] * dt; py[i] += vy[i] * dt; pz[i] += vz[i] * dt;
 	}
 }
 
