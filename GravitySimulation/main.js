@@ -141,8 +141,7 @@ function computeInitialAccelerations() {
 	if (accelBuf.length < particles.length * 2) accelBuf = new Float64Array(particles.length * 2);
 	RungeKutta.computeAllAccelerationsInto(particles, gravitationalConst, accelBuf);
 	for (let i = 0; i < particles.length; i++) {
-		particles[i].acceleration.x = accelBuf[2 * i];
-		particles[i].acceleration.y = accelBuf[2 * i + 1];
+		particles[i].acceleration.Update(accelBuf[2 * i], accelBuf[2 * i + 1]);
 	}
 }
 
@@ -1007,8 +1006,7 @@ function draw() {
 		const ax = accelBuf[2 * i], ay = accelBuf[2 * i + 1];
 		particles[i].velocity.x += ax * (dt * 0.5);
 		particles[i].velocity.y += ay * (dt * 0.5);
-		particles[i].acceleration.x = ax;
-		particles[i].acceleration.y = ay;
+		particles[i].acceleration.Update(ax, ay);
 	}
 
 	// calc elapsed time since last loop
