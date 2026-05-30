@@ -37,6 +37,17 @@
     <div class="hud-section">
       <span class="ctrl-label">Actions</span>
       <button id="resetCanvasButton">Reset canvas</button>
+      <button id="supernovaButton">Supernova</button>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Presets</span>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+        <button id="presetOrbital">Orbital</button>
+        <button id="presetRing">Ring</button>
+        <button id="presetGalaxy">Galaxy clash</button>
+        <button id="presetCollapse">Cold collapse</button>
+      </div>
     </div>
 
     <div class="hud-section">
@@ -51,6 +62,7 @@
     <div class="hud-section">
       <span class="ctrl-label">Collisions</span>
       <label><input type="checkbox" id="particleCollisionCheckbox"> Elastic particle collisions</label>
+      <label><input type="checkbox" id="collisionSparksCheckbox" checked> Collision sparks</label>
     </div>
 
     <div class="hud-section">
@@ -89,6 +101,11 @@
     <div class="hud-section">
       <span class="ctrl-label">Sun radius: <span id="sunRadiusValue"></span></span>
       <input type="range" min="1" max="100" step="1" class="slider" id="sunRadiusSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Force brush <small>(hover canvas)</small></span>
+      <span style="font-size:0.8em;opacity:0.7;">Hold <kbd>G</kbd> = attract &nbsp; Hold <kbd>H</kbd> = repel</span>
     </div>
 
     <div class="hud-divider"></div>

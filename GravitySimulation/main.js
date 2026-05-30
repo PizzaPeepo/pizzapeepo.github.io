@@ -59,6 +59,13 @@ const bhTree = new BarnesHutTree(bhTheta);
 let accelBuf = new Float64Array(6000 * 2);
 let _sh = null, _shCellSize = 0;
 
+let collisionSparksEnabled = true;
+let forceBrushAttract = false;
+let forceBrushRepel = false;
+const BRUSH_STRENGTH = 5e6;
+const BRUSH_SOFT2 = 2500;
+let attractionSprites = null, repulsionSprites = null;
+
 var initial_gravitationalConst = 50;
 let initial_sunMass = 10000;
 let initial_sunRadius = 15;
@@ -195,6 +202,27 @@ function buildColorLUT(palette) {
 	return lut;
 }
 
+// Pre-bake one 32×32 OffscreenCanvas per LUT slot: radial gradient from full color at center to
+// transparent at edge. drawImage scales to particle glow radius, so no per-frame gradient alloc.
+function buildGlowSprites(lut) {
+	const sprites = new Array(LUT_SIZE);
+	for (let i = 0; i < LUT_SIZE; i++) {
+		const off = new OffscreenCanvas(32, 32);
+		const ctx = off.getContext('2d');
+		const c = lut[i];
+		const cFade = c.replace(/,\s*[\d.]+\)$/, ', 0)');
+		const cMid  = c.replace(/,\s*[\d.]+\)$/, ', 0.35)');
+		const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+		grad.addColorStop(0,   c);
+		grad.addColorStop(0.4, cMid);
+		grad.addColorStop(1,   cFade);
+		ctx.fillStyle = grad;
+		ctx.fillRect(0, 0, 32, 32);
+		sprites[i] = off;
+	}
+	return sprites;
+}
+
 function applyThemeColors(isLight) {
 	const t = isLight ? themeColors.light : themeColors.dark;
 	backgroundCanvas.style.background = t.bg;
@@ -203,6 +231,8 @@ function applyThemeColors(isLight) {
 	repullsionColors = t.repulsion.map(c => helpers.HexToRGBA(c));
 	attractionLUT = buildColorLUT(attractionColors);
 	repulsionLUT = buildColorLUT(repullsionColors);
+	attractionSprites = buildGlowSprites(attractionLUT);
+	repulsionSprites  = buildGlowSprites(repulsionLUT);
 	fadeColor = isLight
 		? 'rgba(245,237,224,' + TRAIL_FADE + ')'
 		: 'rgba(24,18,14,' + TRAIL_FADE + ')';
@@ -916,6 +946,163 @@ function resolveCollision(i, k) {
 		const m1 = (2 * pk.mass) / totalMass, m2 = (2 * pi.mass) / totalMass;
 		pi.velocity.x = v1x - m1 * approach * nx; pi.velocity.y = v1y - m1 * approach * ny;
 		pk.velocity.x = v2x + m2 * approach * nx; pk.velocity.y = v2y + m2 * approach * ny;
+		if (collisionSparksEnabled && Math.abs(approach) > 30) {
+			const mx = (pi.position.x + pk.position.x) * 0.5;
+			const my = (pi.position.y + pk.position.y) * 0.5;
+			const intensity = Math.min(1, Math.abs(approach) / 150);
+			const flashR = (pi.radius + pk.radius) * (1 + intensity * 2);
+			const savedOp = bgCtx.globalCompositeOperation;
+			bgCtx.globalCompositeOperation = 'lighter';
+			const grad = bgCtx.createRadialGradient(mx, my, 0, mx, my, flashR);
+			grad.addColorStop(0, `rgba(255,255,200,${intensity})`);
+			grad.addColorStop(1, 'rgba(255,140,0,0)');
+			bgCtx.fillStyle = grad;
+			bgCtx.beginPath();
+			bgCtx.arc(mx, my, flashR, 0, Math.PI * 2);
+			bgCtx.fill();
+			bgCtx.globalCompositeOperation = savedOp;
+		}
+	}
+}
+
+function drawSunCorona(particle) {
+	const x = particle.position.x, y = particle.position.y;
+	const r = particle.radius;
+	const pulse = 1 + 0.12 * Math.sin(Date.now() * 0.003);
+	const outerR = r * 2.5 * pulse;
+	const grad = fgCtx.createRadialGradient(x, y, r * 0.25, x, y, outerR);
+	grad.addColorStop(0,    'rgba(255,255,220,1)');
+	grad.addColorStop(0.18, sunColor.RGBA);
+	grad.addColorStop(0.5,  'rgba(255,100,0,0.45)');
+	grad.addColorStop(1,    'rgba(255,40,0,0)');
+	fgCtx.beginPath();
+	fgCtx.arc(x, y, outerR, 0, Math.PI * 2);
+	fgCtx.fillStyle = grad;
+	fgCtx.fill();
+}
+
+function supernova() {
+	const sun = particles[0];
+	const IMPULSE = 500;
+	for (let i = 1; i < particles.length; i++) {
+		const dx = particles[i].position.x - sun.position.x;
+		const dy = particles[i].position.y - sun.position.y;
+		const r = Math.sqrt(dx * dx + dy * dy) || 1;
+		particles[i].velocity.x += (dx / r) * IMPULSE;
+		particles[i].velocity.y += (dy / r) * IMPULSE;
+	}
+}
+
+function spawnDisk(cx, cy, bulkVx, bulkVy, n, localSunMass) {
+	const diskR = Math.min(canvasWidth, canvasHeight) * 0.17;
+	for (let i = 0; i < n; i++) {
+		const angle = Math.random() * Math.PI * 2;
+		const r = (0.3 + Math.random() * 0.7) * diskR;
+		const x = cx + Math.cos(angle) * r;
+		const y = cy + Math.sin(angle) * r;
+		const orbV = Math.sqrt(+gravitationalConst * localSunMass / r);
+		const vx = bulkVx - Math.sin(angle) * orbV;
+		const vy = bulkVy + Math.cos(angle) * orbV;
+		particles.push(new Particle(
+			new Vector2D(x, y), new Vector2D(vx, vy), new Vector2D(0, 0),
+			helpers.GetRandomIntFromRange(radiusMin, radiusMax),
+			helpers.GetRandomIntFromRange(massMin, massMax)
+		));
+	}
+}
+
+function syncPresetUI() {
+	gravConstSlider.value = gravitationalConst;
+	gravConstValue.innerHTML = gravitationalConst;
+	sunMassSlider.value = sunMass;
+	sunMassValue.innerHTML = sunMass;
+	particleCount = particles.length;
+	particleCountSlider.value = particleCount;
+	particleCountValue.innerHTML = particleCount;
+	then = Date.now();
+}
+
+function applyPreset(name) {
+	switch (name) {
+		case 'orbital': {
+			gravitationalConst = 50;
+			sunMass = 10000;
+			sunRadius = 15;
+			particles[0].mass = sunMass;
+			particles[0].radius = sunRadius;
+			wallBehavior = WallBehaviorEnum.none;
+			noWallsRadiobutton.checked = true;
+			resetCanvas = true;
+			syncPresetUI();
+			break;
+		}
+		case 'ring': {
+			gravitationalConst = 50;
+			sunMass = 10000;
+			particles = [];
+			particles.push(new Particle(
+				new Vector2D(canvasWidth / 2, canvasHeight / 2),
+				new Vector2D(0, 0), new Vector2D(0, 0), 15, sunMass
+			));
+			const ringR = Math.min(canvasWidth, canvasHeight) * 0.35;
+			const ringN = Math.max(particleCount - 1, 30);
+			for (let i = 0; i < ringN; i++) {
+				const angle = (i / ringN) * Math.PI * 2;
+				const orbV = Math.sqrt(+gravitationalConst * sunMass / ringR);
+				particles.push(new Particle(
+					new Vector2D(canvasWidth / 2 + Math.cos(angle) * ringR, canvasHeight / 2 + Math.sin(angle) * ringR),
+					new Vector2D(-Math.sin(angle) * orbV, Math.cos(angle) * orbV),
+					new Vector2D(0, 0), 3, 1.5
+				));
+			}
+			wallBehavior = WallBehaviorEnum.none;
+			noWallsRadiobutton.checked = true;
+			computeInitialAccelerations();
+			syncPresetUI();
+			break;
+		}
+		case 'galaxy-collision': {
+			gravitationalConst = 50;
+			const gSunMass = 8000, gSunR = 18;
+			particles = [];
+			const cx1 = canvasWidth * 0.27, cy1 = canvasHeight * 0.5;
+			const cx2 = canvasWidth * 0.73, cy2 = canvasHeight * 0.5;
+			const cv = 70;
+			particles.push(new Particle(new Vector2D(cx1, cy1), new Vector2D(cv,  12), new Vector2D(0, 0), gSunR, gSunMass));
+			particles.push(new Particle(new Vector2D(cx2, cy2), new Vector2D(-cv, -12), new Vector2D(0, 0), gSunR, gSunMass));
+			const nEach = Math.floor(Math.max(particleCount, 60) / 2);
+			spawnDisk(cx1, cy1,  cv,  12, nEach, gSunMass);
+			spawnDisk(cx2, cy2, -cv, -12, nEach, gSunMass);
+			wallBehavior = WallBehaviorEnum.none;
+			noWallsRadiobutton.checked = true;
+			computeInitialAccelerations();
+			syncPresetUI();
+			break;
+		}
+		case 'collapse': {
+			gravitationalConst = 80;
+			sunMass = 500;
+			particles = [];
+			particles.push(new Particle(
+				new Vector2D(canvasWidth / 2, canvasHeight / 2),
+				new Vector2D(0, 0), new Vector2D(0, 0), 10, sunMass
+			));
+			const spread = Math.min(canvasWidth, canvasHeight) * 0.42;
+			const colN = Math.max(particleCount - 1, 80);
+			for (let i = 0; i < colN; i++) {
+				const angle = Math.random() * Math.PI * 2;
+				const r = Math.random() * spread;
+				particles.push(new Particle(
+					new Vector2D(canvasWidth / 2 + Math.cos(angle) * r, canvasHeight / 2 + Math.sin(angle) * r),
+					new Vector2D(0, 0), new Vector2D(0, 0), 2, 1
+				));
+			}
+			wallBehavior = WallBehaviorEnum.collision;
+			collisionWallsRadiobutton.checked = true;
+			computeInitialAccelerations();
+			syncPresetUI();
+			break;
+		}
 	}
 }
 
@@ -1063,6 +1250,21 @@ function draw() {
 		particles[i].acceleration.Update(ax, ay);
 	}
 
+	// force brush
+	if (pointerOnCanvas && (forceBrushAttract || forceBrushRepel)) {
+		const sign = forceBrushAttract ? 1 : -1;
+		const dtNum = +dt;
+		for (let i = 1; i < particles.length; i++) {
+			const dx = mouse.x - particles[i].position.x;
+			const dy = mouse.y - particles[i].position.y;
+			const r2 = dx * dx + dy * dy + BRUSH_SOFT2;
+			const r  = Math.sqrt(r2);
+			const f  = sign * BRUSH_STRENGTH * dtNum / (r2 * r);
+			particles[i].velocity.x += f * dx;
+			particles[i].velocity.y += f * dy;
+		}
+	}
+
 	// calc elapsed time since last loop
 	now = Date.now();
 	elapsed = now - then;
@@ -1088,24 +1290,40 @@ function draw() {
 			bgCtx.fillRect(particle.position.x - 1, particle.position.y - 1, 2, 2);
 		}
 
-		// draw particles
-		const drawLUT = gravitationalConst >= 0 ? attractionLUT : repulsionLUT;
-		const sunRGBA = sunColor.RGBA;
-		for (let pi = 0; pi < particles.length; pi++) {
-			const particle = particles[pi];
-			if (!particle.isHeavyParticle) {
+		// draw particles — glow pass (additive blend via lighter composite)
+		const drawLUT    = gravitationalConst >= 0 ? attractionLUT    : repulsionLUT;
+		const drawSprites = gravitationalConst >= 0 ? attractionSprites : repulsionSprites;
+		if (drawSprites) {
+			fgCtx.globalCompositeOperation = 'lighter';
+			for (let pi = 1; pi < particles.length; pi++) {
+				const particle = particles[pi];
 				const accLen = particle.acceleration.length;
-				const percentage = accLen > 100 ? 1 : accLen / 100;
-				const rgba = drawLUT[(percentage * (LUT_SIZE - 1)) | 0];
-				particle.Draw(fgCtx, rgba, rgba);
-			} else {
-				const dist = Math.floor(helpers.Distance(particle.position.x, particle.position.y, mouse.x, mouse.y));
-				if (dist < 50 && particle.radius < sunRadius * 1.2) {
-					particle.radius += 0.2;
-				} else if (particle.radius > sunRadius) {
-					particle.radius -= 0.2;
+				const slot = Math.min(LUT_SIZE - 1, accLen > 100 ? LUT_SIZE - 1 : (accLen / 100 * (LUT_SIZE - 1)) | 0);
+				const gr = particle.radius * 3;
+				fgCtx.drawImage(drawSprites[slot], particle.position.x - gr, particle.position.y - gr, gr * 2, gr * 2);
+			}
+			fgCtx.globalCompositeOperation = 'source-over';
+		}
+
+		// hard core pass
+		for (let pi = 1; pi < particles.length; pi++) {
+			const particle = particles[pi];
+			const accLen = particle.acceleration.length;
+			const percentage = accLen > 100 ? 1 : accLen / 100;
+			const rgba = drawLUT[(percentage * (LUT_SIZE - 1)) | 0];
+			particle.Draw(fgCtx, rgba, rgba);
+		}
+
+		// sun(s) — radial gradient corona
+		for (let pi = 0; pi < particles.length; pi++) {
+			if (particles[pi].isHeavyParticle) {
+				const particle = particles[pi];
+				if (pi === 0) {
+					const dist = Math.floor(helpers.Distance(particle.position.x, particle.position.y, mouse.x, mouse.y));
+					if (dist < 50 && particle.radius < sunRadius * 1.2) particle.radius += 0.2;
+					else if (particle.radius > sunRadius) particle.radius -= 0.2;
 				}
-				particle.Draw(fgCtx, sunRGBA, sunRGBA);
+				drawSunCorona(particle);
 			}
 		}
 
@@ -1140,7 +1358,41 @@ function draw() {
 				fgCtx.lineTo(mouse.x - headLen * Math.cos(angle + Math.PI / 6), mouse.y - headLen * Math.sin(angle + Math.PI / 6));
 				fgCtx.closePath();
 				fgCtx.fill();
+
+				// trajectory preview — forward simulate under sun gravity
+				const simDt2 = parseFloat(dt) * 2;
+				let sx = dragStart.x, sy = dragStart.y;
+				let svx = dx, svy = dy;
+				fgCtx.fillStyle = 'rgba(255,255,255,0.22)';
+				for (let step = 0; step < 150; step++) {
+					const sun = particles[0];
+					const gdx = sun.position.x - sx;
+					const gdy = sun.position.y - sy;
+					const gr2 = gdx * gdx + gdy * gdy + 1;
+					const gf  = +gravitationalConst * sun.mass / (gr2 * Math.sqrt(gr2));
+					svx += gdx * gf * simDt2;
+					svy += gdy * gf * simDt2;
+					sx  += svx * simDt2;
+					sy  += svy * simDt2;
+					if (step % 3 === 0) fgCtx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
+				}
 			}
+			fgCtx.restore();
+		}
+
+		// force brush indicator
+		if (pointerOnCanvas && (forceBrushAttract || forceBrushRepel)) {
+			fgCtx.save();
+			fgCtx.strokeStyle = forceBrushAttract ? 'rgba(255,200,80,0.7)' : 'rgba(80,200,255,0.7)';
+			fgCtx.fillStyle   = fgCtx.strokeStyle;
+			fgCtx.lineWidth   = 2;
+			fgCtx.setLineDash([5, 5]);
+			fgCtx.beginPath();
+			fgCtx.arc(mouse.x, mouse.y, 45, 0, Math.PI * 2);
+			fgCtx.stroke();
+			fgCtx.setLineDash([]);
+			fgCtx.font = '12px system-ui';
+			fgCtx.fillText(forceBrushAttract ? '▼ attract' : '▲ repel', mouse.x + 50, mouse.y + 4);
 			fgCtx.restore();
 		}
 
@@ -1156,5 +1408,27 @@ function draw() {
 		fpsLastDrawTime = now;
 	}
 }
+
+// #region new feature wiring
+document.getElementById('supernovaButton').onclick = supernova;
+
+var collisionSparksCheckbox = document.getElementById('collisionSparksCheckbox');
+collisionSparksCheckbox.checked = collisionSparksEnabled;
+collisionSparksCheckbox.onclick = function () { collisionSparksEnabled = this.checked; };
+
+document.getElementById('presetOrbital').onclick  = () => applyPreset('orbital');
+document.getElementById('presetRing').onclick     = () => applyPreset('ring');
+document.getElementById('presetGalaxy').onclick   = () => applyPreset('galaxy-collision');
+document.getElementById('presetCollapse').onclick = () => applyPreset('collapse');
+
+document.addEventListener('keydown', (e) => {
+	if (e.key === 'g' || e.key === 'G') forceBrushAttract = true;
+	if (e.key === 'h' || e.key === 'H') forceBrushRepel   = true;
+});
+document.addEventListener('keyup', (e) => {
+	if (e.key === 'g' || e.key === 'G') forceBrushAttract = false;
+	if (e.key === 'h' || e.key === 'H') forceBrushRepel   = false;
+});
+// #endregion
 
 startAnimating(60);
