@@ -72,19 +72,19 @@
         <option value="32768">32,768</option>
         <option value="65536">65,536</option>
       </select>
-      <span class="ctrl-label" style="font-size:0.72em;opacity:0.6;">All-pairs O(n²) on GPU — higher = heavier</span>
+      <span class="ctrl-label" style="font-size:0.72em;opacity:0.6;">Barnes-Hut θ=1.5 (CPU tree) — scales to 65k+</span>
     </div>
 
     <div class="hud-divider"></div>
 
     <div class="hud-section">
       <span class="ctrl-label">Grav. constant G: <span id="gravValue"></span></span>
-      <input type="range" min="0" max="4" step="0.05" value="1" class="slider" id="gravSlider">
+      <input type="range" min="0" max="200" step="1" value="50" class="slider" id="gravSlider">
     </div>
 
     <div class="hud-section">
       <span class="ctrl-label">Core mass: <span id="coreValue"></span></span>
-      <input type="range" min="0" max="20000" step="100" value="4000" class="slider" id="coreSlider">
+      <input type="range" min="0" max="50000" step="500" value="10000" class="slider" id="coreSlider">
     </div>
 
     <div class="hud-section">
@@ -94,17 +94,17 @@
 
     <div class="hud-section">
       <span class="ctrl-label">Softening: <span id="softValue"></span></span>
-      <input type="range" min="0.1" max="3" step="0.05" value="0.6" class="slider" id="softSlider">
+      <input type="range" min="1" max="30" step="1" value="8" class="slider" id="softSlider">
     </div>
 
     <div class="hud-section">
       <span class="ctrl-label">Timestep: <span id="dtValue"></span></span>
-      <input type="range" min="0.0005" max="0.02" step="0.0005" value="0.005" class="slider" id="dtSlider">
+      <input type="range" min="0.001" max="0.03" step="0.001" value="0.01" class="slider" id="dtSlider">
     </div>
 
     <div class="hud-section">
       <span class="ctrl-label">Particle size: <span id="sizeValue"></span></span>
-      <input type="range" min="0.03" max="0.6" step="0.01" value="0.18" class="slider" id="sizeSlider">
+      <input type="range" min="1" max="12" step="0.5" value="4" class="slider" id="sizeSlider">
     </div>
 
   </aside>

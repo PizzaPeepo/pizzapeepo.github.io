@@ -1,111 +1,118 @@
-// GPU N-body gravity — Three.js WebGPU + TSL compute.
-// Each particle is one GPU thread; the update shader loops over ALL particles
-// (all-pairs O(n²)) plus a central core mass, integrates with symplectic Euler.
-// Positions/velocities live in storage buffers and never round-trip to the CPU —
-// the points material reads them straight from the buffer (material.positionNode).
+// Barnes-Hut N-body — CPU tree, GPU render.
+//
+// Force evaluation uses the project's existing, tested Barnes-Hut quadtree
+// (../GravitySimulation/BarnesHutTree.js): O(n log n) instead of the brute-force
+// O(n²) all-pairs the first GPU version used. The tree is built and walked on the
+// CPU each frame; the GPU's job is to draw the result — particle positions are
+// streamed into an InstancedMesh via a dynamic instanced attribute (one-way upload,
+// no GPU→CPU readback). Physics is 2D (the tree is a quadtree); z is a fixed thin
+// scatter so the disk reads as 3D when you orbit it.
+//
+// The tree's softening/min-cell constants are tuned for ~800px space, so we simulate
+// in that pixel-scale and frame the camera to it — that lets us reuse the tree as-is.
 
 import * as THREE from 'three/webgpu';
-import {
-	Fn, Loop, instancedArray, instanceIndex, positionLocal, uniform, vec3, color, hash
-} from 'three/tsl';
+import { Fn, attribute, positionLocal, uniform, color } from 'three/tsl';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { BarnesHutTree } from '../GravitySimulation/BarnesHutTree.js';
 
 // ── config ──
-const MAX = 65536;              // buffers sized to the largest selectable count
-const baseMass = 2000;          // total disk mass; per-particle mass = baseMass / count
+const MAX = 65536;            // array capacity = largest selectable count
+const DISK_R = 300;           // disk radius in sim (pixel-scale) units
+const BASE_DISK_MASS = 5000;  // total disk mass; per-particle = BASE_DISK_MASS / count
+const THETA = 1.5;            // Barnes-Hut opening angle (higher = faster, looser)
 
-// ── storage buffers (read-write on GPU) ──
-const positions = instancedArray(MAX, 'vec3');
-const velocities = instancedArray(MAX, 'vec3');
-
-// ── uniforms (live-tunable from the HUD) ──
-const dtU = uniform(0.005);
-const G = uniform(1.0);
-const coreMass = uniform(4000.0);
-const spin = uniform(1.0);
-const soft = uniform(0.6);
-const massEach = uniform(baseMass / 16384);
-const pointSize = uniform(0.18); // sphere radius in world units
-const diskRadius = uniform(18.0);
-const speedScale = uniform(0.045);
-const burstStrength = uniform(12.0);
-
-// ── mutable runtime state ──
-let renderer, scene, camera, controls, points;
-let computeInit, computeUpdate, computeBurst;
+// ── tunables (driven by the HUD) ──
 let count = 16384;
+let G = 50;
+let coreMass = 10000;
+let spin = 1.0;
+let coreSoft = 8.0;
+let dt = 0.01;
 let paused = false;
+let massEach = BASE_DISK_MASS / count;
 
-// Build the three compute kernels for a given particle count. Rebuilt whenever the
-// count changes because the all-pairs Loop bound and the dispatch size are baked in.
-function buildCompute(n) {
-	// disk: area-uniform radius (sqrt), random angle, thin z, circular orbital velocity
-	computeInit = Fn(() => {
-		const pos = positions.element(instanceIndex);
-		const vel = velocities.element(instanceIndex);
+// ── CPU particle state (structure-of-arrays) ──
+const px = new Float32Array(MAX), py = new Float32Array(MAX), pz = new Float32Array(MAX);
+const vx = new Float32Array(MAX), vy = new Float32Array(MAX);
 
-		const rMin = diskRadius.mul(0.04);
-		const r = hash(instanceIndex).sqrt().mul(diskRadius.sub(rMin)).add(rMin);
-		const ang = hash(instanceIndex.add(1)).mul(Math.PI * 2);
-		const cs = ang.cos();
-		const sn = ang.sin();
-		const z = hash(instanceIndex.add(2)).sub(0.5).mul(diskRadius.mul(0.06));
-		pos.assign(vec3(cs.mul(r), sn.mul(r), z));
+// persistent particle views the tree consumes ({ position:{x,y}, mass }); reused, no per-frame alloc
+const parts = new Array(MAX);
+for (let i = 0; i < MAX; i++) parts[i] = { position: { x: 0, y: 0 }, mass: 0 };
 
-		// v_circular ≈ sqrt(G·coreMass / r), tangential (-sin, cos, 0), + small jitter
-		const vc = G.mul(coreMass).div(r.add(soft)).sqrt().mul(spin);
-		const jitter = vec3(
-			hash(instanceIndex.add(3)).sub(0.5),
-			hash(instanceIndex.add(4)).sub(0.5),
-			hash(instanceIndex.add(5)).sub(0.5)
-		).mul(vc.mul(0.05));
-		vel.assign(vec3(sn.negate(), cs, 0).mul(vc).add(jitter));
-	})().compute(n);
+// pool sized for ~2 nodes/particle at max count, so the tree never grows mid-run
+const tree = new BarnesHutTree(THETA, MAX * 2);
 
-	computeUpdate = Fn(() => {
-		const pos = positions.element(instanceIndex);
-		const vel = velocities.element(instanceIndex);
-		const soft2 = soft.mul(soft);
-		const acc = vec3(0).toVar();
+// ── render uniforms ──
+const sizeU = uniform(4.0);        // sphere radius, render (= sim) units
+const speedScale = uniform(0.0125); // maps speed → color ramp
 
+// ── runtime ──
+let renderer, scene, camera, controls, mesh;
+let instPos, instSpeed; // InstancedBufferAttributes streamed each frame
+
+function initDisk() {
+	const rMin = DISK_R * 0.04;
+	for (let i = 0; i < count; i++) {
+		const r = Math.sqrt(Math.random()) * (DISK_R - rMin) + rMin;
+		const a = Math.random() * Math.PI * 2;
+		const cs = Math.cos(a), sn = Math.sin(a);
+		px[i] = cs * r; py[i] = sn * r;
+		pz[i] = (Math.random() - 0.5) * DISK_R * 0.06;
+		// circular orbital speed around the core, tangential, + small jitter
+		const vc = Math.sqrt(G * coreMass / (r + coreSoft)) * spin;
+		vx[i] = -sn * vc + (Math.random() - 0.5) * vc * 0.05;
+		vy[i] = cs * vc + (Math.random() - 0.5) * vc * 0.05;
+		parts[i].mass = massEach;
+	}
+}
+
+function step() {
+	// bounds (square, with margin) so every particle sits inside the tree root
+	let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
+	for (let i = 0; i < count; i++) {
+		const x = px[i], y = py[i];
+		if (x < mnx) mnx = x; if (x > mxx) mxx = x;
+		if (y < mny) mny = y; if (y > mxy) mxy = y;
+		parts[i].position.x = x; parts[i].position.y = y;
+	}
+	const cx = (mnx + mxx) * 0.5, cy = (mny + mxy) * 0.5;
+	const s = Math.max(mxx - mnx, mxy - mny) * 0.5 + 10;
+	tree.reset(cx - s, cy - s, 2 * s, 2 * s);
+	for (let i = 0; i < count; i++) tree.insert(parts[i]);
+
+	const soft2 = coreSoft * coreSoft;
+	for (let i = 0; i < count; i++) {
+		tree.computeAccelAt(px[i], py[i], parts[i], G);
+		let ax = tree._ax, ay = tree._ay;
 		// central core at the origin
-		const cd2 = pos.dot(pos).add(soft2);
-		const ci = cd2.inverseSqrt();
-		acc.addAssign(pos.negate().mul(G.mul(coreMass).mul(ci.mul(ci).mul(ci))));
-
-		// mutual gravity, all pairs. Self term (i == instanceIndex) has d = 0 → adds 0.
-		const gm = G.mul(massEach); // loop-invariant — hoisted out of the inner loop
-		Loop(n, ({ i }) => {
-			const d = positions.element(i).sub(pos);
-			const dist2 = d.dot(d).add(soft2);
-			const inv = dist2.inverseSqrt();
-			acc.addAssign(d.mul(gm.mul(inv.mul(inv).mul(inv))));
-		});
-
+		const x = px[i], y = py[i];
+		const inv = 1 / Math.sqrt(x * x + y * y + soft2);
+		const f = G * coreMass * inv * inv * inv;
+		ax -= f * x; ay -= f * y;
 		// symplectic Euler: kick then drift
-		vel.addAssign(acc.mul(dtU));
-		pos.addAssign(vel.mul(dtU));
-	})().compute(n, [256]);
-
-	// one-shot outward velocity kick
-	computeBurst = Fn(() => {
-		const pos = positions.element(instanceIndex);
-		const vel = velocities.element(instanceIndex);
-		const dir = pos.div(pos.length().add(0.001)); // safe normalize near origin
-		vel.addAssign(dir.mul(burstStrength));
-	})().compute(n);
+		vx[i] += ax * dt; vy[i] += ay * dt;
+		px[i] += vx[i] * dt; py[i] += vy[i] * dt;
+	}
 }
 
-function reset() {
-	renderer.compute(computeInit);
+function uploadInstances() {
+	const p = instPos.array, sp = instSpeed.array;
+	for (let i = 0; i < count; i++) {
+		p[3 * i] = px[i]; p[3 * i + 1] = py[i]; p[3 * i + 2] = pz[i];
+		sp[i] = Math.sqrt(vx[i] * vx[i] + vy[i] * vy[i]);
+	}
+	instPos.needsUpdate = true;
+	instSpeed.needsUpdate = true;
+	mesh.count = count;
 }
+
+function reset() { initDisk(); }
 
 function setCount(n) {
 	count = n;
-	massEach.value = baseMass / n;
-	buildCompute(n);
-	if (points) points.count = n;
-	renderer.compute(computeInit);
+	massEach = BASE_DISK_MASS / n;
+	initDisk();
 	document.getElementById('countValue').textContent = n.toLocaleString();
 }
 
@@ -113,8 +120,8 @@ async function init() {
 	scene = new THREE.Scene();
 	scene.background = new THREE.Color(0x06060d);
 
-	camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
-	camera.position.set(0, 32, 62);
+	camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 6000);
+	camera.position.set(0, 380, 640);
 
 	renderer = new THREE.WebGPURenderer({ antialias: true });
 	renderer.setSize(window.innerWidth, window.innerHeight);
@@ -123,57 +130,55 @@ async function init() {
 	document.body.appendChild(renderer.domElement);
 	await renderer.init();
 
-	// WebGPU point primitives are locked to 1px, so size must come from real geometry:
-	// an instanced low-poly sphere, placed at the buffer position and scaled by a uniform.
+	// instanced sphere; per-instance position + speed streamed from the CPU each frame
 	const geometry = new THREE.IcosahedronGeometry(1, 0); // 20 tris; radius scaled in-shader
+	instPos = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3).setUsage(THREE.DynamicDrawUsage);
+	instSpeed = new THREE.InstancedBufferAttribute(new Float32Array(MAX), 1).setUsage(THREE.DynamicDrawUsage);
+	geometry.setAttribute('instPos', instPos);
+	geometry.setAttribute('instSpeed', instSpeed);
 
 	const material = new THREE.MeshBasicNodeMaterial();
-	// local sphere vertex * radius, translated to this particle's simulated position
-	material.positionNode = positionLocal.mul(pointSize).add(positions.element(instanceIndex));
+	material.positionNode = positionLocal.mul(sizeU).add(attribute('instPos', 'vec3'));
 	material.colorNode = Fn(() => {
-		const sp = velocities.element(instanceIndex).length().mul(speedScale).saturate();
-		const base = color(0x1b4fff).mix(color(0xff7a1a), sp); // blue → orange by speed
-		return base.mix(color(0xffffff), sp.mul(sp).mul(0.7));  // white-hot at the top end
+		const s = attribute('instSpeed', 'float').mul(speedScale).saturate();
+		const base = color(0x1b4fff).mix(color(0xff7a1a), s); // blue → orange by speed
+		return base.mix(color(0xffffff), s.mul(s).mul(0.7));    // white-hot at the top end
 	})();
 	material.transparent = true;
 	material.depthWrite = false;
 	material.blending = THREE.AdditiveBlending;
 
-	points = new THREE.InstancedMesh(geometry, material, MAX);
-	points.count = count;           // draw only the active particles
-	points.frustumCulled = false;
+	mesh = new THREE.InstancedMesh(geometry, material, MAX);
+	mesh.frustumCulled = false;
 	// default instanceMatrix is zero-filled (collapses to origin); set identity —
-	// actual placement is done in positionNode above.
+	// placement is done in positionNode via the instPos attribute.
 	const idMat = new THREE.Matrix4();
-	for (let i = 0; i < MAX; i++) points.setMatrixAt(i, idMat);
-	points.instanceMatrix.needsUpdate = true;
-	scene.add(points);
+	for (let i = 0; i < MAX; i++) mesh.setMatrixAt(i, idMat);
+	mesh.instanceMatrix.needsUpdate = true;
+	scene.add(mesh);
 
 	controls = new OrbitControls(camera, renderer.domElement);
 	controls.enableDamping = true;
-	controls.target.set(0, 0, 0);
 
-	buildCompute(count);
-	renderer.compute(computeInit);
-
+	initDisk();
 	window.addEventListener('resize', onResize);
 	wireUI();
 	renderer.setAnimationLoop(animate);
 }
 
-// ── FPS badge (Date.now deltas, same idea as the CPU demos) ──
+// ── FPS badge ──
 let frames = 0, fpsLast = Date.now();
-const fpsEl = () => document.getElementById('fpsValue');
 
 function animate() {
-	if (!paused) renderer.compute(computeUpdate);
+	if (!paused) step();
+	uploadInstances();
 	controls.update();
 	renderer.render(scene, camera);
 
 	frames++;
 	const now = Date.now();
 	if (now - fpsLast >= 500) {
-		fpsEl().textContent = Math.round((frames * 1000) / (now - fpsLast));
+		document.getElementById('fpsValue').textContent = Math.round((frames * 1000) / (now - fpsLast));
 		frames = 0;
 		fpsLast = now;
 	}
@@ -185,26 +190,34 @@ function onResize() {
 	renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
+function burst() {
+	const k = Math.sqrt(G * coreMass / DISK_R) * 0.8; // ~comparable to orbital speed
+	for (let i = 0; i < count; i++) {
+		const x = px[i], y = py[i];
+		const inv = 1 / (Math.sqrt(x * x + y * y) + 0.001);
+		vx[i] += x * inv * k; vy[i] += y * inv * k;
+	}
+}
+
 function wireUI() {
-	const bind = (id, valId, u, fmt) => {
-		const s = document.getElementById(id);
+	const bindNum = (id, valId, set, fmt) => {
+		const sl = document.getElementById(id);
 		const out = document.getElementById(valId);
-		const show = () => { out.textContent = fmt ? fmt(+s.value) : s.value; };
-		s.addEventListener('input', () => { u.value = +s.value; show(); });
+		const show = () => { out.textContent = fmt ? fmt(+sl.value) : sl.value; };
+		sl.addEventListener('input', () => { set(+sl.value); show(); });
 		show();
 	};
-	bind('gravSlider', 'gravValue', G, v => v.toFixed(2));
-	bind('coreSlider', 'coreValue', coreMass, v => v.toLocaleString());
-	bind('spinSlider', 'spinValue', spin, v => v.toFixed(2));
-	bind('softSlider', 'softValue', soft, v => v.toFixed(2));
-	bind('dtSlider', 'dtValue', dtU, v => v.toFixed(4));
-	bind('sizeSlider', 'sizeValue', pointSize, v => v.toFixed(2));
+	bindNum('gravSlider', 'gravValue', v => G = v, v => v.toFixed(0));
+	bindNum('coreSlider', 'coreValue', v => coreMass = v, v => v.toLocaleString());
+	bindNum('spinSlider', 'spinValue', v => spin = v, v => v.toFixed(2));
+	bindNum('softSlider', 'softValue', v => coreSoft = v, v => v.toFixed(0));
+	bindNum('dtSlider', 'dtValue', v => dt = v, v => v.toFixed(3));
+	bindNum('sizeSlider', 'sizeValue', v => sizeU.value = v, v => v.toFixed(1));
 
 	document.getElementById('countSelect').addEventListener('change', e => setCount(+e.target.value));
 	document.getElementById('countValue').textContent = count.toLocaleString();
-
 	document.getElementById('resetButton').addEventListener('click', reset);
-	document.getElementById('burstButton').addEventListener('click', () => renderer.compute(computeBurst));
+	document.getElementById('burstButton').addEventListener('click', burst);
 	const pauseBtn = document.getElementById('pauseButton');
 	pauseBtn.addEventListener('click', () => {
 		paused = !paused;
@@ -214,11 +227,10 @@ function wireUI() {
 	window.addEventListener('keydown', e => {
 		if (e.code === 'Space') { e.preventDefault(); pauseBtn.click(); }
 		else if (e.code === 'KeyR') reset();
-		else if (e.code === 'KeyB') renderer.compute(computeBurst);
+		else if (e.code === 'KeyB') burst();
 	});
 }
 
-// WebGPU gate: bail to the overlay (which links to the CPU demo) if unsupported.
 if (typeof navigator !== 'undefined' && navigator.gpu) {
 	init().catch(err => {
 		console.error('GPU gravity init failed:', err);
