@@ -60,6 +60,16 @@ let accelBuf = new Float64Array(6000 * 2);
 let _sh = null, _shCellSize = 0;
 
 let collisionSparksEnabled = true;
+// excitation field — impact energy that decays + propagates → collision color waves
+const EXC_DECAY  = 0.90;   // per-frame fade (wave trailing edge)
+const EXC_SOFT   = 1.8;    // impact deadzone — soft touches below this add nothing
+const EXC_GAIN   = 0.25;   // impact→excitation conversion above deadzone
+const EXC_SPREAD = 0.75;   // per-hop transfer (<1 → finite wave radius ∝ impact)
+const EXC_FLOOR  = 0.04;   // min excitation that conducts (resting clumps stay dark)
+const EXC_GAMMA  = 3.4;    // intensity curve: >1 crushes soft touches, keeps hard impacts vivid
+const EXC_HUE_STEP = 28;   // hue rotation per propagation hop → rainbow along the cascade
+let   gSeedHue   = 0;      // slowly-drifting base hue — origin color of each new wave
+const EXC_VIS    = 1.3;    // perceptual alpha boost — moderate impacts visible, soft still ~0
 let glowEnabled = true;
 let forceBrushAttract = false;
 let forceBrushRepel = false;
@@ -948,23 +958,26 @@ function resolveCollision(i, k) {
 		const m1 = (2 * pk.mass) / totalMass, m2 = (2 * pi.mass) / totalMass;
 		pi.velocity.x = v1x - m1 * approach * nx; pi.velocity.y = v1y - m1 * approach * ny;
 		pk.velocity.x = v2x + m2 * approach * nx; pk.velocity.y = v2y + m2 * approach * ny;
-		if (collisionSparksEnabled) {
-			const ke_i = pi.mass * (v1x * v1x + v1y * v1y);
-			const ke_k = pk.mass * (v2x * v2x + v2y * v2y);
-			const ct = Date.now();
-			if (ke_i >= ke_k) {
-				if (!pk._lastHueChange || ct - pk._lastHueChange > 600) {
-					pk._hue = ((pi._hue || 0) + 12) % 360;
-					pk._lastHueChange = ct;
-				}
-			} else {
-				if (!pi._lastHueChange || ct - pi._lastHueChange > 600) {
-					pi._hue = ((pk._hue || 0) + 12) % 360;
-					pi._lastHueChange = ct;
-				}
+		if (collisionSparksEnabled && !pi._isHeavyParticle && !pk._isHeavyParticle) {
+			// generation — soft-knee: soft touches add ~0, hard hits saturate toward 1
+			const gain = Math.max(0, Math.abs(approach) - EXC_SOFT) * EXC_GAIN;
+			if (gain > 0) {
+				if ((pi._e || 0) < EXC_FLOOR) pi._hue = gSeedHue; // fresh origin takes the drifting base hue
+				if ((pk._e || 0) < EXC_FLOOR) pk._hue = gSeedHue;
+				pi._eNext = Math.max(pi._eNext || 0, Math.min(1, gain));
+				pk._eNext = Math.max(pk._eNext || 0, Math.min(1, gain));
 			}
-			pi._collisionTime = ct;
-			pk._collisionTime = ct;
+		}
+	}
+	if (collisionSparksEnabled && !pi._isHeavyParticle && !pk._isHeavyParticle) {
+		// propagation — touching neighbors conduct heat (old _e → _eNext): 1 hop/frame
+		if ((pi._e || 0) > EXC_FLOOR) {
+			const cand = pi._e * EXC_SPREAD;
+			if (cand > (pk._eNext || 0)) { pk._eNext = cand; if ((pk._e || 0) < EXC_FLOOR) pk._hue = (pi._hue + EXC_HUE_STEP) % 360; }
+		}
+		if ((pk._e || 0) > EXC_FLOOR) {
+			const cand = pk._e * EXC_SPREAD;
+			if (cand > (pi._eNext || 0)) { pi._eNext = cand; if ((pi._e || 0) < EXC_FLOOR) pi._hue = (pk._hue + EXC_HUE_STEP) % 360; }
 		}
 	}
 }
@@ -1128,6 +1141,12 @@ function draw() {
 	}
 
 	// Collision + wall BEFORE force recomputation — prevents huge forces from overlapping pairs
+	// excitation field — decay previous frame into _eNext (double-buffered → clean 1-hop wave)
+	if (collisionSparksEnabled) {
+		gSeedHue = (gSeedHue + 0.6) % 360; // slow origin drift — DECOUPLED from per-ring step (which is spatial)
+		for (let i = 1; i < particles.length; i++) particles[i]._eNext = (particles[i]._e || 0) * EXC_DECAY;
+	}
+
 	if (particleCollisionsEnabled) {
 		// Phase 1: particle-particle — cell size based on particle radii only (NOT sun radius).
 		// Keeps cells small so clusters near the sun don't collapse into one giant cell → O(n²).
@@ -1152,6 +1171,11 @@ function draw() {
 		for (let i = 1; i < particles.length; i++) {
 			if (particles[i].Overlaps(particles[0])) resolveCollision(0, i);
 		}
+	}
+
+	// commit excitation buffer → _e (deterministic 1-hop propagation per frame)
+	if (collisionSparksEnabled) {
+		for (let i = 1; i < particles.length; i++) particles[i]._e = particles[i]._eNext;
 	}
 
 	// Wall behavior
@@ -1298,22 +1322,22 @@ function draw() {
 			fgCtx.globalCompositeOperation = 'source-over';
 		}
 
-		// hard core pass — also drift each particle hue
+		// hard core pass — solid white bodies
 		for (let pi = 1; pi < particles.length; pi++) {
-			const p = particles[pi];
-			if (p._hue !== undefined) p._hue = (p._hue + 0.05) % 360;
-			p.Draw(fgCtx, whiteLineStrokeStyle, whiteLineStrokeStyle);
+			particles[pi].Draw(fgCtx, whiteLineStrokeStyle, whiteLineStrokeStyle);
 		}
 
-		// collision color overlay — pastel HSL fade over 1 second
+		// collision color overlay — energy from impact cascades — soft touches stay dark
 		if (collisionSparksEnabled) {
 			for (let pi = 1; pi < particles.length; pi++) {
 				const particle = particles[pi];
-				if (!particle._collisionTime) continue;
-				const age = now - particle._collisionTime;
-				if (age >= 1000) { particle._collisionTime = 0; continue; }
-				fgCtx.globalAlpha = 1 - age / 1000;
-				const hsl = `hsl(${particle._hue},80%,75%)`;
+				const e = particle._e || 0;
+				if (e < 0.02) continue;                       // soft / faint → invisible
+				const d = Math.min(1, Math.pow(e, EXC_GAMMA) * EXC_VIS);           // perceptual intensity
+				fgCtx.globalAlpha = d;                        // brightness = energy → wavefront ridge
+				const sat   = Math.round(25 + 75 * d);        // vivid even mid-wave
+				const light = Math.round(90 - 40 * d);
+				const hsl = `hsl(${particle._hue},${sat}%,${light}%)`;
 				particle.Draw(fgCtx, hsl, hsl);
 			}
 			fgCtx.globalAlpha = 1;
