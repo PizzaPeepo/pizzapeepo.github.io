@@ -66,3 +66,29 @@ HTML links shared CSS from `../CSS/`, includes back-to-mainpage link. Templates:
 - `Slider.css` — styled range inputs
 - `horizontalDiv.css` — flex layout for control panels
 - `radioButton.css` — custom radio button styling
+
+## Editing JS Files
+
+All `.js` files use **tabs** for indentation and **CRLF** line endings (Windows).
+
+### Edit tool rules
+- `old_string` must use tabs, not spaces. Verify with `cat -A` or `sed -n 'Np'` if a match fails.
+- Keep `old_string` as short as possible — prefer a single unique line over multi-line blocks.
+- Never include lines containing template literals (`` ` ``) or `${}` in `old_string` — the Edit tool cannot match them reliably. Choose an anchor line above or below instead.
+
+### When Edit fails: use a temp `.mjs` script
+Write a `fix_something.mjs` at the repo root, run it with `node fix_something.mjs`, then delete it.
+Use `import.meta.url` to resolve paths (avoids shell-escaping issues with `-e`):
+
+```js
+import { readFileSync, writeFileSync } from 'fs';
+const path = new URL('./SubDir/file.js', import.meta.url).pathname.slice(1);
+let c = readFileSync(path, 'utf8');
+// build old/new with explicit '\r\n' for CRLF and '\t' for tabs
+const CRLF = '\r\n', T = '\t';
+const old = T + "some line" + CRLF + T + "next line";
+const neu = T + "replacement";
+if (!c.includes(old)) { console.log('NOT FOUND'); process.exit(1); }
+writeFileSync(path, c.replace(old, neu), 'utf8');
+console.log('OK');
+```

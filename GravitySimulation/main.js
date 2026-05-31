@@ -60,6 +60,8 @@ let accelBuf = new Float64Array(6000 * 2);
 let _sh = null, _shCellSize = 0;
 
 let collisionSparksEnabled = true;
+let glowEnabled = true;
+let collisionHue = 0;
 let forceBrushAttract = false;
 let forceBrushRepel = false;
 const BRUSH_STRENGTH = 5e6;
@@ -932,7 +934,7 @@ function resolveCollision(i, k) {
 	const dy = pi.position.y - pk.position.y;
 	let dist = Math.sqrt(dx * dx + dy * dy);
 	if (dist < 0.001) dist = 0.001;
-	const overlap = pi.radius + pk.radius - dist;
+	const overlap = Math.max(pi.radius, 1) + Math.max(pk.radius, 1) - dist;
 	if (overlap <= 0) return;
 	const nx = dx / dist, ny = dy / dist;
 	const totalMass = pi.mass + pk.mass;
@@ -946,21 +948,13 @@ function resolveCollision(i, k) {
 		const m1 = (2 * pk.mass) / totalMass, m2 = (2 * pi.mass) / totalMass;
 		pi.velocity.x = v1x - m1 * approach * nx; pi.velocity.y = v1y - m1 * approach * ny;
 		pk.velocity.x = v2x + m2 * approach * nx; pk.velocity.y = v2y + m2 * approach * ny;
-		if (collisionSparksEnabled && Math.abs(approach) > 30) {
-			const mx = (pi.position.x + pk.position.x) * 0.5;
-			const my = (pi.position.y + pk.position.y) * 0.5;
-			const intensity = Math.min(1, Math.abs(approach) / 150);
-			const flashR = (pi.radius + pk.radius) * (1 + intensity * 0.6);
-			const savedOp = bgCtx.globalCompositeOperation;
-			bgCtx.globalCompositeOperation = 'lighter';
-			const grad = bgCtx.createRadialGradient(mx, my, 0, mx, my, flashR);
-			grad.addColorStop(0, `rgba(255,255,200,${intensity})`);
-			grad.addColorStop(1, 'rgba(255,140,0,0)');
-			bgCtx.fillStyle = grad;
-			bgCtx.beginPath();
-			bgCtx.arc(mx, my, flashR, 0, Math.PI * 2);
-			bgCtx.fill();
-			bgCtx.globalCompositeOperation = savedOp;
+		if (collisionSparksEnabled) {
+			collisionHue = (collisionHue + 3) % 360;
+			const ct = Date.now();
+			pi._collisionTime = ct;
+			pi._collisionHue = collisionHue;
+			pk._collisionTime = ct;
+			pk._collisionHue = collisionHue;
 		}
 	}
 }
@@ -1134,10 +1128,14 @@ function draw() {
 			_sh.insert(i, particles[i].position.x, particles[i].position.y);
 		}
 		for (let i = 1; i < particles.length; i++) {
+			const ri = Math.max(particles[i].radius, 1);
 			const neighbors = _sh.queryNeighbors(particles[i].position.x, particles[i].position.y);
 			for (const k of neighbors) {
 				if (k <= i) continue;
-				if (particles[i].Overlaps(particles[k])) resolveCollision(i, k);
+				const rk = Math.max(particles[k].radius, 1);
+				const cdx = particles[i].position.x - particles[k].position.x;
+				const cdy = particles[i].position.y - particles[k].position.y;
+				if (cdx * cdx + cdy * cdy < (ri + rk) * (ri + rk)) resolveCollision(i, k);
 			}
 		}
 		// Phase 2: particle-sun — direct O(n), sun radius is large so spatial hash can't help here.
@@ -1278,7 +1276,7 @@ function draw() {
 		// draw particles — glow pass (additive blend via lighter composite)
 		const drawLUT    = gravitationalConst >= 0 ? attractionLUT    : repulsionLUT;
 		const drawSprites = gravitationalConst >= 0 ? attractionSprites : repulsionSprites;
-		if (drawSprites) {
+		if (glowEnabled && drawSprites) {
 			fgCtx.globalCompositeOperation = 'lighter';
 			for (let pi = 1; pi < particles.length; pi++) {
 				const particle = particles[pi];
@@ -1292,11 +1290,21 @@ function draw() {
 
 		// hard core pass
 		for (let pi = 1; pi < particles.length; pi++) {
-			const particle = particles[pi];
-			const accLen = particle.acceleration.length;
-			const percentage = accLen > 100 ? 1 : accLen / 100;
-			const rgba = drawLUT[(percentage * (LUT_SIZE - 1)) | 0];
-			particle.Draw(fgCtx, rgba, rgba);
+			particles[pi].Draw(fgCtx, whiteLineStrokeStyle, whiteLineStrokeStyle);
+		}
+
+		// collision color overlay — pastel HSL fade over 1 second
+		if (collisionSparksEnabled) {
+			for (let pi = 1; pi < particles.length; pi++) {
+				const particle = particles[pi];
+				if (!particle._collisionTime) continue;
+				const age = now - particle._collisionTime;
+				if (age >= 1000) { particle._collisionTime = 0; continue; }
+				fgCtx.globalAlpha = 1 - age / 1000;
+				const hsl = `hsl(${particle._collisionHue},80%,75%)`;
+				particle.Draw(fgCtx, hsl, hsl);
+			}
+			fgCtx.globalAlpha = 1;
 		}
 
 		// sun(s) — radial gradient corona
@@ -1400,6 +1408,10 @@ document.getElementById('supernovaButton').onclick = supernova;
 var collisionSparksCheckbox = document.getElementById('collisionSparksCheckbox');
 collisionSparksCheckbox.checked = collisionSparksEnabled;
 collisionSparksCheckbox.onclick = function () { collisionSparksEnabled = this.checked; };
+
+var glowCheckbox = document.getElementById('glowCheckbox');
+glowCheckbox.checked = glowEnabled;
+glowCheckbox.onclick = function () { glowEnabled = this.checked; };
 
 document.getElementById('presetOrbital').onclick  = () => applyPreset('orbital');
 document.getElementById('presetRing').onclick     = () => applyPreset('ring');
