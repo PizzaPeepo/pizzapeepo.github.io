@@ -74,7 +74,7 @@
     html { scroll-behavior: smooth; }
 
     body {
-      background: var(--bg);
+      background: var(--bg);   /* fallback if WebGL2 unavailable */
       color: var(--tx);
       font-family: 'DM Sans', sans-serif;
       min-height: 100vh;
@@ -613,6 +613,8 @@
       </div>
     </div>
   </footer>
+
+  <script src="wavegrid.js"></script>
 
   <script>
     (function () {
