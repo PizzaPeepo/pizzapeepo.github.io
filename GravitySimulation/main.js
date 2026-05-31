@@ -61,15 +61,15 @@ let _sh = null, _shCellSize = 0;
 
 let collisionSparksEnabled = true;
 // excitation field — impact energy that decays + propagates → collision color waves
-const EXC_DECAY  = 0.90;   // per-frame fade (wave trailing edge)
+const EXC_DECAY  = 0.96;   // per-frame fade (wave trailing edge)
 const EXC_SOFT   = 1.8;    // impact deadzone — soft touches below this add nothing
 const EXC_GAIN   = 0.25;   // impact→excitation conversion above deadzone
 const EXC_SPREAD = 0.75;   // per-hop transfer (<1 → finite wave radius ∝ impact)
 const EXC_FLOOR  = 0.04;   // min excitation that conducts (resting clumps stay dark)
 const EXC_GAMMA  = 3.4;    // intensity curve: >1 crushes soft touches, keeps hard impacts vivid
-const EXC_HUE_STEP = 28;   // hue rotation per propagation hop → rainbow along the cascade
-let   gSeedHue   = 0;      // slowly-drifting base hue — origin color of each new wave
+const EXC_HUE_SWEEP = 720; // hue deg: radial gradient center to edge across half-diagonal (>360 wraps to bands)
 const EXC_VIS    = 1.3;    // perceptual alpha boost — moderate impacts visible, soft still ~0
+const HUE_SHIFT_SPEED = 30; // degrees/sec — shifts entire hue gradient over time
 let glowEnabled = true;
 let forceBrushAttract = false;
 let forceBrushRepel = false;
@@ -938,6 +938,15 @@ foregroundCanvas.addEventListener("mousemove", function (event) {
 //#endregion
 // #endregion
 
+// radial canvas-position to hue: smooth gradient from center out, EXC_HUE_SWEEP deg across the half-diagonal
+function excHueAt(p) {
+	const dx = p.position.x - canvasWidth * 0.5, dy = p.position.y - canvasHeight * 0.5;
+	const r = Math.sqrt(dx * dx + dy * dy);
+	const maxR = 0.5 * Math.sqrt(canvasWidth * canvasWidth + canvasHeight * canvasHeight) || 1;
+	const timeShift = (Date.now() * HUE_SHIFT_SPEED / 1000) % 360;
+	return (r / maxR * EXC_HUE_SWEEP + timeShift) % 360;
+}
+
 function resolveCollision(i, k) {
 	const pi = particles[i], pk = particles[k];
 	const dx = pi.position.x - pk.position.x;
@@ -962,8 +971,8 @@ function resolveCollision(i, k) {
 			// generation — soft-knee: soft touches add ~0, hard hits saturate toward 1
 			const gain = Math.max(0, Math.abs(approach) - EXC_SOFT) * EXC_GAIN;
 			if (gain > 0) {
-				if ((pi._e || 0) < EXC_FLOOR) pi._hue = gSeedHue; // fresh origin takes the drifting base hue
-				if ((pk._e || 0) < EXC_FLOOR) pk._hue = gSeedHue;
+				pi._hue = excHueAt(pi);
+				pk._hue = excHueAt(pk);
 				pi._eNext = Math.max(pi._eNext || 0, Math.min(1, gain));
 				pk._eNext = Math.max(pk._eNext || 0, Math.min(1, gain));
 			}
@@ -973,11 +982,11 @@ function resolveCollision(i, k) {
 		// propagation — touching neighbors conduct heat (old _e → _eNext): 1 hop/frame
 		if ((pi._e || 0) > EXC_FLOOR) {
 			const cand = pi._e * EXC_SPREAD;
-			if (cand > (pk._eNext || 0)) { pk._eNext = cand; if ((pk._e || 0) < EXC_FLOOR) pk._hue = (pi._hue + EXC_HUE_STEP) % 360; }
+			if (cand > (pk._eNext || 0)) { pk._eNext = cand; pk._hue = excHueAt(pk); }
 		}
 		if ((pk._e || 0) > EXC_FLOOR) {
 			const cand = pk._e * EXC_SPREAD;
-			if (cand > (pi._eNext || 0)) { pi._eNext = cand; if ((pi._e || 0) < EXC_FLOOR) pi._hue = (pk._hue + EXC_HUE_STEP) % 360; }
+			if (cand > (pi._eNext || 0)) { pi._eNext = cand; pi._hue = excHueAt(pi); }
 		}
 	}
 }
@@ -1143,7 +1152,7 @@ function draw() {
 	// Collision + wall BEFORE force recomputation — prevents huge forces from overlapping pairs
 	// excitation field — decay previous frame into _eNext (double-buffered → clean 1-hop wave)
 	if (collisionSparksEnabled) {
-		gSeedHue = (gSeedHue + 0.6) % 360; // slow origin drift — DECOUPLED from per-ring step (which is spatial)
+		// hue now positional via excHueAt() — no global drift
 		for (let i = 1; i < particles.length; i++) particles[i]._eNext = (particles[i]._e || 0) * EXC_DECAY;
 	}
 
@@ -1335,8 +1344,8 @@ function draw() {
 				if (e < 0.02) continue;                       // soft / faint → invisible
 				const d = Math.min(1, Math.pow(e, EXC_GAMMA) * EXC_VIS);           // perceptual intensity
 				fgCtx.globalAlpha = d;                        // brightness = energy → wavefront ridge
-				const sat   = Math.round(25 + 75 * d);        // vivid even mid-wave
-				const light = Math.round(90 - 40 * d);
+				const sat   = Math.round(40 + 40 * d);        // peaks at 80% — pastel range
+				const light = Math.round(90 - 15 * d);        // 75–90% lightness — always pale
 				const hsl = `hsl(${particle._hue},${sat}%,${light}%)`;
 				particle.Draw(fgCtx, hsl, hsl);
 			}
