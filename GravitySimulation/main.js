@@ -951,12 +951,18 @@ function resolveCollision(i, k) {
 		if (collisionSparksEnabled) {
 			const ke_i = pi.mass * (v1x * v1x + v1y * v1y);
 			const ke_k = pk.mass * (v2x * v2x + v2y * v2y);
-			if (ke_i >= ke_k) {
-				pk._hue = ((pi._hue || 0) + 18) % 360;
-			} else {
-				pi._hue = ((pk._hue || 0) + 18) % 360;
-			}
 			const ct = Date.now();
+			if (ke_i >= ke_k) {
+				if (!pk._lastHueChange || ct - pk._lastHueChange > 600) {
+					pk._hue = ((pi._hue || 0) + 12) % 360;
+					pk._lastHueChange = ct;
+				}
+			} else {
+				if (!pi._lastHueChange || ct - pi._lastHueChange > 600) {
+					pi._hue = ((pk._hue || 0) + 12) % 360;
+					pi._lastHueChange = ct;
+				}
+			}
 			pi._collisionTime = ct;
 			pk._collisionTime = ct;
 		}
