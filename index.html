@@ -253,7 +253,10 @@
     /* ─── CARD ─── */
     .card {
       position: relative;
-      background: var(--bg-card);
+      background: rgba(35, 26, 17, 0.60);
+      backdrop-filter: blur(14px) saturate(160%);
+      -webkit-backdrop-filter: blur(14px) saturate(160%);
+      border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 16px;
       padding: 28px 26px 24px;
       text-decoration: none;
@@ -263,10 +266,9 @@
       gap: 12px;
       min-height: 200px;
       box-shadow: var(--shadow-sm);
-      transition: transform 0.28s cubic-bezier(0.34,1.4,0.64,1),
-                  box-shadow 0.28s ease,
-                  background-color 0.4s ease;
-      overflow: hidden;
+      transition: transform 0.30s cubic-bezier(0.34,1.4,0.64,1),
+                  box-shadow 0.30s ease,
+                  background 0.25s ease;
 
       opacity: 0;
       animation: riseIn 0.5s ease forwards;
@@ -281,30 +283,19 @@
     .card:nth-child(8)  { animation-delay: 0.59s; }
     .card:nth-child(9)  { animation-delay: 0.66s; }
 
-    /* Coloured left stripe */
-    .card::before {
-      content: '';
-      position: absolute;
-      top: 20px; bottom: 20px; left: 0;
-      width: 3px;
-      border-radius: 0 3px 3px 0;
-      background: var(--gold);
-      opacity: 0;
-      transition: opacity 0.3s ease, height 0.3s ease;
-    }
     .card:hover {
-      transform: translateY(-7px);
-      box-shadow: var(--shadow-lg);
-      background: var(--bg-lift);
+      transform: translateY(-12px);
+      box-shadow: 0 28px 64px rgba(0,0,0,0.55),
+                  0 10px 22px rgba(0,0,0,0.28),
+                  0 0 50px rgba(245,166,35,0.10);
+      background: rgba(44, 33, 22, 0.78);
     }
-    .card:hover::before       { opacity: 1; }
     .card:hover .card-arrow   { transform: translate(4px, -4px); opacity: 1; }
     .card:hover .card-title   { color: var(--gold); }
 
     /* Wide card */
     .card-wide             { grid-column: span 2; }
     .card-wide .card-title { font-size: 40px; }
-    .card-wide::before     { background: linear-gradient(to bottom, var(--gold), var(--coral)); }
 
     /* Card parts */
     .card-head {
@@ -415,6 +406,27 @@
       .hdr-title       { font-size: 52px; }
       .theme-toggle    { top: 20px; right: 20px; }
       header           { padding: 80px 0 48px; }
+    }
+
+    /* ─── LIGHT MODE GLASS ─── */
+    html.light .card {
+      background: rgba(255, 249, 242, 0.68);
+      border-color: rgba(0, 0, 0, 0.09);
+    }
+    html.light .card:hover {
+      background: rgba(255, 252, 248, 0.88);
+      box-shadow: 0 28px 64px rgba(0,0,0,0.13),
+                  0 10px 22px rgba(0,0,0,0.08);
+    }
+
+    /* ─── CARD BORDER SVG ─── */
+    .card-border-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      overflow: visible;
     }
   </style>
 </head>
@@ -601,6 +613,115 @@
       </div>
     </div>
   </footer>
+
+  <script>
+    (function () {
+      var NS = 'http://www.w3.org/2000/svg';
+
+      function makeSVGBorder(card, idx) {
+        var svg = document.createElementNS(NS, 'svg');
+        svg.classList.add('card-border-svg');
+        svg.setAttribute('aria-hidden', 'true');
+
+        var defs = document.createElementNS(NS, 'defs');
+        var gid  = 'cbg' + idx;
+
+        var grad = document.createElementNS(NS, 'linearGradient');
+        grad.id  = gid;
+        grad.setAttribute('x1', '0%'); grad.setAttribute('y1', '0%');
+        grad.setAttribute('x2', '100%'); grad.setAttribute('y2', '100%');
+        [['0%','#fdd87a'], ['55%','#f5a623'], ['100%','#ff6b47']].forEach(function(s) {
+          var stop = document.createElementNS(NS, 'stop');
+          stop.setAttribute('offset', s[0]);
+          stop.setAttribute('stop-color', s[1]);
+          grad.appendChild(stop);
+        });
+        defs.appendChild(grad);
+        svg.appendChild(defs);
+
+        function makeRect(sw, blurPx, baseOp) {
+          var r = document.createElementNS(NS, 'rect');
+          r.setAttribute('rx', '15');
+          r.setAttribute('pathLength', '1000');
+          r.style.fill = 'none';
+          r.style.stroke = 'url(#' + gid + ')';
+          r.style.strokeWidth = sw;
+          r.style.strokeLinecap = 'round';
+          r.style.strokeDashoffset = '1000';
+          r.style.opacity = '0';
+          if (blurPx) r.style.filter = 'blur(' + blurPx + 'px)';
+          r._op = String(baseOp);
+          return r;
+        }
+
+        // Trail: dim full-border that draws progressively behind the comet
+        var trailRect = makeRect('1.5', 0, 0.3);
+        trailRect.style.strokeDasharray = '1000 1000';
+
+        // Comet head: short bright segment that leads the trail
+        var headRect = makeRect('2', 0, 1);
+        headRect.style.strokeDasharray = '60 940';
+
+        // Comet glow: wide blurred halo around the head
+        var headGlow = makeRect('10', 7, 0.5);
+        headGlow.style.strokeDasharray = '60 940';
+
+        svg.appendChild(trailRect);
+        svg.appendChild(headGlow);
+        svg.appendChild(headRect);
+        card.appendChild(svg);
+
+        function resize() {
+          var w = card.offsetWidth, h = card.offsetHeight;
+          svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+          [trailRect, headRect, headGlow].forEach(function(r) {
+            r.setAttribute('x', '3');
+            r.setAttribute('y', '3');
+            r.setAttribute('width',  w - 6);
+            r.setAttribute('height', h - 6);
+          });
+        }
+        resize();
+        window.addEventListener('resize', resize);
+
+        var leaveTimer = null;
+
+        card.addEventListener('mouseenter', function() {
+          if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = null; }
+          [trailRect, headRect, headGlow].forEach(function(r) {
+            r.style.transition = 'none';
+            r.style.strokeDashoffset = '1000';
+            r.style.opacity = '0';
+          });
+          void card.offsetWidth;
+          var ease = '0.85s cubic-bezier(0.05, 0.72, 0.08, 1.0)';
+          [trailRect, headRect, headGlow].forEach(function(r) {
+            r.style.transition = 'stroke-dashoffset ' + ease + ', opacity 0.12s ease';
+            r.style.opacity = r._op;
+            r.style.strokeDashoffset = '0';
+          });
+        });
+
+        card.addEventListener('mouseleave', function() {
+          [trailRect, headRect, headGlow].forEach(function(r) {
+            r.style.transition = 'opacity 0.32s ease-out';
+            r.style.opacity = '0';
+          });
+          leaveTimer = setTimeout(function() {
+            [trailRect, headRect, headGlow].forEach(function(r) {
+              r.style.transition = 'none';
+              r.style.strokeDashoffset = '1000';
+            });
+            leaveTimer = null;
+          }, 350);
+        });
+      }
+
+      document.querySelectorAll('.card').forEach(function(card, i) {
+        makeSVGBorder(card, i);
+      });
+    })();
+  </script>
 
   <script>
     (function () {
