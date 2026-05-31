@@ -61,7 +61,6 @@ let _sh = null, _shCellSize = 0;
 
 let collisionSparksEnabled = true;
 let glowEnabled = true;
-let collisionHue = 0;
 let forceBrushAttract = false;
 let forceBrushRepel = false;
 const BRUSH_STRENGTH = 5e6;
@@ -149,6 +148,7 @@ function GenerateRandomizedParticles(particleCount) {
 		for (let i = 1; i < particles.length; i++) particles[i].radius *= particleSizeScale;
 	}
 	computeInitialAccelerations();
+	for (let i = 1; i < particles.length; i++) particles[i]._hue = Math.random() * 360;
 }
 
 // Computes and stores gravitational acceleration on every particle (direct O(n²)).
@@ -949,12 +949,16 @@ function resolveCollision(i, k) {
 		pi.velocity.x = v1x - m1 * approach * nx; pi.velocity.y = v1y - m1 * approach * ny;
 		pk.velocity.x = v2x + m2 * approach * nx; pk.velocity.y = v2y + m2 * approach * ny;
 		if (collisionSparksEnabled) {
-			collisionHue = (collisionHue + 3) % 360;
+			const ke_i = pi.mass * (v1x * v1x + v1y * v1y);
+			const ke_k = pk.mass * (v2x * v2x + v2y * v2y);
+			if (ke_i >= ke_k) {
+				pk._hue = ((pi._hue || 0) + 18) % 360;
+			} else {
+				pi._hue = ((pk._hue || 0) + 18) % 360;
+			}
 			const ct = Date.now();
 			pi._collisionTime = ct;
-			pi._collisionHue = collisionHue;
 			pk._collisionTime = ct;
-			pk._collisionHue = collisionHue;
 		}
 	}
 }
@@ -1288,9 +1292,11 @@ function draw() {
 			fgCtx.globalCompositeOperation = 'source-over';
 		}
 
-		// hard core pass
+		// hard core pass — also drift each particle hue
 		for (let pi = 1; pi < particles.length; pi++) {
-			particles[pi].Draw(fgCtx, whiteLineStrokeStyle, whiteLineStrokeStyle);
+			const p = particles[pi];
+			if (p._hue !== undefined) p._hue = (p._hue + 0.05) % 360;
+			p.Draw(fgCtx, whiteLineStrokeStyle, whiteLineStrokeStyle);
 		}
 
 		// collision color overlay — pastel HSL fade over 1 second
@@ -1301,7 +1307,7 @@ function draw() {
 				const age = now - particle._collisionTime;
 				if (age >= 1000) { particle._collisionTime = 0; continue; }
 				fgCtx.globalAlpha = 1 - age / 1000;
-				const hsl = `hsl(${particle._collisionHue},80%,75%)`;
+				const hsl = `hsl(${particle._hue},80%,75%)`;
 				particle.Draw(fgCtx, hsl, hsl);
 			}
 			fgCtx.globalAlpha = 1;
