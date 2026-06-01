@@ -143,6 +143,24 @@
   var prog = mkProg(VS, FS);
   if (!prog) { canvas.remove(); return; }
 
+  // Remove opaque body bg so backdrop-filter on cards sees the canvas
+  document.body.style.background = 'transparent';
+
+  // Warm tint overlay — sits above canvas (z:0, after canvas in DOM) but below .wrap (z:1)
+  // Dims the raw dot grid back to the original calm/warm look
+  var tint = document.createElement('div');
+  tint.style.cssText = 'position:fixed;inset:0;z-index:0;pointer-events:none;transition:background 0.3s;';
+  canvas.insertAdjacentElement('afterend', tint);
+
+  function updateTint() {
+    var lite = document.documentElement.classList.contains('light');
+    tint.style.background = lite
+      ? 'rgba(250,245,238,0.58)'
+      : 'rgba(24,18,16,0.58)';
+  }
+  updateTint();
+  new MutationObserver(updateTint).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
   /* ── Grid geometry ── */
   var COLS = 100, ROWS = 62;
   var verts = [];

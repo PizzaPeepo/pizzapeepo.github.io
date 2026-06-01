@@ -253,10 +253,10 @@
     /* ─── CARD ─── */
     .card {
       position: relative;
-      background: rgba(35, 26, 17, 0.60);
-      backdrop-filter: blur(14px) saturate(160%);
-      -webkit-backdrop-filter: blur(14px) saturate(160%);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(35, 26, 17, 0.08);
+      backdrop-filter: blur(3px) saturate(150%);
+      -webkit-backdrop-filter: blur(3px) saturate(150%);
+      border: 1px solid rgba(255, 255, 255, 0.13);
       border-radius: 16px;
       padding: 28px 26px 24px;
       text-decoration: none;
@@ -268,7 +268,9 @@
       box-shadow: var(--shadow-sm);
       transition: transform 0.30s cubic-bezier(0.34,1.4,0.64,1),
                   box-shadow 0.30s ease,
-                  background 0.25s ease;
+                  background 0.25s ease,
+                  z-index 0s;
+      z-index: 1;
 
       opacity: 0;
       animation: riseIn 0.5s ease forwards;
@@ -284,11 +286,15 @@
     .card:nth-child(9)  { animation-delay: 0.66s; }
 
     .card:hover {
-      transform: translateY(-12px);
-      box-shadow: 0 28px 64px rgba(0,0,0,0.55),
-                  0 10px 22px rgba(0,0,0,0.28),
-                  0 0 50px rgba(245,166,35,0.10);
-      background: rgba(44, 33, 22, 0.78);
+      transform: perspective(800px) translateZ(60px);
+      box-shadow: 0 40px 80px rgba(0,0,0,0.65),
+                  0 16px 32px rgba(0,0,0,0.35),
+                  0 0 60px rgba(245,166,35,0.14);
+      background: rgba(44, 33, 22, 0.26);
+      z-index: 2;
+    }
+    .grid:has(.card:hover) .card:not(:hover) {
+      transform: scale(0.97);
     }
     .card:hover .card-arrow   { transform: translate(4px, -4px); opacity: 1; }
     .card:hover .card-title   { color: var(--gold); }
@@ -296,6 +302,7 @@
     /* Wide card */
     .card-wide             { grid-column: span 2; }
     .card-wide .card-title { font-size: 40px; }
+    .card-wide:hover       { transform: perspective(800px) translateZ(28px); }
 
     /* Card parts */
     .card-head {
@@ -410,11 +417,11 @@
 
     /* ─── LIGHT MODE GLASS ─── */
     html.light .card {
-      background: rgba(255, 249, 242, 0.68);
-      border-color: rgba(0, 0, 0, 0.09);
+      background: rgba(255, 249, 242, 0.10);
+      border-color: rgba(0, 0, 0, 0.12);
     }
     html.light .card:hover {
-      background: rgba(255, 252, 248, 0.88);
+      background: rgba(255, 252, 248, 0.22);
       box-shadow: 0 28px 64px rgba(0,0,0,0.13),
                   0 10px 22px rgba(0,0,0,0.08);
     }
@@ -615,6 +622,7 @@
   </footer>
 
   <script src="wavegrid.js"></script>
+  <script src="streaks.js"></script>
 
   <script>
     (function () {
@@ -721,6 +729,10 @@
 
       document.querySelectorAll('.card').forEach(function(card, i) {
         makeSVGBorder(card, i);
+        card.addEventListener('animationend', function() {
+          card.style.animation = 'none';
+          card.style.opacity   = '1';
+        }, { once: true });
       });
     })();
   </script>
