@@ -399,6 +399,73 @@
     }
     .foot-link:hover { color: var(--coral); }
 
+    /* ─── KINETIC LETTERS ─── */
+    .hdr-title .kl {
+      display: inline-block;
+      transition: transform 0.55s cubic-bezier(0.34,1.4,0.64,1);
+      will-change: transform;
+    }
+
+    /* ─── SCROLL COUNTER TRACK ─── */
+    .scroll-track {
+      position: fixed;
+      left: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    .scroll-track.visible { opacity: 1; }
+
+    .track-line {
+      width: 1px;
+      height: 100%;
+      position: absolute;
+      left: 50%;
+      top: 0;
+      background: color-mix(in srgb, var(--tx-4) 40%, transparent);
+    }
+    .track-fill {
+      width: 1px;
+      background: linear-gradient(180deg, var(--gold), var(--coral));
+      position: absolute;
+      left: 50%;
+      top: 0;
+      height: 0%;
+      transition: height 0.1s linear;
+    }
+    .track-items {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      position: relative;
+      z-index: 1;
+      padding: 4px 0;
+    }
+    .track-num {
+      font-family: 'Fraunces', serif;
+      font-size: 10px;
+      font-style: italic;
+      color: var(--tx-4);
+      writing-mode: vertical-rl;
+      width: 20px;
+      text-align: center;
+      transition: color 0.3s ease, transform 0.3s ease;
+      line-height: 1;
+    }
+    .track-num.active {
+      color: var(--gold);
+      transform: scale(1.2);
+    }
+
+    @media (max-width: 1080px) { .scroll-track { display: none; } }
+
     /* ─── RESPONSIVE ─── */
     @media (max-width: 960px) {
       .wrap            { padding: 0 28px; }
@@ -445,6 +512,13 @@
     <span class="toggle-label">Light</span>
   </button>
 
+  <!-- Scroll counter track -->
+  <nav class="scroll-track" id="scrollTrack" aria-label="Demo navigation">
+    <div class="track-line"></div>
+    <div class="track-fill" id="trackFill"></div>
+    <div class="track-items" id="trackItems"></div>
+  </nav>
+
   <!-- Atmospheric background -->
   <div class="blobs" aria-hidden="true">
     <div class="blob blob-1"></div>
@@ -460,7 +534,7 @@
         <span class="pip"></span>
         Canvas Lab · Interactive Demos
       </div>
-      <h1 class="hdr-title">Make it<br><em>interactive.</em></h1>
+      <h1 class="hdr-title" id="kineticTitle">Make it<br><em>interactive.</em></h1>
       <div class="hdr-divider"></div>
       <p class="hdr-sub">
         A collection of physics simulations, mathematical visualizations,
@@ -623,6 +697,9 @@
 
   <script src="wavegrid.js"></script>
   <script src="streaks.js"></script>
+  <script src="globe.js"></script>
+  <script src="cardan.js"></script>
+  <script src="cardpreviews.js"></script>
 
   <script>
     (function () {
@@ -734,6 +811,105 @@
           card.style.opacity   = '1';
         }, { once: true });
       });
+    })();
+  </script>
+
+  <script>
+    (function () {
+      var title = document.getElementById('kineticTitle');
+      if (!title) return;
+
+      // Split text nodes into letter spans, preserve HTML structure
+      function wrapLetters(node) {
+        if (node.nodeType === 3) {
+          // text node
+          var frag = document.createDocumentFragment();
+          var text = node.textContent;
+          for (var i = 0; i < text.length; i++) {
+            var ch = text[i];
+            if (ch === ' ' || ch === '\n') {
+              frag.appendChild(document.createTextNode(ch));
+            } else {
+              var sp = document.createElement('span');
+              sp.className = 'kl';
+              sp.textContent = ch;
+              frag.appendChild(sp);
+            }
+          }
+          node.parentNode.replaceChild(frag, node);
+        } else if (node.nodeType === 1 && node.tagName !== 'BR') {
+          Array.from(node.childNodes).forEach(wrapLetters);
+        }
+      }
+      wrapLetters(title);
+
+      var letters = Array.from(title.querySelectorAll('.kl'));
+      var REPEL_R = 120, MAX_PUSH = 38;
+
+      document.addEventListener('mousemove', function (e) {
+        letters.forEach(function (l) {
+          var r  = l.getBoundingClientRect();
+          var cx = r.left + r.width  * 0.5;
+          var cy = r.top  + r.height * 0.5;
+          var dx = cx - e.clientX;
+          var dy = cy - e.clientY;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < REPEL_R && dist > 0.1) {
+            var force = (1 - dist / REPEL_R);
+            var px = (dx / dist) * force * MAX_PUSH;
+            var py = (dy / dist) * force * MAX_PUSH;
+            l.style.transform = 'translate(' + px.toFixed(1) + 'px,' + py.toFixed(1) + 'px)';
+          } else {
+            l.style.transform = '';
+          }
+        });
+      });
+
+      document.addEventListener('mouseleave', function () {
+        letters.forEach(function (l) { l.style.transform = ''; });
+      });
+    })();
+  </script>
+
+  <script>
+    (function () {
+      var track    = document.getElementById('scrollTrack');
+      var fill     = document.getElementById('trackFill');
+      var items    = document.getElementById('trackItems');
+      var cards    = Array.from(document.querySelectorAll('.card'));
+      var nums     = [];
+
+      cards.forEach(function (card, i) {
+        var n = document.createElement('div');
+        n.className = 'track-num';
+        n.textContent = String(i + 1).padStart(2, '0');
+        items.appendChild(n);
+        nums.push(n);
+      });
+
+      function onScroll() {
+        var scrollY    = window.scrollY;
+        var docHeight  = document.documentElement.scrollHeight - window.innerHeight;
+        var progress   = docHeight > 0 ? scrollY / docHeight : 0;
+
+        track.classList.toggle('visible', scrollY > 120);
+        fill.style.height = (progress * 100) + '%';
+
+        var midY = scrollY + window.innerHeight * 0.5;
+        var best = -1, bestDist = Infinity;
+        cards.forEach(function (card, i) {
+          var r    = card.getBoundingClientRect();
+          var cy   = scrollY + r.top + r.height * 0.5;
+          var dist = Math.abs(midY - cy);
+          if (dist < bestDist) { bestDist = dist; best = i; }
+        });
+        nums.forEach(function (n, i) {
+          n.classList.toggle('active', i === best);
+        });
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
     })();
   </script>
 
