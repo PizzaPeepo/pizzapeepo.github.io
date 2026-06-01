@@ -1,9 +1,10 @@
-/* streaks.js — dual diagonal glowing streaks on card hover */
+/* streaks.js — randomised diagonal glowing streaks on card hover */
 (function () {
   'use strict';
 
   var cvs = document.createElement('canvas');
-  cvs.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:3;pointer-events:none;';
+  // z-index 0: above wavegrid (also 0, but later in DOM), below cards (z-index 1)
+  cvs.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;';
   document.body.appendChild(cvs);
   var ctx = cvs.getContext('2d');
 
@@ -11,109 +12,64 @@
   resize();
   window.addEventListener('resize', resize);
 
-  // ~35° below horizontal
   var DIR_X  = -0.819, DIR_Y = 0.574;
-  // Perpendicular (90° CW from DIR)
-  var PERP_X = DIR_Y, PERP_Y = -DIR_X; // (0.574, 0.819)
 
-  // IN_DUR matches border animation (0.85s cubic-bezier) so arrival = circuit complete
   var IN_DUR  = 0.85;
   var OUT_DUR = 0.50;
-
-  // perp: offset perpendicular to DIR; extraX: additional rightward shift
-  var CONFIGS = [
-    { perp: +11, extraX:  0, len: 78, wo: 4.0, wc: 1.5, as: 1.00 }, // main/lower
-    { perp: -11, extraX: 22, len: 46, wo: 2.2, wc: 0.8, as: 0.72 }, // upper, shifted right
-  ];
+  var MARGIN  = 50;
 
   var streaks = [];
   var hovered = null;
-  var cardMY  = 0.5;
 
   function easeOutBack(t) {
     var c1 = 1.2, c3 = c1 + 1;
     return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
   }
 
-  function getParkX() {
-    var grid = document.querySelector('.grid');
-    if (!grid) return Math.max(20, cvs.width * 0.08);
-    return Math.max(20, grid.getBoundingClientRect().left - 160);
-  }
-
-  function getParkY() {
-    if (!hovered) return cvs.height * 0.5;
-    var r = hovered.getBoundingClientRect();
-    return r.top + r.height * 0.5 + (cardMY - 0.5) * 45;
-  }
-
-  function streakTarget(cfg, px, py) {
-    return {
-      x: px + PERP_X * cfg.perp + cfg.extraX,
-      y: py + PERP_Y * cfg.perp,
-    };
-  }
-
-  function makeStreak(idx, px, py) {
-    var cfg    = CONFIGS[idx];
-    var tgt    = streakTarget(cfg, px, py);
-    var startX = cvs.width + 150;
+  function makeStreak() {
+    var tpx    = MARGIN + Math.random() * (cvs.width  - MARGIN * 2);
+    var tpy    = MARGIN + Math.random() * (cvs.height - MARGIN * 2);
+    var startX = cvs.width + 80 + Math.random() * 120;
     var slope  = DIR_Y / DIR_X;
-    var startY = tgt.y - slope * (tgt.x - startX);
+    var startY = tpy - slope * (tpx - startX);
     return {
       x: startX, y: startY,
       startX: startX, startY: startY,
-      targetX: tgt.x, targetY: tgt.y,
+      targetX: tpx, targetY: tpy,
       exitX: 0, exitY: 0,
-      cfg: cfg,
+      len: 28 + Math.random() * 65,
+      wo:  1.2 + Math.random() * 3.2,
+      wc:  0.4 + Math.random() * 1.1,
+      as:  0.35 + Math.random() * 0.65,
       t: 0, dur: IN_DUR,
       state: 'in',
       alpha: 0,
     };
   }
 
+  function exitAll() {
+    streaks.forEach(function (s) {
+      if (s.state !== 'out') {
+        s.startX = s.x; s.startY = s.y;
+        s.exitX  = s.x + DIR_X * 2000;
+        s.exitY  = s.y + DIR_Y * 2000;
+        s.t      = 0; s.dur = OUT_DUR;
+        s.state  = 'out';
+      }
+    });
+  }
+
   document.querySelectorAll('.card').forEach(function (card) {
     card.addEventListener('mouseenter', function () {
       hovered = card;
-      cardMY  = 0.5;
-      // Exit any existing streaks, spawn fresh ones for the new card
-      streaks.forEach(function (s) {
-        if (s.state !== 'out') {
-          s.startX = s.x; s.startY = s.y;
-          s.exitX  = s.x + DIR_X * 2000;
-          s.exitY  = s.y + DIR_Y * 2000;
-          s.t      = 0; s.dur = OUT_DUR;
-          s.state  = 'out';
-        }
-      });
-      var px = getParkX(), py = getParkY();
-      CONFIGS.forEach(function (cfg, idx) { streaks.push(makeStreak(idx, px, py)); });
+      exitAll();
+      var count = 8 + Math.floor(Math.random() * 8);
+      for (var n = 0; n < count; n++) { streaks.push(makeStreak()); }
     });
 
     card.addEventListener('mouseleave', function () {
       hovered = null;
-      streaks.forEach(function (s) {
-        if (s.state !== 'out') {
-          s.startX = s.x; s.startY = s.y;
-          s.exitX  = s.x + DIR_X * 2000;
-          s.exitY  = s.y + DIR_Y * 2000;
-          s.t      = 0; s.dur = OUT_DUR;
-          s.state  = 'out';
-        }
-      });
-    });
-
-    card.addEventListener('mousemove', function (e) {
-      if (hovered !== card) return;
-      var r = card.getBoundingClientRect();
-      cardMY = (e.clientY - r.top) / r.height;
-      var px = getParkX(), py = getParkY();
-      streaks.forEach(function (s, i) {
-        if (s.state === 'parked' && CONFIGS[i]) {
-          var tgt = streakTarget(CONFIGS[i], px, py);
-          s.targetX = tgt.x; s.targetY = tgt.y;
-        }
-      });
+      exitAll();
     });
   });
 
@@ -133,19 +89,16 @@
 
       if (s.state === 'in') {
         s.t    += dt / s.dur;
-        s.alpha = Math.min(1, s.alpha + dt * 4); // fade in over ~0.25s
+        s.alpha = Math.min(1, s.alpha + dt * 4);
         var e   = easeOutBack(Math.min(s.t, 1));
         s.x     = s.startX + (s.targetX - s.startX) * e;
         s.y     = s.startY + (s.targetY - s.startY) * e;
         if (s.t >= 1) { s.x = s.targetX; s.y = s.targetY; s.state = 'parked'; }
 
       } else if (s.state === 'parked') {
-        var lk = Math.min(1, dt * 8);
-        s.x    += (s.targetX - s.x) * lk;
-        s.y    += (s.targetY - s.y) * lk;
         s.alpha = Math.min(1, s.alpha + dt * 9);
 
-      } else { // 'out' — easeOutBack: fast exit, tiny overshoot off-screen
+      } else { // 'out'
         s.t    += dt / s.dur;
         var eo  = easeOutBack(Math.min(s.t, 1));
         s.x     = s.startX + (s.exitX - s.startX) * eo;
@@ -154,11 +107,10 @@
         if (s.t >= 1 || s.alpha <= 0) { streaks.splice(i, 1); continue; }
       }
 
-      var cfg = s.cfg;
-      var a   = s.alpha * cfg.as;
+      var a = s.alpha * s.as;
       if (a <= 0) continue;
 
-      var fLen = s.state === 'parked' ? cfg.len * (0.91 + Math.random() * 0.18) : cfg.len;
+      var fLen = s.state === 'parked' ? s.len * (0.91 + Math.random() * 0.18) : s.len;
       var tx   = s.x - DIR_X * fLen;
       var ty   = s.y - DIR_Y * fLen;
 
@@ -172,7 +124,7 @@
       ctx.shadowBlur  = 30;
       ctx.shadowColor = 'rgba(' + gold + ',1)';
       ctx.strokeStyle = grad;
-      ctx.lineWidth   = cfg.wo;
+      ctx.lineWidth   = s.wo;
       ctx.lineCap     = 'round';
       ctx.beginPath();
       ctx.moveTo(tx, ty);
@@ -180,7 +132,7 @@
       ctx.stroke();
       ctx.shadowBlur  = 8;
       ctx.shadowColor = 'rgba(' + hot + ',1)';
-      ctx.lineWidth   = cfg.wc;
+      ctx.lineWidth   = s.wc;
       ctx.strokeStyle = 'rgba(' + hot + ',' + (a * 0.95).toFixed(3) + ')';
       ctx.beginPath();
       ctx.moveTo(tx, ty);
