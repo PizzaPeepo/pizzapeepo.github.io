@@ -12,6 +12,7 @@
 		'width:100%', 'height:100%',
 		'pointer-events:none', 'z-index:0',
 		'opacity:0', 'transition:opacity 1.4s ease',
+		'filter:drop-shadow(0 0 2px #fff8e7) drop-shadow(0 0 7px #fdd87a) drop-shadow(0 0 18px #f5a623) drop-shadow(0 0 36px rgba(245,120,20,0.5)) drop-shadow(0 0 60px rgba(220,80,10,0.22))',
 	].join(';');
 	var wgRef = document.body.firstChild;
 	document.body.insertBefore(cvs, wgRef ? wgRef.nextSibling : null);
@@ -33,10 +34,7 @@
 		'uniform mat3 uNorm;',
 		'out float vLight;',
 		'void main(){',
-		'  vec3 N = normalize(uNorm * aNorm);',
-		'  vec3 L = normalize(vec3(0.35, 0.70, 1.0));',
-		'  float amb = 0.45;',
-		'  vLight = amb + (1.0 - amb) * max(0.0, dot(N, L));',
+		'  vLight = 1.0;',
 		'  gl_Position = uMVP * vec4(aPos, 1.0);',
 		'}',
 	].join('\n');
@@ -180,15 +178,43 @@
 		return uploadVAO(verts, norms, idx);
 	}
 
-	var RINGS = [
-		buildFlatRing(1.62, 0.30, 0.16, 128),
-		buildFlatRing(1.24, 0.26, 0.13, 108),
-		buildFlatRing(0.88, 0.22, 0.10,  80),
+
+	/* -- neon tube-tori along all 4 circular edges -- */
+	function buildNeonEdges(R, hw, hh, rTube, NS) {
+		var NT = 8;
+		var verts = [], norms = [], idx = [], base = 0;
+		[[R + hw, hh], [R - hw, hh], [R + hw, -hh], [R - hw, -hh]].forEach(function (e) {
+			var er = e[0], ez = e[1];
+			for (var i = 0; i <= NS; i++) {
+				var u = i / NS * Math.PI * 2;
+				var cu = Math.cos(u), su = Math.sin(u);
+				for (var j = 0; j <= NT; j++) {
+					var v = j / NT * Math.PI * 2;
+					var cv = Math.cos(v), sv = Math.sin(v);
+					verts.push((er + rTube * cv) * cu, (er + rTube * cv) * su, ez + rTube * sv);
+					norms.push(cv * cu, cv * su, sv);
+				}
+			}
+			for (var i = 0; i < NS; i++) {
+				for (var j = 0; j < NT; j++) {
+					var a = base + i * (NT + 1) + j, b = a + 1, k = base + (i + 1) * (NT + 1) + j, d = k + 1;
+					idx.push(a, k, b,  b, k, d);
+				}
+			}
+			base += (NS + 1) * (NT + 1);
+		});
+		return uploadVAO(verts, norms, idx);
+	}
+
+	var NEON_CORE = [
+		buildNeonEdges(1.62, 0.15, 0.08,  0.009, 128),
+		buildNeonEdges(1.33, 0.13, 0.065, 0.009, 108),
+		buildNeonEdges(1.08, 0.11, 0.05,  0.009,  80),
 	];
-	var GLOWS = [
-		buildGlowEdge(1.62, 0.15, 0.08,  64),
-		buildGlowEdge(1.24, 0.13, 0.065, 54),
-		buildGlowEdge(0.88, 0.11, 0.05,  40),
+	var NEON_HALO = [
+		buildNeonEdges(1.62, 0.15, 0.08,  0.024,  64),
+		buildNeonEdges(1.33, 0.13, 0.065, 0.024,  54),
+		buildNeonEdges(1.08, 0.11, 0.05,  0.024,  40),
 	];
 
 	/* ── matrix math (column-major, GL convention) ── */
@@ -227,25 +253,25 @@
 	];
 
 	var DARK = [
-		[0.96, 0.65, 0.14, 1.0],
-		[0.96, 0.65, 0.14, 1.0],
-		[0.99, 0.85, 0.48, 1.0],
+		[0.98, 0.84, 0.30, 1.0],
+		[0.98, 0.84, 0.30, 1.0],
+		[1.00, 0.92, 0.50, 1.0],
 	];
 	var LITE = [
-		[0.63, 0.31, 0.00, 1.0],
-		[0.63, 0.31, 0.00, 1.0],
-		[0.70, 0.40, 0.00, 1.0],
+		[0.72, 0.32, 0.00, 1.0],
+		[0.72, 0.32, 0.00, 1.0],
+		[0.78, 0.44, 0.04, 1.0],
 	];
 	// Glow colors: lighter/warmer, used with additive blending
 	var DARK_GLOW = [
-		[1.0, 0.88, 0.42, 0.75],
-		[1.0, 0.88, 0.42, 0.75],
-		[1.0, 0.95, 0.62, 0.75],
+		[1.0, 0.88, 0.42, 0.22],
+		[1.0, 0.88, 0.42, 0.22],
+		[1.0, 0.95, 0.62, 0.22],
 	];
 	var LITE_GLOW = [
-		[0.88, 0.52, 0.10, 0.75],
-		[0.88, 0.52, 0.10, 0.75],
-		[0.92, 0.64, 0.18, 0.75],
+		[0.88, 0.52, 0.10, 0.22],
+		[0.88, 0.52, 0.10, 0.22],
+		[0.92, 0.64, 0.18, 0.22],
 	];
 
 	var t0 = performance.now();
@@ -270,31 +296,18 @@
 		var angs    = [t * 0.11, t * 0.17, t * 0.27];
 		var spinFns = [ry, rz, rx];
 
-		// Pass 1: opaque rings with standard alpha blend + depth writes
+		// Neon core — standard alpha blend
 		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 		gl.depthMask(true);
 
-		RINGS.forEach(function (ring, i) {
+		// Core pass
+		NEON_CORE.forEach(function (neon, i) {
 			var model = mul(offset, mul(spinFns[i](angs[i]), PRE[i]));
 			gl.uniformMatrix4fv(LOC.uMVP,  false, mul(pv, model));
 			gl.uniformMatrix3fv(LOC.uNorm, false, mat3of(model));
 			gl.uniform4fv(LOC.uCol, new Float32Array(COLS[i]));
-			gl.bindVertexArray(ring.vao);
-			gl.drawElements(gl.TRIANGLES, ring.count, gl.UNSIGNED_INT, 0);
-			gl.bindVertexArray(null);
-		});
-
-		// Pass 2: additive glow edges, depth-test but no depth write
-		gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-		gl.depthMask(false);
-
-		GLOWS.forEach(function (glow, i) {
-			var model = mul(offset, mul(spinFns[i](angs[i]), PRE[i]));
-			gl.uniformMatrix4fv(LOC.uMVP,  false, mul(pv, model));
-			gl.uniformMatrix3fv(LOC.uNorm, false, mat3of(model));
-			gl.uniform4fv(LOC.uCol, new Float32Array(GCOLS[i]));
-			gl.bindVertexArray(glow.vao);
-			gl.drawElements(gl.TRIANGLES, glow.count, gl.UNSIGNED_INT, 0);
+			gl.bindVertexArray(neon.vao);
+			gl.drawElements(gl.TRIANGLES, neon.count, gl.UNSIGNED_INT, 0);
 			gl.bindVertexArray(null);
 		});
 
