@@ -207,14 +207,14 @@
 	}
 
 	var NEON_CORE = [
-		buildNeonEdges(1.62, 0.15, 0.08,  0.009, 128),
-		buildNeonEdges(1.33, 0.13, 0.065, 0.009, 108),
-		buildNeonEdges(1.08, 0.11, 0.05,  0.009,  80),
+		buildNeonEdges(1.62, 0.15, 0.15,  0.005, 128),
+		buildNeonEdges(1.33, 0.13, 0.13,  0.005, 108),
+		buildNeonEdges(1.08, 0.11, 0.11,  0.005,  80),
 	];
 	var NEON_HALO = [
-		buildNeonEdges(1.62, 0.15, 0.08,  0.024,  64),
-		buildNeonEdges(1.33, 0.13, 0.065, 0.024,  54),
-		buildNeonEdges(1.08, 0.11, 0.05,  0.024,  40),
+		buildNeonEdges(1.62, 0.15, 0.15,  0.024,  64),
+		buildNeonEdges(1.33, 0.13, 0.13,  0.024,  54),
+		buildNeonEdges(1.08, 0.11, 0.11,  0.024,  40),
 	];
 
 	/* ── matrix math (column-major, GL convention) ── */
@@ -238,6 +238,13 @@
 	function rx(a) { var m=ident(),c=Math.cos(a),s=Math.sin(a); m[5]=c;m[6]=s;m[9]=-s;m[10]=c; return m; }
 	function ry(a) { var m=ident(),c=Math.cos(a),s=Math.sin(a); m[0]=c;m[2]=-s;m[8]=s;m[10]=c; return m; }
 	function rz(a) { var m=ident(),c=Math.cos(a),s=Math.sin(a); m[0]=c;m[1]=s;m[4]=-s;m[5]=c; return m; }
+	function rAxis(ax, ay, az, a) {
+		var m=ident(),c=Math.cos(a),s=Math.sin(a),mc=1-c;
+		m[0]=c+ax*ax*mc;      m[4]=ax*ay*mc-az*s;   m[8]=ax*az*mc+ay*s;
+		m[1]=ay*ax*mc+az*s;   m[5]=c+ay*ay*mc;      m[9]=ay*az*mc-ax*s;
+		m[2]=az*ax*mc-ay*s;   m[6]=az*ay*mc+ax*s;   m[10]=c+az*az*mc;
+		return m;
+	}
 	function persp(fov, asp, n, f) {
 		var m = m4(), fv = 1 / Math.tan(fov * 0.5);
 		m[0]=fv/asp; m[5]=fv; m[10]=(f+n)/(n-f); m[11]=-1; m[14]=2*f*n/(n-f);
@@ -293,19 +300,27 @@
 
 		gl.useProgram(prog);
 
-		var angs    = [t * 0.11, t * 0.17, t * 0.27];
-		var spinFns = [ry, rz, rx];
+		var D    = 1 / Math.sqrt(3);
+		var ang  = t * 0.25;
+		var diag = rAxis(D, D, D, ang);
+		var primarySpins = [rx, ry, rz];
 
-		// Neon core — standard alpha blend
+		// Per-ring flicker: slow sin oscillation + per-frame noise, mirrors streak spark intensity
+		var flicker = [
+			(0.90 + 0.10 * Math.sin(t * 6.3)) * (0.92 + 0.08 * Math.random()),
+			(0.90 + 0.10 * Math.sin(t * 4.7)) * (0.92 + 0.08 * Math.random()),
+			(0.90 + 0.10 * Math.sin(t * 8.9)) * (0.92 + 0.08 * Math.random()),
+		];
+
+		// Core pass — thin bright tubes, standard alpha blend
 		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 		gl.depthMask(true);
-
-		// Core pass
 		NEON_CORE.forEach(function (neon, i) {
-			var model = mul(offset, mul(spinFns[i](angs[i]), PRE[i]));
+			var model = mul(offset, mul(diag, mul(primarySpins[i](ang), PRE[i])));
 			gl.uniformMatrix4fv(LOC.uMVP,  false, mul(pv, model));
 			gl.uniformMatrix3fv(LOC.uNorm, false, mat3of(model));
-			gl.uniform4fv(LOC.uCol, new Float32Array(COLS[i]));
+			var c = COLS[i];
+			gl.uniform4fv(LOC.uCol, new Float32Array([c[0], c[1], c[2], c[3] * flicker[i]]));
 			gl.bindVertexArray(neon.vao);
 			gl.drawElements(gl.TRIANGLES, neon.count, gl.UNSIGNED_INT, 0);
 			gl.bindVertexArray(null);
