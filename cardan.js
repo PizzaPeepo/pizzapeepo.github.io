@@ -337,6 +337,9 @@
 		var D    = 1 / Math.sqrt(3);
 		var ang  = accAng;
 		var diag = rAxis(D, D, D, ang);
+		var speedRatio  = currentSpeed / BASE_SPEED;
+		var blurSamples = Math.max(1, Math.min(8, Math.round(1 + (speedRatio - 1) * 0.1)));
+		var blurSpread  = dt * currentSpeed * 0.7;
 		var primarySpins = [rx, ry, rz];
 
 		// Band pass — flat rings with diffuse shading
@@ -344,15 +347,20 @@
 		gl.depthMask(true);
 		gl.uniform1f(LOC.uShade, 1.0);
 		RINGS.forEach(function (ring, i) {
-			var model = mul(offset, mul(diag, mul(primarySpins[i](ang), PRE[i])));
-			gl.uniformMatrix4fv(LOC.uMVP,  false, mul(pv, model));
-			gl.uniformMatrix3fv(LOC.uNorm, false, mat3of(model));
 			var c = COLS[i];
 			var bandA = isLite ? 0.38 : 0.12;
-			gl.uniform4fv(LOC.uCol, new Float32Array([c[0] * 0.08, c[1] * 0.08, c[2] * 0.08, bandA]));
-			gl.bindVertexArray(ring.vao);
-			gl.drawElements(gl.TRIANGLES, ring.count, gl.UNSIGNED_INT, 0);
-			gl.bindVertexArray(null);
+			for (var s = 0; s < blurSamples; s++) {
+				var blurOff = blurSamples > 1 ? (s / (blurSamples - 1) - 1.0) * blurSpread : 0;
+				var sAng  = ang + blurOff;
+				var sDiag = rAxis(D, D, D, sAng);
+				var model = mul(offset, mul(sDiag, mul(primarySpins[i](sAng), PRE[i])));
+				gl.uniformMatrix4fv(LOC.uMVP,  false, mul(pv, model));
+				gl.uniformMatrix3fv(LOC.uNorm, false, mat3of(model));
+				gl.uniform4fv(LOC.uCol, new Float32Array([c[0] * 0.08, c[1] * 0.08, c[2] * 0.08, bandA / blurSamples]));
+				gl.bindVertexArray(ring.vao);
+				gl.drawElements(gl.TRIANGLES, ring.count, gl.UNSIGNED_INT, 0);
+				gl.bindVertexArray(null);
+			}
 		});
 
 		var flicker = [1.0, 1.0, 1.0];
@@ -362,15 +370,20 @@
 		gl.depthMask(true);
 		gl.uniform1f(LOC.uShade, 0.0);
 		NEON_CORE.forEach(function (neon, i) {
-			var model = mul(offset, mul(diag, mul(primarySpins[i](ang), PRE[i])));
-			gl.uniformMatrix4fv(LOC.uMVP,  false, mul(pv, model));
-			gl.uniformMatrix3fv(LOC.uNorm, false, mat3of(model));
 			var c = COLS[i];
 			var tubeA = isLite ? 0.80 : 0.45;
-			gl.uniform4fv(LOC.uCol, new Float32Array([c[0], c[1], c[2], tubeA * flicker[i]]));
-			gl.bindVertexArray(neon.vao);
-			gl.drawElements(gl.TRIANGLES, neon.count, gl.UNSIGNED_INT, 0);
-			gl.bindVertexArray(null);
+			for (var s = 0; s < blurSamples; s++) {
+				var blurOff = blurSamples > 1 ? (s / (blurSamples - 1) - 1.0) * blurSpread : 0;
+				var sAng  = ang + blurOff;
+				var sDiag = rAxis(D, D, D, sAng);
+				var model = mul(offset, mul(sDiag, mul(primarySpins[i](sAng), PRE[i])));
+				gl.uniformMatrix4fv(LOC.uMVP,  false, mul(pv, model));
+				gl.uniformMatrix3fv(LOC.uNorm, false, mat3of(model));
+				gl.uniform4fv(LOC.uCol, new Float32Array([c[0], c[1], c[2], (tubeA * flicker[i]) / blurSamples]));
+				gl.bindVertexArray(neon.vao);
+				gl.drawElements(gl.TRIANGLES, neon.count, gl.UNSIGNED_INT, 0);
+				gl.bindVertexArray(null);
+			}
 		});
 
 		gl.depthMask(true);
