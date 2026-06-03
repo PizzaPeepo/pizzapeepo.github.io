@@ -312,7 +312,7 @@
 		gl.useProgram(prog);
 
 		var D    = 1 / Math.sqrt(3);
-		var ang  = t * 0.25;
+		var ang  = t * 0.125;
 		var diag = rAxis(D, D, D, ang);
 		var primarySpins = [rx, ry, rz];
 
