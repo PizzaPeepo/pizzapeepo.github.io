@@ -273,12 +273,12 @@
 	var DARK = [
 		[0.98, 0.84, 0.30, 1.0],
 		[0.98, 0.84, 0.30, 1.0],
-		[1.00, 0.92, 0.50, 1.0],
+		[0.98, 0.84, 0.30, 1.0],
 	];
 	var LITE = [
 		[0.72, 0.32, 0.00, 1.0],
 		[0.72, 0.32, 0.00, 1.0],
-		[0.78, 0.44, 0.04, 1.0],
+		[0.72, 0.32, 0.00, 1.0],
 	];
 	// Glow colors: lighter/warmer, used with additive blending
 	var DARK_GLOW = [
@@ -325,7 +325,8 @@
 			gl.uniformMatrix4fv(LOC.uMVP,  false, mul(pv, model));
 			gl.uniformMatrix3fv(LOC.uNorm, false, mat3of(model));
 			var c = COLS[i];
-			gl.uniform4fv(LOC.uCol, new Float32Array([c[0] * 0.08, c[1] * 0.08, c[2] * 0.08, 0.28]));
+			var bandA = isLite ? 0.38 : 0.12;
+			gl.uniform4fv(LOC.uCol, new Float32Array([c[0] * 0.08, c[1] * 0.08, c[2] * 0.08, bandA]));
 			gl.bindVertexArray(ring.vao);
 			gl.drawElements(gl.TRIANGLES, ring.count, gl.UNSIGNED_INT, 0);
 			gl.bindVertexArray(null);
@@ -342,7 +343,8 @@
 			gl.uniformMatrix4fv(LOC.uMVP,  false, mul(pv, model));
 			gl.uniformMatrix3fv(LOC.uNorm, false, mat3of(model));
 			var c = COLS[i];
-			gl.uniform4fv(LOC.uCol, new Float32Array([c[0], c[1], c[2], c[3] * flicker[i]]));
+			var tubeA = isLite ? 0.80 : 0.45;
+			gl.uniform4fv(LOC.uCol, new Float32Array([c[0], c[1], c[2], tubeA * flicker[i]]));
 			gl.bindVertexArray(neon.vao);
 			gl.drawElements(gl.TRIANGLES, neon.count, gl.UNSIGNED_INT, 0);
 			gl.bindVertexArray(null);
