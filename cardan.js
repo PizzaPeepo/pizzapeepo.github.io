@@ -293,6 +293,17 @@
 	];
 
 	var t0 = performance.now();
+	var BASE_SPEED     = 0.125;
+	var PEAK_MULT      = 75;
+	var ACCEL_DUR      = 0.5;
+	var currentSpeed   = BASE_SPEED;
+	var accAng         = 0;
+	var prevFrameTime  = t0;
+	var hoverStartTime = -1;
+	document.querySelectorAll('.card').forEach(function (card) {
+		card.addEventListener('mouseenter', function () { hoverStartTime = performance.now() * 0.001; });
+		card.addEventListener('mouseleave', function () { hoverStartTime = -1; });
+	});
 
 	function frame(now) {
 		var t = (now - t0) * 0.001;
@@ -311,8 +322,20 @@
 
 		gl.useProgram(prog);
 
+		var dt = Math.min((now - prevFrameTime) * 0.001, 0.05);
+		prevFrameTime = now;
+		var elapsed = hoverStartTime >= 0 ? (now * 0.001 - hoverStartTime) : -1;
+		var speedMult = 1.0;
+		if (elapsed >= 0 && elapsed < ACCEL_DUR) {
+			var p = elapsed / ACCEL_DUR;
+			speedMult = 1.0 + (PEAK_MULT - 1.0) * Math.sin(p * Math.PI);
+		}
+		var targetSpeed = BASE_SPEED * speedMult;
+		currentSpeed += (targetSpeed - currentSpeed) * 0.07;
+		accAng += dt * currentSpeed;
+
 		var D    = 1 / Math.sqrt(3);
-		var ang  = t * 0.125;
+		var ang  = accAng;
 		var diag = rAxis(D, D, D, ang);
 		var primarySpins = [rx, ry, rz];
 
