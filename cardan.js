@@ -32,9 +32,13 @@
 		'in vec3 aNorm;',
 		'uniform mat4 uMVP;',
 		'uniform mat3 uNorm;',
+		'uniform float uShade;',
 		'out float vLight;',
 		'void main(){',
-		'  vLight = 1.0;',
+		'  vec3 N = normalize(uNorm * aNorm);',
+		'  vec3 L = normalize(vec3(0.6, 1.0, 0.7));',
+		'  float diff = max(dot(N, L), 0.0);',
+		'  vLight = mix(1.0, 0.42 + 0.58 * diff, uShade);',
 		'  gl_Position = uMVP * vec4(aPos, 1.0);',
 		'}',
 	].join('\n');
@@ -63,7 +67,8 @@
 		aNorm: gl.getAttribLocation(prog,  'aNorm'),
 		uMVP:  gl.getUniformLocation(prog, 'uMVP'),
 		uNorm: gl.getUniformLocation(prog, 'uNorm'),
-		uCol:  gl.getUniformLocation(prog, 'uCol'),
+		uCol:   gl.getUniformLocation(prog, 'uCol'),
+		uShade: gl.getUniformLocation(prog, 'uShade'),
 	};
 
 	/* ── geometry upload ── */
@@ -206,6 +211,12 @@
 		return uploadVAO(verts, norms, idx);
 	}
 
+	var RINGS = [
+		buildFlatRing(1.62, 0.30, 0.30, 128),
+		buildFlatRing(1.33, 0.26, 0.26, 108),
+		buildFlatRing(1.08, 0.22, 0.22,  80),
+	];
+
 	var NEON_CORE = [
 		buildNeonEdges(1.62, 0.15, 0.15,  0.005, 128),
 		buildNeonEdges(1.33, 0.13, 0.13,  0.005, 108),
@@ -305,16 +316,27 @@
 		var diag = rAxis(D, D, D, ang);
 		var primarySpins = [rx, ry, rz];
 
-		// Per-ring flicker: slow sin oscillation + per-frame noise, mirrors streak spark intensity
-		var flicker = [
-			(0.90 + 0.10 * Math.sin(t * 6.3)) * (0.92 + 0.08 * Math.random()),
-			(0.90 + 0.10 * Math.sin(t * 4.7)) * (0.92 + 0.08 * Math.random()),
-			(0.90 + 0.10 * Math.sin(t * 8.9)) * (0.92 + 0.08 * Math.random()),
-		];
-
-		// Core pass — thin bright tubes, standard alpha blend
+		// Band pass — flat rings with diffuse shading
 		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 		gl.depthMask(true);
+		gl.uniform1f(LOC.uShade, 1.0);
+		RINGS.forEach(function (ring, i) {
+			var model = mul(offset, mul(diag, mul(primarySpins[i](ang), PRE[i])));
+			gl.uniformMatrix4fv(LOC.uMVP,  false, mul(pv, model));
+			gl.uniformMatrix3fv(LOC.uNorm, false, mat3of(model));
+			var c = COLS[i];
+			gl.uniform4fv(LOC.uCol, new Float32Array([c[0] * 0.08, c[1] * 0.08, c[2] * 0.08, 0.28]));
+			gl.bindVertexArray(ring.vao);
+			gl.drawElements(gl.TRIANGLES, ring.count, gl.UNSIGNED_INT, 0);
+			gl.bindVertexArray(null);
+		});
+
+		var flicker = [1.0, 1.0, 1.0];
+
+		// Core pass — thin bright tubes, standard alpha blend, no shading
+		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+		gl.depthMask(true);
+		gl.uniform1f(LOC.uShade, 0.0);
 		NEON_CORE.forEach(function (neon, i) {
 			var model = mul(offset, mul(diag, mul(primarySpins[i](ang), PRE[i])));
 			gl.uniformMatrix4fv(LOC.uMVP,  false, mul(pv, model));
