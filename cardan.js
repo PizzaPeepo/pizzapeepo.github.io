@@ -78,7 +78,7 @@
 		'out float vVis;',
 		'out float vLat;',
 		'void main(){',
-		'  vec3 ax=normalize(vec3(sin(0.4102),cos(0.4102),0.0));',
+		'  vec3 ax=normalize(vec3(sin(0.4102),cos(0.4102),0.5));',
 		'  float c=cos(uAng),s=sin(uAng);',
 		'  vec3 p=aPos*c+cross(ax,aPos)*s+ax*dot(ax,aPos)*(1.0-c);',
 		'  vVis=p.z;',
