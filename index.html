@@ -71,7 +71,7 @@
     }
 
     /* ─── BASE ─── */
-    html { scroll-behavior: smooth; }
+    html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 
     body {
       background: var(--bg);   /* fallback if WebGL2 unavailable */
@@ -300,6 +300,12 @@
     .card:hover .card-arrow   { transform: translate(4px, -4px); opacity: 1; }
     .card:hover .card-title   { color: var(--gold); }
 
+    .grid.filtered .card:hover,
+    .grid.filtered .card-wide:hover { transform: none; box-shadow: var(--shadow-sm); background: rgba(35,26,17,0.08); z-index: 1; }
+    .grid.filtered:has(.card:hover) .card:not(:hover) { transform: none; }
+    .grid.filtered .card:hover .card-arrow { transform: none; opacity: 0.45; }
+    .grid.filtered .card:hover .card-title { color: var(--tx); }
+
     /* Wide card */
     .card-wide             { grid-column: span 2; }
     .card-wide .card-title { font-size: 40px; }
@@ -407,65 +413,6 @@
       will-change: transform;
     }
 
-    /* ─── SCROLL COUNTER TRACK ─── */
-    .scroll-track {
-      position: fixed;
-      left: 20px;
-      top: 50%;
-      transform: translateY(-50%);
-      z-index: 200;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.4s ease;
-    }
-    .scroll-track.visible { opacity: 1; }
-
-    .track-line {
-      width: 1px;
-      height: 100%;
-      position: absolute;
-      left: 50%;
-      top: 0;
-      background: color-mix(in srgb, var(--tx-4) 40%, transparent);
-    }
-    .track-fill {
-      width: 1px;
-      background: linear-gradient(180deg, var(--gold), var(--coral));
-      position: absolute;
-      left: 50%;
-      top: 0;
-      height: 0%;
-      transition: height 0.1s linear;
-    }
-    .track-items {
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-      position: relative;
-      z-index: 1;
-      padding: 4px 0;
-    }
-    .track-num {
-      font-family: 'Fraunces', serif;
-      font-size: 10px;
-      font-style: italic;
-      color: var(--tx-4);
-      writing-mode: vertical-rl;
-      width: 20px;
-      text-align: center;
-      transition: color 0.3s ease, transform 0.3s ease;
-      line-height: 1;
-    }
-    .track-num.active {
-      color: var(--gold);
-      transform: scale(1.2);
-    }
-
-    @media (max-width: 1080px) { .scroll-track { display: none; } }
 
     /* ─── RESPONSIVE ─── */
     @media (max-width: 960px) {
@@ -501,6 +448,18 @@
       background: var(--gold-tint);
       border-color: color-mix(in srgb, var(--gold) 50%, transparent);
       color: var(--gold);
+    }
+    .filter-pill.coral:hover { border-color: var(--coral); color: var(--coral); }
+    .filter-pill.coral.active {
+      background: var(--coral-tint);
+      border-color: color-mix(in srgb, var(--coral) 50%, transparent);
+      color: var(--coral-mid);
+    }
+    .filter-pill.green:hover { border-color: #40a060; color: #40a060; }
+    .filter-pill.green.active {
+      background: rgba(80,180,100,0.12);
+      border-color: rgba(80,180,100,0.5);
+      color: #40a060;
     }
     .pill-count { font-size: 10px; opacity: 0.6; margin-left: 3px; }
     .card.f-hidden { display: none; }
@@ -553,13 +512,6 @@
     <span class="toggle-label">Light</span>
   </button>
 
-  <!-- Scroll counter track -->
-  <nav class="scroll-track" id="scrollTrack" aria-label="Demo navigation">
-    <div class="track-line"></div>
-    <div class="track-fill" id="trackFill"></div>
-    <div class="track-items" id="trackItems"></div>
-  </nav>
-
   <!-- Atmospheric background -->
   <div class="blobs" aria-hidden="true">
     <div class="blob blob-1"></div>
@@ -595,15 +547,15 @@
         <button class="filter-pill active" data-filter="all">All</button>
         <button class="filter-pill" data-filter="physics">Physics</button>
         <button class="filter-pill" data-filter="mathematics">Mathematics</button>
-        <button class="filter-pill" data-filter="rendering">Rendering</button>
-        <button class="filter-pill" data-filter="algorithms">Algorithms</button>
-        <button class="filter-pill" data-filter="waves">Waves</button>
-        <button class="filter-pill" data-filter="geometry">Geometry</button>
-        <button class="filter-pill" data-filter="creative">Creative</button>
+        <button class="filter-pill coral" data-filter="rendering">Rendering</button>
+        <button class="filter-pill green" data-filter="algorithms">Algorithms</button>
+        <button class="filter-pill coral" data-filter="waves">Waves</button>
+        <button class="filter-pill green" data-filter="geometry">Geometry</button>
+        <button class="filter-pill coral" data-filter="creative">Creative</button>
         <button class="filter-pill" data-filter="webgpu">WebGPU</button>
       </div>
 
-      <div class="grid">
+      <div class="grid" id="demoGrid">
 
         <a class="card card-wide" href="GravitySimulation/GravitySim.html">
           <div class="card-head">
@@ -824,7 +776,7 @@
           });
         }
         resize();
-        window.addEventListener('resize', resize);
+        new ResizeObserver(resize).observe(card);
 
         var leaveTimer = null;
 
@@ -928,48 +880,6 @@
 
   <script>
     (function () {
-      var track    = document.getElementById('scrollTrack');
-      var fill     = document.getElementById('trackFill');
-      var items    = document.getElementById('trackItems');
-      var cards    = Array.from(document.querySelectorAll('.card'));
-      var nums     = [];
-
-      cards.forEach(function (card, i) {
-        var n = document.createElement('div');
-        n.className = 'track-num';
-        n.textContent = String(i + 1).padStart(2, '0');
-        items.appendChild(n);
-        nums.push(n);
-      });
-
-      function onScroll() {
-        var scrollY    = window.scrollY;
-        var docHeight  = document.documentElement.scrollHeight - window.innerHeight;
-        var progress   = docHeight > 0 ? scrollY / docHeight : 0;
-
-        track.classList.toggle('visible', scrollY > 120);
-        fill.style.height = (progress * 100) + '%';
-
-        var midY = scrollY + window.innerHeight * 0.5;
-        var best = -1, bestDist = Infinity;
-        cards.forEach(function (card, i) {
-          var r    = card.getBoundingClientRect();
-          var cy   = scrollY + r.top + r.height * 0.5;
-          var dist = Math.abs(midY - cy);
-          if (dist < bestDist) { bestDist = dist; best = i; }
-        });
-        nums.forEach(function (n, i) {
-          n.classList.toggle('active', i === best);
-        });
-      }
-
-      window.addEventListener('scroll', onScroll, { passive: true });
-      onScroll();
-    })();
-  </script>
-
-  <script>
-    (function () {
       const root  = document.documentElement;
       const btn   = document.getElementById('themeToggle');
       const icon  = btn.querySelector('.toggle-icon');
@@ -1032,14 +942,17 @@
       pills.forEach(function (pill) {
         var n = counts[pill.dataset.filter];
         if (n !== undefined) {
-          pill.innerHTML = pill.textContent + '<span class="pill-count">' + n + '</span>';
+          pill.innerHTML = pill.textContent + '<span class="pill-count">· ' + n + '</span>';
         }
       });
+
+      var grid = document.getElementById('demoGrid');
 
       pills.forEach(function (pill) {
         pill.addEventListener('click', function () {
           var f = pill.dataset.filter;
           pills.forEach(function (p) { p.classList.toggle('active', p === pill); });
+          grid.classList.toggle('filtered', f !== 'all');
           cards.forEach(function (card) {
             var cat = card.dataset.cat || '';
             card.classList.toggle('f-hidden', f !== 'all' && cat !== f);
@@ -1049,6 +962,7 @@
         pill.addEventListener('mouseenter', function () {
           var f = pill.dataset.filter;
           if (f === 'all') return;
+          if (grid.classList.contains('filtered')) return;
           cards.forEach(function (card) {
             var cat = card.dataset.cat || '';
             if (cat !== f) {
