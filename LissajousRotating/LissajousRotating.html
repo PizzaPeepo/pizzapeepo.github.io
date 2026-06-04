@@ -35,12 +35,12 @@
 
     <div class="hud-section">
       <span class="ctrl-label">Omega 1: <span id="omega1Value"></span></span>
-      <input type="range" min="1" max="20" step="1" class="slider" id="omega1Slider">
+      <input type="range" min="1" max="20" step="0.1" class="slider" id="omega1Slider">
     </div>
 
     <div class="hud-section">
       <span class="ctrl-label">Omega 2: <span id="omega2Value"></span></span>
-      <input type="range" min="1" max="20" step="1" class="slider" id="omega2Slider">
+      <input type="range" min="1" max="20" step="0.1" class="slider" id="omega2Slider">
     </div>
 
     <div class="hud-section">
@@ -57,6 +57,11 @@
       <span class="ctrl-label">Options</span>
       <label><input type="checkbox" id="fadeAwayCheckbox"> Enable fade-away</label>
       <label><input type="checkbox" id="liveResetCheckbox"> Live canvas reset</label>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">ω₁ : ω₂ = <span id="ratioReadout">1 : 4</span></span>
+      <span class="ctrl-label">Phase: <span id="phaseReadout">0.0°</span></span>
     </div>
 
     <div class="hud-section">

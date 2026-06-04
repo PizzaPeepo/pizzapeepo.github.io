@@ -1,6 +1,7 @@
 import * as helpers from "../Utils/helpers.js";
 import Vector2D from "../Utils/Vector2D.js";
 import Circle from "./circle.js";
+import FadeTrail from "../Utils/FadeTrail.js";
 
 // #region global variables
 const HUD_PANEL_WIDTH = 280;
@@ -18,12 +19,13 @@ var velocity = 0.0015;
 var deltaCircleRadius = Math.floor(canvasHeight / 2.1 / pointCount);
 var pointRadius = 5;
 let origin = new Vector2D(Math.floor(canvasWidth / 2), Math.floor(canvasHeight / 2));
-let fadeColor = 'rgba(24,18,14,';
 
 let circles = [];
 FillArrayOfCircles();
 
 let t = helpers.range(0, 2 * Math.PI, velocity);
+
+const trail = new FadeTrail(500);
 // #endregion
 
 // #region functions
@@ -34,6 +36,22 @@ function FillArrayOfCircles() {
 	for (let i = 0; i < pointCount; i++) {
 		circles.push(new Circle(origin, 20 + i * deltaCircleRadius));
 	}
+}
+
+function drawTrailFrame(ctx, tVal, opacity) {
+	ctx.save();
+	ctx.globalAlpha = opacity;
+	for (let j = 0; j < circles.length; j++) {
+		const angle = (circles.length - j) * tVal;
+		const rainbowColorStyle = "hsl(" + helpers.RadianToDegree(angle) + ", 100%,  70%)";
+		ctx.beginPath();
+		ctx.save();
+		circles[j].DrawPointOnCircle(ctx, angle, pointRadius, rainbowColorStyle, rainbowColorStyle);
+		ctx.fill();
+		ctx.stroke();
+		ctx.restore();
+	}
+	ctx.restore();
 }
 // #endregion
 
@@ -66,7 +84,6 @@ applyCanvasSize();
 // #region theme
 function applyThemeColors(isLight) {
 	blackbackgroundCanvas.style.background = isLight ? '#f5ede0' : '#18140e';
-	fadeColor = isLight ? 'rgba(245,237,224,' : 'rgba(24,18,14,';
 }
 applyThemeColors(document.documentElement.classList.contains('light'));
 document.addEventListener('themechange', function(e) {
@@ -124,6 +141,7 @@ fadeAwaySpeedValue.innerHTML = fadeAwaySpeedSlider.value * 1000;
 fadeAwaySpeedSlider.oninput = function() {
 	fadeAwaySpeedValue.innerHTML = this.value * 1000;
 	fadeAwaySpeed = this.value;
+	trail.reset();
 };
 
 var fadeAwayCheckbox = document.getElementById("fadeAwayCheckbox");
@@ -152,34 +170,29 @@ function draw() {
 	bgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 	fgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-	if (fadeAway) {
-		mgCtx.save();
-		mgCtx.fillStyle = fadeColor + fadeAwaySpeed + ")";
-		mgCtx.fillRect(0, 0, canvasWidth, canvasHeight);
-		mgCtx.restore();
-	} else {
-		mgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
-	}
-
 	if (i >= t.length || resetCanvas == true) {
 		i = 0;
+		trail.reset();
 		resetCanvas = false;
 		bgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 		mgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 		fgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 	}
 
+	if (fadeAway) {
+		mgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+		trail.push(t[i]);
+		trail.render(fadeAwaySpeed, (tVal, opacity) => drawTrailFrame(mgCtx, tVal, opacity));
+	} else {
+		mgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+		drawTrailFrame(mgCtx, t[i], 1.0);
+	}
+
 	bgCtx.beginPath();
 
 	for (let j = 0; j < circles.length; j++) {
-		const rainbowColorStyle = "hsl(" + helpers.RadianToDegree((circles.length - j) * t[i]) + ", 100%,  70%)";
-		mgCtx.beginPath();
-		mgCtx.save();
 		const angle = (circles.length - j) * t[i];
-		circles[j].DrawPointOnCircle(mgCtx, angle, pointRadius, rainbowColorStyle, rainbowColorStyle);
-		mgCtx.fill();
-		mgCtx.stroke();
-		mgCtx.restore();
+		const rainbowColorStyle = "hsl(" + helpers.RadianToDegree(angle) + ", 100%,  70%)";
 
 		fgCtx.beginPath();
 		fgCtx.save();

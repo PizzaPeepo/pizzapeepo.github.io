@@ -1,6 +1,7 @@
 import RotatingLissajousFigure from "./RotatingLissajousFigure.js";
 import * as helpers from "../Utils/helpers.js";
 import Vector2D from "../Utils/Vector2D.js";
+import FadeTrail from "../Utils/FadeTrail.js";
 
 // #region global variables
 const HUD_PANEL_WIDTH = 280;
@@ -14,8 +15,9 @@ var fadeAwaySpeed = 0.3;
 var lissFigureSize = Math.min(canvasWidth, canvasHeight) * 0.45;
 var delta_phaseshift = 0.015;
 var omega1 = 1;
-var omega2 = 1;
-let fadeColor = 'rgba(24,18,14,';
+var omega2 = 4;
+
+const trail = new FadeTrail(500);
 
 let t = helpers.range(0, 6.28, delta_phaseshift);
 let i = 0;
@@ -50,7 +52,6 @@ applyCanvasSize();
 // #region theme
 function applyThemeColors(isLight) {
 	backgroundCanvas.style.background = isLight ? '#f5ede0' : '#18140e';
-	fadeColor = isLight ? 'rgba(245,237,224,' : 'rgba(24,18,14,';
 }
 applyThemeColors(document.documentElement.classList.contains('light'));
 document.addEventListener('themechange', function(e) {
@@ -119,6 +120,7 @@ fadeAwaySpeedValue.innerHTML = fadeAwaySpeedSlider.value;
 fadeAwaySpeedSlider.oninput = function() {
 	fadeAwaySpeedValue.innerHTML = this.value;
 	fadeAwaySpeed = this.value;
+	trail.reset();
 	if (liveResetCanvas) {
 		resetCanvas = true;
 	}
@@ -137,20 +139,27 @@ resetCanvasButton.onclick = function() { resetCanvas = true; };
 // #endregion
 
 function draw() {
-	if (fadeAway) {
-		bgCtx.save();
-		bgCtx.fillStyle = fadeColor + fadeAwaySpeed + ")";
-		bgCtx.fillRect(0, 0, canvasWidth, canvasHeight);
-		bgCtx.restore();
-	}
-	if (i * delta_phaseshift > 6.28 || resetCanvas == true) {
+	if (i * delta_phaseshift > 6.28 || resetCanvas) {
 		i = 0;
+		trail.reset();
 		resetCanvas = false;
 		bgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 	}
 
-	lissajous.Update(lissFigureSize, omega1, omega2, 0, t[i]);
-	lissajous.DrawWholeFigure(bgCtx, fgCtx);
+	if (fadeAway) {
+		bgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+		trail.push(t[i]);
+		trail.render(fadeAwaySpeed, (ps2, opacity) => {
+			lissajous.Update(lissFigureSize, omega1, omega2, 0, ps2);
+			lissajous.DrawWholeFigure(bgCtx, fgCtx, opacity);
+		});
+	} else {
+		lissajous.Update(lissFigureSize, omega1, omega2, 0, t[i]);
+		lissajous.DrawWholeFigure(bgCtx, fgCtx, 1.0);
+	}
+
+	document.getElementById('ratioReadout').textContent = parseFloat(omega1) + ' : ' + parseFloat(omega2);
+	document.getElementById('phaseReadout').textContent = (t[i] / 6.28 * 360).toFixed(1) + '°';
 	i++;
 	if (document.hidden) return;
 	window.requestAnimationFrame(draw);

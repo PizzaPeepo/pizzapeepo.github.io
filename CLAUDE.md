@@ -44,6 +44,7 @@ Both fetched by ID in `main.js`, sized to `canvasWidth × canvasHeight` (typical
 | `rectangle.js` | `Rectangle` for Quadtree (`containsPoint`, `intersects`) |
 | `perlin.js` / `simplexNoise.js` | Noise generation |
 | `bignumber.js` | Big number arithmetic |
+| `FadeTrail.js` | Ring-buffer fade trail — eliminates `fillRect` ghosting; `push(data)`, `render(speed, fn)`, `reset()` |
 
 ### Shared Scripts (`JS/`)
 | File | Purpose |
@@ -76,7 +77,7 @@ HTML links shared CSS from `../CSS/`, includes back-to-mainpage link. Templates:
 - **Lissajous / LissajousRotating** — Parametric figures as table; `LissajousTable` manages 2D array of `LissajousFigure` instances
 - **Quadtree** — Spatial partitioning viz; `Quadtree.js` implements Wikipedia pseudocode
 - **RotatingSquares** — rotating square animation; standard dual-canvas pattern
-- **CircularMotion** — circular motion demo; standard dual-canvas pattern
+- **CircularMotion** — circular motion demo; **4-canvas outlier**: `blackbackgroundCanvas` + `backgroundCanvas` (bgCtx) + `middlegroundCanvas` (mgCtx, trail) + `foregroundCanvas`
 - **Bouncink** — bouncing animation with custom font asset
 - **PhaseshiftDemo1** — phase shift visualization
 - **pr0xmas** — holiday demo. **Outlier**: uses p5.js (loaded locally), not ES6 modules
@@ -86,6 +87,10 @@ HTML links shared CSS from `../CSS/`, includes back-to-mainpage link. Templates:
 - `Slider.css` — styled range inputs
 - `horizontalDiv.css` — flex layout for control panels
 - `radioButton.css` — custom radio button styling
+
+### Canvas Fade Ghosting
+`fillRect` with `rgba(bg, alpha)` overlay never fully clears — `round(1 × 0.7) = 1` repeats forever (8-bit integer storage). Use `FadeTrail` instead: clear canvas each frame, replay history with `globalAlpha = (1-speed)^age` computed from full-brightness colors, so pixels cleanly reach 0.
+`_dummyCtx` pattern: `document.createElement('canvas').getContext('2d')` as no-op sink when a draw fn writes to both bgCtx and fgCtx but only one should receive history replay.
 
 ## Editing JS Files
 

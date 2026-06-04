@@ -16,23 +16,22 @@ export default class RotatingLissajousFigure extends Lissajous {
 		super(center, cellSize, omega1, omega2, phaseshift1, phaseshift2, showHorizontalLine, showVerticalLine);
 	}
 
-	DrawWholeFigure(bgContext, fgContext) {
+	DrawWholeFigure(bgContext, fgContext, opacity = 1.0) {
 		const t = helpers.range(0, 6.28, 0.01);
-		bgContext.beginPath();
 		bgContext.save();
-		const hue = this.phaseshift2 * 100 > 360 ? (this._phaseshift2 * 100) % 360 : this.phaseshift2 * 100; // makes sure rainbowcolors are repeating
-		bgContext.strokeStyle = "hsl(" + hue + ", 100%,  78%)";
 		bgContext.lineWidth = 2;
-		let pos = new Vector2D(0, 0);
-		let newPos = new Vector2D(0, 0);
-
+		bgContext.globalAlpha = opacity;
 		for (let i = 0; i < t.length - 1; i++) {
-			pos = this.center.Add(this.CalcXY(t[i]));
-			newPos = this.center.Add(this.CalcXY(t[i + 1]));
+			const hue = (t[i] / 6.28 * 360) % 360;
+			bgContext.strokeStyle = `hsl(${hue}, 100%, 78%)`;
+			const pos = this.center.Add(this.CalcXY(t[i]));
+			const newPos = this.center.Add(this.CalcXY(t[i + 1]));
+			bgContext.beginPath();
 			bgContext.moveTo(pos.x, pos.y);
 			bgContext.lineTo(newPos.x, newPos.y);
+			bgContext.stroke();
 		}
-		bgContext.stroke();
 		bgContext.restore();
+
 	}
 }

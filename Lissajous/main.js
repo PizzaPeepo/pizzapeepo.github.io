@@ -2,6 +2,7 @@ import Vector2D from "../Utils/Vector2D.js";
 import * as helpers from "../Utils/helpers.js";
 import Lissajous from "./LissajousFigure.js";
 import LissajousTable from "./LissajousTable.js";
+import FadeTrail from "../Utils/FadeTrail.js";
 
 // #region global variables
 const HUD_PANEL_WIDTH = 280;
@@ -17,7 +18,9 @@ var lissajousTable = new LissajousTable(canvasWidth, canvasHeight, lissFigureSiz
 var liveResetCanvas = false;
 var resetCanvas = false;
 var i = 0;
-let fadeColor = 'rgba(24,18,14,';
+
+const trail = new FadeTrail(500);
+const _dummyCtx = document.createElement('canvas').getContext('2d');
 // #endregion
 
 // #region canvas setup
@@ -46,7 +49,6 @@ applyCanvasSize();
 // #region theme
 function applyThemeColors(isLight) {
 	backgroundCanvas.style.background = isLight ? '#f5ede0' : '#18140e';
-	fadeColor = isLight ? 'rgba(245,237,224,' : 'rgba(24,18,14,';
 }
 applyThemeColors(document.documentElement.classList.contains('light'));
 document.addEventListener('themechange', function(e) {
@@ -134,6 +136,7 @@ fadeAwaySpeedValue.innerHTML = fadeAwaySpeedSlider.value * 1000;
 fadeAwaySpeedSlider.oninput = function() {
 	fadeAwaySpeedValue.innerHTML = this.value * 1000;
 	fadeAwaySpeed = this.value;
+	trail.reset();
 };
 
 var fadeAwayCheckbox = document.getElementById("fadeAwayCheckbox");
@@ -151,25 +154,43 @@ resetCanvasButton.onclick = function() { resetCanvas = true; };
 // #region animation
 function draw() {
 	fgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
-	if (fadeAway) {
-		bgCtx.save();
-		bgCtx.fillStyle = fadeColor + fadeAwaySpeed + ")";
-		bgCtx.fillRect(0, 0, canvasWidth, canvasHeight);
-		bgCtx.restore();
-	}
 
 	if (i >= 2 * 629 || resetCanvas == true) {
 		i = 0;
+		trail.reset();
 		resetCanvas = false;
 		bgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 	}
 
-	for (let row = 0; row < lissajousTable.rows; row++) {
-		for (let col = 0; col < lissajousTable.cols; col++) {
-			if ((row === 0) & (col === 0)) {
-				continue;
+	if (fadeAway) {
+		bgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+		trail.push(i);
+		trail.render(fadeAwaySpeed, (frameIdx, opacity) => {
+			bgCtx.save();
+			bgCtx.globalAlpha = opacity;
+			for (let row = 0; row < lissajousTable.rows; row++) {
+				for (let col = 0; col < lissajousTable.cols; col++) {
+					if ((row === 0) & (col === 0)) continue;
+					lissajousTable.figures[row][col].Draw(bgCtx, _dummyCtx, t[frameIdx], t[frameIdx + 1]);
+				}
 			}
-			lissajousTable.figures[row][col].Draw(bgCtx, fgCtx, t[i], t[i + 1]);
+			bgCtx.restore();
+		});
+		// Draw fgCtx head dots for current step only
+		for (let row = 0; row < lissajousTable.rows; row++) {
+			for (let col = 0; col < lissajousTable.cols; col++) {
+				if ((row === 0) & (col === 0)) continue;
+				lissajousTable.figures[row][col].Draw(_dummyCtx, fgCtx, t[i], t[i + 1]);
+			}
+		}
+	} else {
+		for (let row = 0; row < lissajousTable.rows; row++) {
+			for (let col = 0; col < lissajousTable.cols; col++) {
+				if ((row === 0) & (col === 0)) {
+					continue;
+				}
+				lissajousTable.figures[row][col].Draw(bgCtx, fgCtx, t[i], t[i + 1]);
+			}
 		}
 	}
 	i++;
