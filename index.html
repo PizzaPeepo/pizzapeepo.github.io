@@ -269,7 +269,8 @@
       transition: transform 0.30s cubic-bezier(0.34,1.4,0.64,1),
                   box-shadow 0.30s ease,
                   background 0.25s ease,
-                  z-index 0s;
+                  z-index 0s,
+                  opacity 0.25s ease;
       z-index: 1;
 
       opacity: 0;
@@ -482,6 +483,46 @@
       header           { padding: 80px 0 48px; }
     }
 
+    /* ─── FILTER BAR ─── */
+    .filter-bar {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      margin-bottom: 28px;
+    }
+    .filter-pill {
+      font-size: 12px; font-weight: 500;
+      padding: 6px 16px; border-radius: 40px;
+      border: 1.5px solid color-mix(in srgb, var(--tx-4) 60%, transparent);
+      background: transparent; color: var(--tx-3);
+      cursor: pointer; font-family: 'DM Sans', sans-serif;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+    }
+    .filter-pill:hover { border-color: var(--gold); color: var(--gold); }
+    .filter-pill.active {
+      background: var(--gold-tint);
+      border-color: color-mix(in srgb, var(--gold) 50%, transparent);
+      color: var(--gold);
+    }
+    .pill-count { font-size: 10px; opacity: 0.6; margin-left: 3px; }
+    .card.f-hidden { display: none; }
+    .card.preview-dim { opacity: 0.18; }
+    .card.card-pill-hover {
+      transform: scale(1.04);
+      box-shadow: 0 40px 80px rgba(0,0,0,0.65),
+                  0 16px 32px rgba(0,0,0,0.35),
+                  0 0 60px rgba(245,166,35,0.14);
+      background: rgba(44, 33, 22, 0.26);
+      z-index: 2;
+    }
+    .card-wide.card-pill-hover { transform: scale(1.037); }
+    .card.card-pill-hover .card-arrow { transform: translate(4px, -4px); opacity: 1; }
+    .card.card-pill-hover .card-title { color: var(--gold); }
+    .card.card-pill-hover .card-num   { color: var(--tx-3); }
+    html.light .card.card-pill-hover {
+      background: rgba(255, 252, 248, 0.22);
+      box-shadow: 0 28px 64px rgba(0,0,0,0.13),
+                  0 10px 22px rgba(0,0,0,0.08);
+    }
+
     /* ─── LIGHT MODE GLASS ─── */
     html.light .card {
       background: rgba(255, 249, 242, 0.10);
@@ -549,6 +590,19 @@
 
     <!-- ── DEMO GRID ── -->
     <section class="demos" aria-label="Demo list">
+
+      <div class="filter-bar" id="filterBar">
+        <button class="filter-pill active" data-filter="all">All</button>
+        <button class="filter-pill" data-filter="physics">Physics</button>
+        <button class="filter-pill" data-filter="mathematics">Mathematics</button>
+        <button class="filter-pill" data-filter="rendering">Rendering</button>
+        <button class="filter-pill" data-filter="algorithms">Algorithms</button>
+        <button class="filter-pill" data-filter="waves">Waves</button>
+        <button class="filter-pill" data-filter="geometry">Geometry</button>
+        <button class="filter-pill" data-filter="creative">Creative</button>
+        <button class="filter-pill" data-filter="webgpu">WebGPU</button>
+      </div>
+
       <div class="grid">
 
         <a class="card card-wide" href="GravitySimulation/GravitySim.html">
@@ -934,6 +988,112 @@
         localStorage.setItem('theme', isLight ? 'light' : 'dark');
       });
     })();
+  </script>
+  <script>
+    (function () {
+      'use strict';
+
+      /* ── CAT MAP — matches card href slugs ── */
+      var CAT_MAP = [
+        ['GravitySimulation/',   'physics'],
+        ['Raycaster',            'rendering'],
+        ['Quadtree',             'algorithms'],
+        ['Lissajous/',           'mathematics'],
+        ['LissajousRotating',    'mathematics'],
+        ['PhaseshiftDemo1',      'waves'],
+        ['CircularMotion',       'physics'],
+        ['RotatingSquares',      'geometry'],
+        ['Bouncink',             'creative'],
+        ['GravitySimulationGPU', 'webgpu'],
+      ];
+
+      var cards = Array.from(document.querySelectorAll('.card'));
+
+      cards.forEach(function (card) {
+        var href = card.getAttribute('href') || '';
+        for (var i = 0; i < CAT_MAP.length; i++) {
+          if (href.indexOf(CAT_MAP[i][0]) !== -1) {
+            card.dataset.cat = CAT_MAP[i][1];
+            break;
+          }
+        }
+      });
+
+      /* ── FILTER PILLS ── */
+      var pills = Array.from(document.querySelectorAll('.filter-pill'));
+
+      var counts = { all: cards.length };
+      cards.forEach(function (card) {
+        var cat = card.dataset.cat;
+        if (cat) counts[cat] = (counts[cat] || 0) + 1;
+      });
+
+      pills.forEach(function (pill) {
+        var n = counts[pill.dataset.filter];
+        if (n !== undefined) {
+          pill.innerHTML = pill.textContent + '<span class="pill-count">' + n + '</span>';
+        }
+      });
+
+      pills.forEach(function (pill) {
+        pill.addEventListener('click', function () {
+          var f = pill.dataset.filter;
+          pills.forEach(function (p) { p.classList.toggle('active', p === pill); });
+          cards.forEach(function (card) {
+            var cat = card.dataset.cat || '';
+            card.classList.toggle('f-hidden', f !== 'all' && cat !== f);
+          });
+        });
+
+        pill.addEventListener('mouseenter', function () {
+          var f = pill.dataset.filter;
+          if (f === 'all') return;
+          cards.forEach(function (card) {
+            var cat = card.dataset.cat || '';
+            if (cat !== f) {
+              card.style.opacity = '0.18';
+            } else {
+              card.style.opacity = '1';
+              card.classList.add('card-pill-hover');
+              card.dispatchEvent(new MouseEvent('mouseenter'));
+            }
+          });
+        });
+
+        pill.addEventListener('mouseleave', function () {
+          cards.forEach(function (card) {
+            card.style.opacity = '1';
+            if (card.classList.contains('card-pill-hover')) {
+              card.classList.remove('card-pill-hover');
+              card.dispatchEvent(new MouseEvent('mouseleave'));
+            }
+          });
+        });
+      });
+
+      /* ── 3D TILT ── */
+      var MAX_TILT = 10;
+
+      cards.forEach(function (card) {
+        var isWide = card.classList.contains('card-wide');
+        var scale  = isWide ? 1.037 : 1.08;
+
+        card.addEventListener('mousemove', function (e) {
+          var r  = card.getBoundingClientRect();
+          var nx = (e.clientX - r.left) / r.width  - 0.5;
+          var ny = (e.clientY - r.top)  / r.height - 0.5;
+          card.style.transform =
+            'perspective(900px) scale(' + scale + ') rotateX(' +
+            (-ny * MAX_TILT).toFixed(2) + 'deg) rotateY(' +
+            ( nx * MAX_TILT).toFixed(2) + 'deg)';
+        });
+
+        card.addEventListener('mouseleave', function () {
+          card.style.transform = '';
+        });
+      });
+
+}());
   </script>
 </body>
 </html>
