@@ -10,6 +10,17 @@
   <style>
     html, body { margin: 0; padding: 0; overflow: hidden; }
     #myCanvas { position: fixed; top: 0; left: 0; z-index: 0; }
+    .ctrl-hint {
+      font-size: 11px;
+      color: var(--tx-3);
+      line-height: 1.5;
+      margin: 0;
+    }
+    #drawWallToggle.active {
+      color: var(--gold);
+      border-color: var(--gold);
+      background: var(--gold-tint);
+    }
   </style>
 </head>
 <body>
@@ -34,12 +45,32 @@
 
     <div class="hud-section">
       <span class="ctrl-label">Rays: <span id="rayCountValue"></span></span>
-      <input type="range" min="1" max="600" class="slider" id="rayCountSlider">
+      <input type="range" min="1" max="600" value="200" class="slider" id="rayCountSlider">
     </div>
 
     <div class="hud-section">
       <span class="ctrl-label">Walls: <span id="wallCountValue"></span></span>
       <input type="range" min="1" max="20" class="slider" id="wallCountSlider">
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Auto-regen: <span id="autoRegenStatus">Off</span></span>
+      <button id="autoRegenToggle">Turn On</button>
+      <span class="ctrl-label" style="margin-top:4px">Interval: <span id="regenIntervalValue">15 </span>s</span>
+      <input type="range" min="1" max="30" value="5" class="slider" id="regenIntervalSlider">
+    </div>
+
+    <div class="hud-section">
+      <button id="newWallsBtn">New Walls</button>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <button id="drawWallToggle" class="active">Draw Wall: On</button>
+      <p class="ctrl-hint">Drag on canvas to add a wall.<br>Right-click a wall to remove it.</p>
     </div>
 
   </aside>

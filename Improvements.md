@@ -55,19 +55,6 @@ incremental.
   mass shown next to the arrow.
 - **[Enhancement] Add Friction slider.**
 
-### 02 · Raycaster
-
-- **[Bug / UX] Walls auto-regenerate every 5 seconds** (`setInterval(GetNewRandomLines, 5000)`
-  in `main.js`), teleporting the whole scene while you are using it. Make it a toggle, slow it
-  way down, or remove it entirely.
-- **[Big] Render the visibility polygon.** Fill the lit region between consecutive ray-hit
-  points instead of drawing bare lines — this is exactly what the card promises ("light and
-  shadow") and is a dramatic visual upgrade. Add a light-colored radial glow at the source and
-  optional soft shadows (a few jittered ray origins).
-- **[Enhancement] Let the user draw walls.** Drag to add a segment, right-click to delete.
-  Far more engaging than random walls — and it removes the auto-regenerate problem.
-- **[Enhancement] Multiple colored lights** that blend additively, with a subtle flicker.
-
 ### 03 · Quadtree
 
 - **[Bug / UX] The interaction is undiscoverable.** Left-click inserts a point; **middle-drag**
@@ -136,22 +123,6 @@ incremental.
 - **[Quick win] Optional fade trail** (motion blur) like the other demos, plus PNG export.
 - **[Enhancement] Mouse-reactive speed** — spin faster near the cursor, mirroring the
   hover-acceleration trick `cardan.js` already uses on the landing page.
-
-### 09 · Bouncink
-
-- **[Bug / Mismatch] The card does not match the demo.** The card and its micro-preview
-  (`cardpreviews.js`, demo #8) promise "physics-driven ink blobs with custom collision
-  response." The actual page is a DVD-logo bouncer with a 0.4-minute countdown that flips to a
-  pepe-dance GIF — and it is the only demo built on p5 (loaded from a CDN) rather than vanilla
-  canvas. Resolve one of two ways:
-  - **(a) Re-label** the card, tag, and preview to match reality (a "DVD Bounce" nostalgia /
-    novelty piece), or
-  - **(b) Build the promised demo:** gooey **metaball ink blobs** (marching squares, or simple
-    additive radial fields that visually merge on contact). This would genuinely earn the name
-    "Bouncink" and the Creative tag, and would fit the vanilla-canvas stack used everywhere
-    else.
-- **[Quick win]** If kept as-is, add a corner-hit celebration and a "will it hit the corner?"
-  counter — the one thing everyone actually watches a DVD bouncer for.
 
 ### 10 · Gravity Simulation · GPU
 
