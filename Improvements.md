@@ -170,3 +170,278 @@ Each leans on the existing stack and would slot into a current filter category.
   backtrack the path. *(Algorithms)*
 - **Slime-mold (Physarum) agents** — striking generative networks from simple sense-and-turn
   agents, reusing the particle + trail-fade pattern from the gravity demo. *(Creative / Rendering)*
+
+---
+
+## Code Refactoring Plan
+
+Findings from a full codebase survey. Prioritized by impact. Bugs marked **[BUG]**.
+
+---
+
+### Phase 1 — Critical Bugs
+
+#### 1. **[BUG]** `Cos()` calls `Math.sin()` — `Utils/helpers.js:19`
+```js
+// Wrong:
+function Cos(degrees) { return Math.sin(degrees * Math.PI / 180); }
+// Fix:
+function Cos(degrees) { return Math.cos(degrees * Math.PI / 180); }
+```
+
+#### 2. **[BUG]** `RgbaToHex` logic inverted — `Utils/helpers.js:211`
+```js
+// Wrong — throws when input IS a ColorRGBA:
+if (color instanceof ColorRGBA) throw new Error(...)
+// Fix:
+if (!(color instanceof ColorRGBA)) throw new Error(...)
+```
+
+#### 3. **[BUG]** `Line2D` type-check always true — `Raycaster/Raycaster.js:7`
+```js
+// Wrong — operator precedence makes `(!x) instanceof Y` meaningless:
+if (!tempOffsetVec instanceof Vector2D)
+// Fix:
+if (!(tempOffsetVec instanceof Vector2D))
+```
+
+#### 4. **[BUG]** `UpdatePositon` method doesn't exist — `Lissajous/LissajousFigure.js:43`
+Vector2D has no `UpdatePositon` method. Either the method was renamed or this line is dead.
+Check intent and either delete or fix the call.
+
+#### 5. **[BUG]** Loose equality in hot loop — `Raycaster/Raycaster.js:78`
+Replace `!=` / `==` with `!==` / `===` throughout to avoid type coercion.
+
+---
+
+### Phase 2 — High-Impact Duplications
+
+#### 6. Extract `createLinkedRangeSliders()` — saves ~350 lines
+
+Every demo repeats this 25-line pattern per slider pair:
+```js
+xminSlider.addEventListener("input", function() {
+    let val = parseInt(this.value);
+    if (val >= xmax) { this.value = xmax - 1; val = xmax - 1; }
+    xmin = val;
+    xminLabel.textContent = xmin;
+});
+// ...repeated for xmax, ymin, ymax, vxmin, vxmax, radius, mass...
+```
+
+Extract to `Utils/sliders.js`:
+```js
+// Wire a min/max slider pair so they stay ordered and update a label.
+export function createLinkedRangeSliders(minId, maxId, onChange) { ... }
+
+// Wire a single slider to a label and a callback.
+export function createSlider(sliderId, labelId, onChange) { ... }
+```
+
+Affected demos: GravitySimulation (~300 lines), Raycaster, Lissajous, RotatingPolygons, CircularMotion, PhaseshiftDemo1.
+
+#### 7. Extract `CanvasManager` — saves ~200 lines
+
+Every demo has this block (twice — once per canvas):
+```js
+var backgroundCanvas = document.getElementById("backgroundCanvas");
+var bgCtx = backgroundCanvas.getContext("2d");
+backgroundCanvas.width = canvasWidth;
+backgroundCanvas.height = canvasHeight;
+backgroundCanvas.style.width = canvasWidth + "px";
+backgroundCanvas.style.height = canvasHeight + "px";
+bgCtx.strokeStyle = whiteLineStrokeStyle;
+bgCtx.lineWidth = 2;
+```
+
+Extract to `Utils/CanvasManager.js`:
+```js
+// Set up canvases to the given size; returns their 2D contexts.
+export function setupCanvases(canvases, width, height) { ... }
+// canvases: [{ id: string, setup?: (ctx) => void }]
+```
+
+#### 8. Extract `ThemeManager` — saves ~80 lines
+
+Every demo does:
+```js
+function applyThemeColors(isLight) { ... }
+applyThemeColors(document.documentElement.classList.contains('light'));
+document.addEventListener('themechange', (e) => applyThemeColors(e.detail.isLight));
+```
+
+Extract to `Utils/ThemeManager.js`:
+```js
+// Fire callback immediately with current theme, then again on every change.
+export function onThemeChange(callback) { ... }
+```
+
+#### 9. Extract `onWindowResize` — saves ~60 lines
+
+Same pattern in every demo:
+```js
+window.addEventListener('resize', function() {
+    canvasWidth = window.innerWidth - HUD_PANEL_WIDTH;
+    canvasHeight = window.innerHeight;
+    applyCanvasSize();
+    resetDemo();
+});
+```
+
+Extract to `Utils/ResizeManager.js`:
+```js
+// Register a debounced resize handler.
+export function onWindowResize(callback, debounceMs = 100) { ... }
+```
+
+---
+
+### Phase 3 — Global State & Long Functions
+
+#### 10. Replace 114-line global variable block — `GravitySimulation/main.js:8–114`
+
+Group related state into named config objects so magic numbers have names:
+```js
+// Before: 114 loose globals
+var xmin, xmax, ymin, ymax, vxmin, vxmax, LUT_SIZE, BRUSH_STRENGTH, ...
+
+// After:
+const PARTICLE_CONFIG = { xmin: -400, xmax: 400, ymin: -400, ymax: 400 };
+const RENDER_CONFIG   = { LUT_SIZE: 64, TRAIL_FADE: 0.04 };
+const BRUSH_CONFIG    = { strength: 5e6, softRadiusSq: 2500 };
+```
+
+#### 11. Split `draw()` in GravitySimulation — currently 325 lines
+
+Current `draw()` mixes physics, rendering, UI input, collisions, trails, and sparks.
+Split into focused functions:
+```js
+function stepPhysics(dt)   { /* positions, velocities, collisions */ }
+function renderParticles() { /* trails, glows, sprites */ }
+function renderUI()        { /* HUD, labels */ }
+function draw() {
+    requestAnimationFrame(draw);
+    if (document.hidden) return;
+    const dt = computeDeltaTime();
+    stepPhysics(dt);
+    renderParticles();
+    renderUI();
+}
+```
+
+---
+
+### Phase 4 — Incomplete Abstractions
+
+#### 12. Make drawing helpers self-contained — `Utils/helpers.js`
+
+`drawLine`, `drawCircle`, `drawPoint` add to the canvas path but don't call `stroke()`.
+Every caller must remember to stroke — leaky abstraction.
+
+Fix with explicit naming:
+- `pathLine(ctx, ...)` / `pathCircle(ctx, ...)` — path only (current behavior, renamed)
+- `drawLine(ctx, ...)` / `drawCircle(ctx, ...)` — path + stroke (new, what callers usually want)
+
+Non-breaking: rename existing functions, add new `draw*` wrappers.
+
+#### 13. Remove `Point2D` — `Utils/helpers.js:114–123`
+
+`Point2D` is just `{ x, y }` with no methods. `Vector2D` covers the same ground plus arithmetic.
+Having both forces callers to convert between them. Replace all `Point2D` usage with `Vector2D` and delete the class.
+
+#### 14. Deduplicate `Vector2D` rotation methods — `Utils/Vector2D.js:92–154`
+
+8 rotation methods where mutable and immutable variants share identical math.
+Extract the core rotation into one private helper:
+```js
+_applyRotation(sinA, cosA) { ... }  // mutates in place
+rotateCCW(deg)             { return this.clone()._applyRotation(...); }
+rotateCCWInPlace(deg)      { return this._applyRotation(...); }
+```
+Rename mutable variants from `_RotateCCW` to `rotateCCWInPlace` — `_` prefix as "mutable" is an undocumented convention, `InPlace` suffix is explicit.
+
+#### 15. `ColorRGBA` rebuilds string in every setter — `Utils/helpers.js`
+
+4 setters each contain the identical string concatenation. Extract:
+```js
+_rebuildRGBA() { this._RGBA = `rgba(${this._r},${this._g},${this._b},${this._a})`; }
+```
+Call once per setter instead.
+
+#### 16. `Particle._isHeavyParticle` goes stale — `GravitySimulation/particle.js`
+
+Computed at construction; becomes wrong if mass changes later (setter exists).
+Fix: make it a getter:
+```js
+get isHeavyParticle() { return this._mass >= 500; }
+```
+
+#### 17. Delete `Particle._lastMousePos` — `GravitySimulation/particle.js`
+
+Set in constructor, getter/setter defined, never read anywhere. Dead code — delete it.
+
+---
+
+### Phase 5 — Magic Numbers
+
+Every hardcoded constant should be a named variable at the top of its file.
+
+| File | Value | Suggested Name |
+|---|---|---|
+| `Utils/RungeKutta.js:31` | `25` | `GRAVITY_SOFTENING_SQ` |
+| `GravitySimulation/main.js:30` | `64` | `COLOR_LUT_SIZE` |
+| `GravitySimulation/main.js:25` | `0.04` | `TRAIL_FADE_SPEED` |
+| `GravitySimulation/main.js:76` | `5e6` | `BRUSH_FORCE_STRENGTH` |
+| `GravitySimulation/main.js:77` | `2500` | `BRUSH_SOFT_RADIUS_SQ` |
+| `GravitySimulation/BarnesHutTree.js:5` | `5` | `BH_SOFTENING_RADIUS` |
+| `Raycaster/Raycaster.js:36` | `10000` | `MAX_RAY_LENGTH` |
+| `Raycaster/main.js:371` | `0.0005` | `NOISE_TIME_STEP` |
+| `GravitySimulation/SpatialHash.js:15` | `10000` | `HASH_KEY_MULTIPLIER` |
+
+---
+
+### Phase 6 — Structural Cleanups
+
+#### 18. Move demo-specific factories out of general utilities
+
+`Line2D.js` contains `GetRandomLine2D`, `GetWallLines2D` — demo factories in a geometry class.
+Move to `Raycaster/LineFactory.js`.
+
+`particle.js` contains `GenerateRandomParticle()`, `AddNRandomParticles()` which depend on GravitySimulation globals.
+Move to `GravitySimulation/ParticleFactory.js`.
+
+#### 19. Delete `CalcGravForce()` — `Utils/RungeKutta.js:33–49`
+
+Exported but never imported or called anywhere. GravitySimulation uses the Barnes-Hut acceleration instead. Delete it.
+
+#### 20. Fix unfilled placeholders in boilerplate — `BoilerplateCode/mainWithCanvas.js`
+
+`getElementById("")` (lines ~33, ~49) throws at runtime if the template is used as-is.
+Replace with clearly-commented TODOs:
+```js
+// TODO: replace with your canvas element ID
+var backgroundCanvas = document.getElementById("backgroundCanvas");
+```
+
+---
+
+### Refactoring Summary by File
+
+| File | Actions |
+|---|---|
+| `Utils/helpers.js` | Fix Cos() bug, fix RgbaToHex bug, extract `_rebuildRGBA`, rename `path*`/`draw*`, remove `Point2D` |
+| `Utils/Vector2D.js` | Deduplicate rotation, rename mutable variants to `*InPlace` |
+| `Utils/RungeKutta.js` | Delete `CalcGravForce`, name `GRAVITY_SOFTENING_SQ` |
+| `Utils/sliders.js` | **New file** — `createLinkedRangeSliders`, `createSlider` |
+| `Utils/CanvasManager.js` | **New file** — `setupCanvases` |
+| `Utils/ThemeManager.js` | **New file** — `onThemeChange` |
+| `Utils/ResizeManager.js` | **New file** — `onWindowResize` |
+| `GravitySimulation/main.js` | Group globals into config objects, split `draw()`, collapse slider handlers |
+| `GravitySimulation/particle.js` | Delete `_lastMousePos`, make `isHeavyParticle` getter, move factories |
+| `GravitySimulation/BarnesHutTree.js` | Name `BH_SOFTENING_RADIUS` |
+| `GravitySimulation/SpatialHash.js` | Name `HASH_KEY_MULTIPLIER` |
+| `Raycaster/Raycaster.js` | Fix instanceof bug, fix `!=` → `!==`, name `MAX_RAY_LENGTH` |
+| `Raycaster/Line2D.js` | Move demo factories to `Raycaster/LineFactory.js` |
+| `Lissajous/LissajousFigure.js` | Fix `UpdatePositon` bug, reduce getter/setter boilerplate |
+| `BoilerplateCode/mainWithCanvas.js` | Replace `getElementById("")` with TODO comments |
+| All demo `main.js` | Apply ThemeManager, CanvasManager, ResizeManager, sliders utilities |
