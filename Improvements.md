@@ -80,17 +80,6 @@ incremental.
 - **[Enhancement] Global phase slider** to morph every figure together (ellipse ↔ line).
 - **[Nit]** `if ((row === 0) & (col === 0))` uses bitwise `&`; harmless, but `&&` is clearer.
 
-### 05 · Rotating Lissajous
-
-- **[Bug] Dead initial parameters.** The figure is constructed with `(omega1=1, omega2=4)`, but
-  `draw()` immediately calls `Update(..., omega1, omega2, ...)` with the slider defaults
-  `1, 1`, overwriting it on the first frame. So the demo opens as a boring 1:1. Either set the
-  slider defaults to a nicer ratio (e.g. 3:2 or 3:4) so it is interesting on load, or actually
-  honor the `1, 4`.
-- **[Quick win] Color by phase** (hue follows `t[i]`) instead of flat white, and add a glowing
-  head point on the leading edge (reuse the gravity demo's glow-sprite idea).
-- **[Enhancement] On-screen ω₁:ω₂ + phase readout;** allow decimal ω steps for smoother morph.
-
 ### 06 · Phaseshift
 
 - **[Bug / UX] No controls at all.** `PhaseshiftDemo1.html` has only the nav pill;
