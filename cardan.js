@@ -7,13 +7,19 @@
 
 	var cvs = document.createElement('canvas');
 	cvs.id = 'cardan-canvas';
+	var FILTER_DARK = 'drop-shadow(0 0 2px #fff8e7) drop-shadow(0 0 7px #fdd87a) drop-shadow(0 0 18px #f5a623) drop-shadow(0 0 36px rgba(245,120,20,0.5)) drop-shadow(0 0 60px rgba(220,80,10,0.22))';
+	var FILTER_LITE = 'drop-shadow(0 0 2px rgba(160,105,20,0.40)) drop-shadow(0 0 8px rgba(140,85,10,0.22)) drop-shadow(0 0 22px rgba(110,65,5,0.10))';
 	cvs.style.cssText = [
 		'position:fixed', 'top:0', 'left:0',
 		'width:100%', 'height:100%',
 		'pointer-events:none', 'z-index:0',
 		'opacity:0', 'transition:opacity 1.4s ease',
-		'filter:drop-shadow(0 0 2px #fff8e7) drop-shadow(0 0 7px #fdd87a) drop-shadow(0 0 18px #f5a623) drop-shadow(0 0 36px rgba(245,120,20,0.5)) drop-shadow(0 0 60px rgba(220,80,10,0.22))',
 	].join(';');
+	function updateFilter() {
+		cvs.style.filter = document.documentElement.classList.contains('light') ? FILTER_LITE : FILTER_DARK;
+	}
+	updateFilter();
+	document.addEventListener('themechange', updateFilter);
 	var wgRef = document.body.firstChild;
 	document.body.insertBefore(cvs, wgRef ? wgRef.nextSibling : null);
 
@@ -276,9 +282,9 @@
 		[0.98, 0.84, 0.30, 1.0],
 	];
 	var LITE = [
-		[0.72, 0.32, 0.00, 1.0],
-		[0.72, 0.32, 0.00, 1.0],
-		[0.72, 0.32, 0.00, 1.0],
+		[0.65, 0.42, 0.08, 1.0],
+		[0.65, 0.42, 0.08, 1.0],
+		[0.65, 0.42, 0.08, 1.0],
 	];
 	// Glow colors: lighter/warmer, used with additive blending
 	var DARK_GLOW = [
@@ -287,9 +293,9 @@
 		[1.0, 0.95, 0.62, 0.22],
 	];
 	var LITE_GLOW = [
-		[0.88, 0.52, 0.10, 0.22],
-		[0.88, 0.52, 0.10, 0.22],
-		[0.92, 0.64, 0.18, 0.22],
+		[0.68, 0.44, 0.12, 0.14],
+		[0.68, 0.44, 0.12, 0.14],
+		[0.72, 0.50, 0.18, 0.14],
 	];
 
 	var t0 = performance.now();
@@ -348,8 +354,9 @@
 			gl.uniformMatrix4fv(LOC.uMVP,  false, mul(pv, model));
 			gl.uniformMatrix3fv(LOC.uNorm, false, mat3of(model));
 			var c = COLS[i];
-			var bandA = isLite ? 0.38 : 0.12;
-			gl.uniform4fv(LOC.uCol, new Float32Array([c[0] * 0.08, c[1] * 0.08, c[2] * 0.08, bandA]));
+			var bandA  = isLite ? 0.55 : 0.12;
+			var bandMul = isLite ? 0.45 : 0.08;
+			gl.uniform4fv(LOC.uCol, new Float32Array([c[0] * bandMul, c[1] * bandMul, c[2] * bandMul, bandA]));
 			gl.bindVertexArray(ring.vao);
 			gl.drawElements(gl.TRIANGLES, ring.count, gl.UNSIGNED_INT, 0);
 			gl.bindVertexArray(null);
@@ -366,7 +373,7 @@
 			gl.uniformMatrix4fv(LOC.uMVP,  false, mul(pv, model));
 			gl.uniformMatrix3fv(LOC.uNorm, false, mat3of(model));
 			var c = COLS[i];
-			var tubeA = isLite ? 0.80 : 0.45;
+			var tubeA = isLite ? 0.60 : 0.45;
 			gl.uniform4fv(LOC.uCol, new Float32Array([c[0], c[1], c[2], tubeA * flicker[i]]));
 			gl.bindVertexArray(neon.vao);
 			gl.drawElements(gl.TRIANGLES, neon.count, gl.UNSIGNED_INT, 0);

@@ -108,7 +108,7 @@
     '  vec3 trailLight = vec3(0.70, 0.35, 0.02);',
     '  col = mix(col, mix(trailDark, trailLight, uLight), vTrail * 0.88);',
     '',
-    '  float a = mix(0.12 + t * 0.50, 0.60 + t * 0.38, uLight) * soft;',
+    '  float a = mix(0.12 + t * 0.50, 0.72 + t * 0.26, uLight) * soft;',
     '  a = mix(a, soft * 0.95, vTrail * 0.65);',
     '  fragColor = vec4(col, a);',
     '}'
@@ -155,7 +155,7 @@
   function updateTint() {
     var lite = document.documentElement.classList.contains('light');
     tint.style.background = lite
-      ? 'rgba(250,245,238,0.58)'
+      ? 'rgba(250,245,238,0.38)'
       : 'rgba(24,18,16,0.58)';
   }
   updateTint();
