@@ -75,6 +75,7 @@
 		'uniform mat4 uGlobeMVP;',
 		'uniform float uAng;',
 		'uniform float uScale;',
+		'uniform float uSizeMul;',
 		'out float vVis;',
 		'out float vLat;',
 		'void main(){',
@@ -86,7 +87,7 @@
 		'  vec4 clip=uGlobeMVP*vec4(p*uScale,1.0);',
 		'  gl_Position=clip;',
 		'  float fade=clamp(p.z*1.8+0.5,0.0,1.0);',
-		'  gl_PointSize=clamp(fade*3.5,1.0,3.5);',
+		'  gl_PointSize=clamp(fade*3.5*uSizeMul,1.0,8.0);',
 		'}',
 	].join('\n');
 	var FS_G = [
@@ -94,6 +95,8 @@
 		'in float vVis;',
 		'in float vLat;',
 		'uniform float uLight;',
+		'uniform float uPulse;',
+		'uniform float uAlphaMul;',
 		'out vec4 fragColor;',
 		'void main(){',
 		'  vec2 c=2.0*gl_PointCoord-1.0;',
@@ -103,8 +106,9 @@
 		'  vec3 dark=mix(vec3(0.40,0.22,0.06),vec3(0.99,0.85,0.47),(vLat*0.5+0.5));',
 		'  vec3 lite=mix(vec3(0.55,0.28,0.02),vec3(0.80,0.45,0.02),(vLat*0.5+0.5));',
 		'  vec3 col=mix(dark,lite,uLight);',
+		'  col=mix(col,vec3(1.0,0.95,0.75),uPulse*0.6);',
 		'  float soft=1.0-smoothstep(0.3,1.0,dot(c,c));',
-		'  fragColor=vec4(col,vis*soft*0.9);',
+		'  fragColor=vec4(col,vis*soft*0.9*uAlphaMul);',
 		'}',
 	].join('\n');
 	var progG = gl.createProgram();
@@ -118,6 +122,9 @@
 		uGlobeMVP: gl.getUniformLocation(progG, 'uGlobeMVP'),
 		uAng:      gl.getUniformLocation(progG, 'uAng'),
 		uScale:    gl.getUniformLocation(progG, 'uScale'),
+		uSizeMul:  gl.getUniformLocation(progG, 'uSizeMul'),
+		uPulse:    gl.getUniformLocation(progG, 'uPulse'),
+		uAlphaMul: gl.getUniformLocation(progG, 'uAlphaMul'),
 		uLight:    gl.getUniformLocation(progG, 'uLight'),
 	} : null;
 
@@ -455,13 +462,17 @@
 
 		/* globe pass — inside frame(), depth-tested against ring depth */
 		if (progG && window._cardanGlobeVBO) {
-						gAng += GLOBE_BASE * speedMult;
+			gAng += GLOBE_BASE * speedMult;
+			var pulseVal = Math.min((speedMult - 1.0) / (PEAK_MULT - 1.0), 1.0);
 			gl.useProgram(progG);
-			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 			gl.depthMask(false);
+			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 			gl.uniformMatrix4fv(LOC_G.uGlobeMVP, false, mul(pv, offset));
 			gl.uniform1f(LOC_G.uAng, gAng);
 			gl.uniform1f(LOC_G.uScale, 0.2);
+			gl.uniform1f(LOC_G.uSizeMul, 1.0);
+			gl.uniform1f(LOC_G.uPulse, pulseVal);
+			gl.uniform1f(LOC_G.uAlphaMul, 1.0);
 			gl.uniform1f(LOC_G.uLight, isLite ? 1.0 : 0.0);
 			gl.bindBuffer(gl.ARRAY_BUFFER, window._cardanGlobeVBO);
 			gl.enableVertexAttribArray(LOC_G.aPos);
