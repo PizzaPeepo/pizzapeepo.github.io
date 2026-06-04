@@ -814,11 +814,12 @@
 
         function resize() {
           var w = card.offsetWidth, h = card.offsetHeight;
+          var xOff = card.classList.contains('card-wide') ? 1 : 3;
           svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
           [trailRect, headRect, headGlow].forEach(function(r) {
-            r.setAttribute('x', '3');
+            r.setAttribute('x', String(xOff));
             r.setAttribute('y', '3');
-            r.setAttribute('width',  w - 6);
+            r.setAttribute('width',  w - xOff * 2);
             r.setAttribute('height', h - 6);
           });
         }
