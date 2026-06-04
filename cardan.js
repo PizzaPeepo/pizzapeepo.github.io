@@ -470,7 +470,7 @@
 			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 			gl.uniformMatrix4fv(LOC_G.uGlobeMVP, false, mul(pv, offset));
 			gl.uniform1f(LOC_G.uAng, gAng);
-			gl.uniform1f(LOC_G.uScale, 0.2);
+			gl.uniform1f(LOC_G.uScale, 0.15);
 			gl.uniform1f(LOC_G.uSizeMul, 1.0);
 			gl.uniform1f(LOC_G.uPulse, pulseVal);
 			gl.uniform1f(LOC_G.uAlphaMul, 1.0);
