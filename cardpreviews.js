@@ -169,23 +169,27 @@
       }
     },
 
-    // 8: Bouncink — bouncing blobs
+    // 8: DVD Bounce — bouncing logo rect
     function (ctx, w, h, t, hover) {
-      var blobs = [
-        { bx: 0.3, by: 0.4, vx: 0.9, vy: 1.1, r: 9  },
-        { bx: 0.6, by: 0.7, vx: -0.7, vy: 0.8, r: 7  },
-        { bx: 0.5, by: 0.3, vx: 1.1, vy: -0.9, r: 6  },
-        { bx: 0.7, by: 0.5, vx: -1.0, vy: 1.2, r: 5  },
-      ];
-      blobs.forEach(function (bl, i) {
-        var speed = 0.45;
-        var px = ((bl.bx + bl.vx * t * speed) % 1 + 1) % 1;
-        var py = ((bl.by + bl.vy * t * speed) % 1 + 1) % 1;
-        ctx.beginPath();
-        ctx.arc(px * w, py * h, bl.r, 0, Math.PI * 2);
-        ctx.fillStyle = i % 2 === 0 ? g(0.4) : c(0.35);
-        ctx.fill();
-      });
+      var lw = 36, lh = 20;
+      var speed = 28;
+      // bounce position from time
+      var px = speed * t % (2 * (w - lw));
+      if (px > w - lw) px = 2 * (w - lw) - px;
+      var py = speed * 0.7 * t % (2 * (h - lh));
+      if (py > h - lh) py = 2 * (h - lh) - py;
+      // color cycles on each "bounce period"
+      var hue = (t * 40) % 360;
+      ctx.save();
+      ctx.strokeStyle = 'hsla(' + hue + ',80%,60%,0.9)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(px, py, lw, lh);
+      // small dot in center
+      ctx.beginPath();
+      ctx.arc(px + lw / 2, py + lh / 2, 2, 0, Math.PI * 2);
+      ctx.fillStyle = 'hsla(' + hue + ',80%,70%,0.9)';
+      ctx.fill();
+      ctx.restore();
     },
 
     // 9: Gravity GPU — galaxy swirl (wide card, different feel)

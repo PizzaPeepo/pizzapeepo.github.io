@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bouncink — Canvas Lab</title>
+  <title>DVD Bounce — Canvas Lab</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../CSS/theme.css">
@@ -22,6 +22,10 @@
     let timeleftSeconds = startingMinutes * 60;
     let countDown = '';
     let countDownFinished = false;
+    let cornerHits = 0;
+    let celebrationFrames = 0;
+    const CELEBRATION_DURATION = 45;
+    const CORNER_THRESHOLD = 4;
 
     function updateCountdown() {
       let minutes = Math.floor(timeleftSeconds / 60);
@@ -80,10 +84,42 @@
       }
       x += xspeed;
       y += yspeed;
-      if (x + dvd.width >= width)  { xspeed = -xspeed; x = width - dvd.width; pickColor(); }
-      else if (x <= 0)              { xspeed = -xspeed; x = 0; pickColor(); }
-      if (y + dvd.height + textHeight >= height) { yspeed = -yspeed; y = height - dvd.height - textHeight; pickColor(); }
-      else if (y <= 0)              { yspeed = -yspeed; y = 0; pickColor(); }
+      let hitX = false, hitY = false;
+      if (x + dvd.width >= width)  { xspeed = -xspeed; x = width - dvd.width; hitX = true; }
+      else if (x <= 0)              { xspeed = -xspeed; x = 0; hitX = true; }
+      if (y + dvd.height + textHeight >= height) { yspeed = -yspeed; y = height - dvd.height - textHeight; hitY = true; }
+      else if (y <= 0)              { yspeed = -yspeed; y = 0; hitY = true; }
+      if (hitX || hitY) pickColor();
+      if (hitX && hitY) { cornerHits++; celebrationFrames = CELEBRATION_DURATION; }
+
+      // corner-hit celebration flash
+      if (celebrationFrames > 0) {
+        let alpha = celebrationFrames / CELEBRATION_DURATION;
+        background(0);
+        fill(h, 100, 70, alpha * 80);
+        noStroke();
+        rect(0, 0, width, height);
+        celebrationFrames--;
+        // celebration text
+        textSize(28);
+        fill(h, 100, 90);
+        textAlign(CENTER, CENTER);
+        text('CORNER HIT!', width / 2, height / 2);
+        textSize(42);
+        textAlign(LEFT, BASELINE);
+      }
+
+      // "will it hit?" proximity counter — distance to nearest corner in bounces
+      let distToCornerX = min(x, width - x - dvd.width);
+      let distToCornerY = min(y, height - y - dvd.height - textHeight);
+      let nearCorner = distToCornerX < CORNER_THRESHOLD * abs(xspeed) &&
+                       distToCornerY < CORNER_THRESHOLD * abs(yspeed);
+      textSize(14);
+      fill(nearCorner ? color(h, 100, 90) : color(255, 255, 255, 120));
+      textAlign(RIGHT, BOTTOM);
+      text('corners: ' + cornerHits + (nearCorner ? '  ← incoming!' : ''), width - 10, height - 10);
+      textSize(42);
+      textAlign(LEFT, BASELINE);
     }
 
     function windowResized() { resizeCanvas(windowWidth, windowHeight); }
@@ -94,7 +130,7 @@
   <!-- Floating UI overlay — always on top of p5 canvas -->
   <div class="bouncink-ui" style="position:fixed;top:0;left:0;right:0;z-index:200;display:flex;align-items:center;gap:16px;padding:16px 48px;background:linear-gradient(to bottom,rgba(0,0,0,0.55),transparent);">
     <a class="back-link" href="../index.html" style="border-color:rgba(255,255,255,0.25);color:rgba(255,255,255,0.75);background:rgba(0,0,0,0.35);backdrop-filter:blur(8px);">← Home</a>
-    <span style="font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;color:rgba(255,255,255,0.8);flex:1;">Bouncink</span>
+    <span style="font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;color:rgba(255,255,255,0.8);flex:1;">DVD Bounce</span>
     <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme" style="position:static;background:rgba(0,0,0,0.35);backdrop-filter:blur(8px);border-color:rgba(255,255,255,0.25);color:rgba(255,255,255,0.75);">
       <span class="toggle-icon">☀</span>
       <span class="toggle-label">Light</span>

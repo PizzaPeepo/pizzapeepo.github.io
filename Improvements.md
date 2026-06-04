@@ -53,6 +53,7 @@ incremental.
   preview only integrates against `particles[0]`, so it would be approximate with many suns.)
 - **[Enhancement] Scroll wheel sets launch mass** during drag-to-launch, with the predicted
   mass shown next to the arrow.
+- **[Enhancement] Add Friction slider.**
 
 ### 02 · Raycaster
 
@@ -173,8 +174,6 @@ OrbitControls, burst, pause, particle-count selector, and an FPS badge.
 
 These exist in the repo but are not reachable from `index.html`. Worth a deliberate decision.
 
-- **`Niko/randomizer.html`** — a jQuery "pick a random item from a pasted list" utility using
-  the old pre-redesign CSS. Either promote it as a styled "tools" entry, or remove it.
 - **`pr0xmas/`** — an elaborate p5 pr0gramm-meme Christmas wallpaper (bouncing logo, snow,
   badges, pepe GIFs, a "reset peepos" hold-timer, wichtel), built for Wallpaper Engine and
   pulling in many external assets. Either generalize the snow into a clean, brandless seasonal
