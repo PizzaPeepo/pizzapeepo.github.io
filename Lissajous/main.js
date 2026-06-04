@@ -173,8 +173,10 @@ function draw() {
 		}
 	}
 	i++;
+	if (document.hidden) return;
 	window.requestAnimationFrame(draw);
 }
 // #endregion
 
 window.requestAnimationFrame(draw);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) draw(); });

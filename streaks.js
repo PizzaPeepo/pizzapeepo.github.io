@@ -141,8 +141,10 @@
       ctx.restore();
     }
 
+    if (document.hidden) return;
     requestAnimationFrame(frame);
   }
 
   requestAnimationFrame(frame);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) frame(); });
 }());

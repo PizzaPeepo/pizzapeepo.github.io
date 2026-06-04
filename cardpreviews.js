@@ -292,8 +292,10 @@
       cvs.style.opacity = c.hov ? '1' : '0';
     });
 
+    if (document.hidden) return;
     requestAnimationFrame(frame);
   }
 
   frame();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) frame(); });
 }());

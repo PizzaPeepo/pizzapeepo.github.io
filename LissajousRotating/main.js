@@ -152,7 +152,9 @@ function draw() {
 	lissajous.Update(lissFigureSize, omega1, omega2, 0, t[i]);
 	lissajous.DrawWholeFigure(bgCtx, fgCtx);
 	i++;
+	if (document.hidden) return;
 	window.requestAnimationFrame(draw);
 }
 
 draw();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) draw(); });

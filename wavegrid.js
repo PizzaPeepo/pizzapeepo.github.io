@@ -257,8 +257,10 @@
 
     gl.drawArrays(gl.POINTS, 0, COLS * ROWS);
 
+    if (document.hidden) return;
     requestAnimationFrame(frame);
   }
 
   frame();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) frame(); });
 }());

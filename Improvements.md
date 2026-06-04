@@ -19,21 +19,6 @@ shared `themechange` event from `JS/theme.js`.
 
 ## Cross-cutting (whole site)
 
-- **[Bug] Dead `globe.js` script tag.** `index.html:706` loads `globe.js`, but that file does
-  not exist anywhere in the repo — the rotating globe is actually drawn inside `cardan.js`
-  (`window._cardanGlobeVBO`, the `progG` pass). The tag throws a 404 on every page load.
-  Remove it, or split the globe code out into a real `globe.js`.
-- **[Bug] Stale "9 demos" badge.** `index.html:539` hardcodes "9 demos"; there are 10 cards.
-  Derive the number from the `.card` count (the filter pills already auto-count their
-  categories, so the data is there).
-- **[Quick win] Pause render loops when the tab is hidden.** No demo checks `document.hidden`.
-  Every `requestAnimationFrame` loop — plus the four background loops on the landing page
-  (wavegrid, cardan, streaks, cardpreviews) — keeps running in background tabs, wasting CPU
-  and battery. Add a `visibilitychange` guard that stops/resumes the loop.
-- **[Quick win] Respect `prefers-reduced-motion`.** Nothing on the site honors it. The landing
-  page alone runs two WebGL2 canvases (wavegrid + cardan) plus streaks, card micro-previews,
-  the kinetic-title repel, and per-card 3D tilt at once. Gate the heaviest background motion
-  (and the auto-animations) behind the media query for accessibility and low-end devices.
 - **[Enhancement] Standardize hotkeys + add PNG export.** The GPU demo already supports
   Space / R / B. Make Space = pause, R = reset, S = save-PNG consistent across all demos.
   Export is a three-liner (`canvas.toDataURL('image/png')` → download link) and is especially

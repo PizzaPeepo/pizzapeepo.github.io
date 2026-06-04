@@ -536,7 +536,7 @@
       <div class="hdr-badges">
         <span class="badge">Vanilla JS</span>
         <span class="badge coral">Canvas API</span>
-        <span class="badge">9 demos</span>
+        <span class="badge" id="demoCountBadge"/>
       </div>
     </header>
 
@@ -703,7 +703,6 @@
 
   <script src="wavegrid.js"></script>
   <script src="streaks.js"></script>
-  <script src="globe.js"></script>
   <script src="cardan.js"></script>
   <script src="cardpreviews.js"></script>
 
@@ -811,7 +810,10 @@
         });
       }
 
-      document.querySelectorAll('.card').forEach(function(card, i) {
+      var cards = document.querySelectorAll('.card');
+      var badge = document.getElementById('demoCountBadge');
+      if (badge) badge.textContent = cards.length + ' demos';
+      cards.forEach(function(card, i) {
         makeSVGBorder(card, i);
         card.addEventListener('animationend', function() {
           card.style.animation = 'none';

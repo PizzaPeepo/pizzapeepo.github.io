@@ -1125,7 +1125,9 @@ function startAnimating(fps) {
 
 function draw() {
 	// stop
-	if (stop) {
+	if (stop || document.hidden) {
+		if (document.hidden && !stop) document.addEventListener(
+			'visibilitychange', () => { if (!document.hidden) draw(); }, { once: true });
 		return;
 	}
 

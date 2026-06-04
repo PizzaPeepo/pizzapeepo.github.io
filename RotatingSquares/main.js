@@ -148,7 +148,9 @@ function draw() {
 	bgCtx.restore();
 
 	i++;
+	if (document.hidden) return;
 	window.requestAnimationFrame(draw);
 }
 
 draw();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) draw(); });
