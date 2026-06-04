@@ -262,5 +262,5 @@
   }
 
   frame();
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) frame(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) requestAnimationFrame(frame); });
 }());
