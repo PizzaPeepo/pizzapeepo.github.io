@@ -45,6 +45,20 @@ Both fetched by ID in `main.js`, sized to `canvasWidth × canvasHeight` (typical
 | `perlin.js` / `simplexNoise.js` | Noise generation |
 | `bignumber.js` | Big number arithmetic |
 
+### Shared Scripts (`JS/`)
+| File | Purpose |
+|------|---------|
+| `theme.js` | Dark/light theme toggle — loaded by demo pages that have a `#themeToggle` button |
+
+### Root-level Index Scripts
+These are IIFE-style (not ES6 modules), loaded only by `index.html`:
+| File | Purpose |
+|------|---------|
+| `wavegrid.js` | WebGL2 interactive wave-dot background |
+| `cardpreviews.js` | Animated canvas micro-previews on each demo card |
+| `streaks.js` | Streak/particle overlay on index page |
+| `cardan.js` | Cardan grille animation on index page |
+
 ### Demo Structure
 ```
 DemoName/
@@ -57,9 +71,15 @@ HTML links shared CSS from `../CSS/`, includes back-to-mainpage link. Templates:
 
 ### Key Demos
 - **GravitySimulation** — N-body gravity via RK4; `particle.js` elastic collision physics; three wall modes (none/infinite/collision)
+- **GravitySimulationGPU** — Barnes-Hut N-body (CPU octree via `Octree.js`, GPU render via Three.js WebGPU). **Outlier**: uses Three.js loaded via importmap from CDN; no dual-canvas pattern; 3D OrbitControls camera
 - **Raycaster** — 2D line-segment raycasting; `Raycaster.js` casts rays, finds closest wall via `Line2D.GetIntersectionPointWith`
 - **Lissajous / LissajousRotating** — Parametric figures as table; `LissajousTable` manages 2D array of `LissajousFigure` instances
 - **Quadtree** — Spatial partitioning viz; `Quadtree.js` implements Wikipedia pseudocode
+- **RotatingSquares** — rotating square animation; standard dual-canvas pattern
+- **CircularMotion** — circular motion demo; standard dual-canvas pattern
+- **Bouncink** — bouncing animation with custom font asset
+- **PhaseshiftDemo1** — phase shift visualization
+- **pr0xmas** — holiday demo. **Outlier**: uses p5.js (loaded locally), not ES6 modules
 
 ### CSS (`CSS/`)
 - `fontStyles.css` — typography
