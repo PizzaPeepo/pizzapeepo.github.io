@@ -374,12 +374,12 @@
 	var accAng         = 0;
 	var prevFrameTime  = t0;
 	var hoverStartTime = -1;
+	var GLOBE_BASE = 0.004;
 	var gAng = 0;
-	var gSpeedY = 0.004, gTargetSpeedY = 0.004;
 
 	document.querySelectorAll('.card').forEach(function (card) {
-		card.addEventListener('mouseenter', function () { hoverStartTime = performance.now() * 0.001; gTargetSpeedY = 0.048; });
-		card.addEventListener('mouseleave', function () { hoverStartTime = -1; gTargetSpeedY = 0.004; });
+		card.addEventListener('mouseenter', function () { hoverStartTime = performance.now() * 0.001; });
+		card.addEventListener('mouseleave', function () { hoverStartTime = -1; });
 	});
 
 	function frame(now) {
@@ -455,8 +455,7 @@
 
 		/* globe pass — inside frame(), depth-tested against ring depth */
 		if (progG && window._cardanGlobeVBO) {
-						gSpeedY += (gTargetSpeedY - gSpeedY) * 0.06;
-			gAng    += gSpeedY;
+						gAng += GLOBE_BASE * speedMult;
 			gl.useProgram(progG);
 			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 			gl.depthMask(false);
