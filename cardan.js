@@ -301,7 +301,7 @@
 	var t0 = performance.now();
 	var BASE_SPEED     = 0.125;
 	var PEAK_MULT      = 75;
-	var ACCEL_DUR      = 0.5;
+	var ACCEL_DUR      = 0.28;
 	var currentSpeed   = BASE_SPEED;
 	var accAng         = 0;
 	var prevFrameTime  = t0;
@@ -337,7 +337,7 @@
 			speedMult = 1.0 + (PEAK_MULT - 1.0) * Math.sin(p * Math.PI);
 		}
 		var targetSpeed = BASE_SPEED * speedMult;
-		currentSpeed += (targetSpeed - currentSpeed) * 0.07;
+		currentSpeed += (targetSpeed - currentSpeed) * 0.13;
 		accAng += dt * currentSpeed;
 
 		var D    = 1 / Math.sqrt(3);
