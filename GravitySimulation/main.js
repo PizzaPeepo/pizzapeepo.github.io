@@ -6,9 +6,8 @@ import { BarnesHutTree } from "./BarnesHutTree.js";
 import { SpatialHash } from "./SpatialHash.js";
 
 // #region global variables
-const HUD_PANEL_WIDTH = 280;
 var canvasHeight = window.innerHeight;
-var canvasWidth = window.innerWidth - HUD_PANEL_WIDTH;
+var canvasWidth = window.getCanvasWidth();
 const whiteLineStrokeStyle = "rgba(255, 255, 255, 1.0)";
 var resetCanvas = false;
 var stop = false;
@@ -197,10 +196,10 @@ function applyCanvasSize() {
 applyCanvasSize();
 
 window.addEventListener('resize', function () {
-	canvasWidth  = window.innerWidth - HUD_PANEL_WIDTH;
+	canvasWidth  = window.getCanvasWidth();
 	canvasHeight = window.innerHeight;
 	applyCanvasSize();
-	resetCanvas = true;
+	if (!window._hudToggling) resetCanvas = true;
 });
 
 // Bake a palette into LUT_SIZE ready-to-use rgba strings, indexed by a clamped [0,1] value.

@@ -5,8 +5,7 @@ import "../Utils/simplexNoise.js";
 import * as helpers from "../Utils/helpers.js";
 
 // #region global variables
-const HUD_PANEL_WIDTH = 280;
-var canvas_width = window.innerWidth - HUD_PANEL_WIDTH;
+var canvas_width = window.getCanvasWidth();
 var canvas_height = window.innerHeight;
 
 var numberOfRandomWalls = 6;
@@ -97,13 +96,13 @@ document.addEventListener('themechange', function(e) {
 
 // #region resize
 window.addEventListener('resize', function() {
-	canvas_width  = window.innerWidth - HUD_PANEL_WIDTH;
+	canvas_width  = window.getCanvasWidth();
 	canvas_height = window.innerHeight;
 	applyCanvasSize();
 	canvasWalls = Line2D.GetWallLines2D(canvas_width, canvas_height);
 	rayCaster.position.x = Math.floor(canvas_width / 2);
 	rayCaster.position.y = Math.floor(canvas_height / 2);
-	GetNewRandomLines();
+	if (!window._hudToggling) GetNewRandomLines();
 });
 // #endregion
 

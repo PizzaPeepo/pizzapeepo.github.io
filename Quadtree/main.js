@@ -4,9 +4,8 @@ import { Rectangle } from "../Utils/rectangle.js";
 import { Quadtree } from "./Quadtree.js";
 
 // #region global variables
-const HUD_PANEL_WIDTH = 280;
 var canvasHeight = window.innerHeight;
-var canvasWidth = window.innerWidth - HUD_PANEL_WIDTH;
+var canvasWidth = window.getCanvasWidth();
 const whiteLineStrokeStyle = "rgba(255, 255, 255, 1.0)";
 var resetCanvas = false;
 // #endregion
@@ -51,13 +50,15 @@ document.addEventListener('themechange', function(e) {
 
 // #region resize
 window.addEventListener('resize', function() {
-	canvasWidth  = window.innerWidth - HUD_PANEL_WIDTH;
+	canvasWidth  = window.getCanvasWidth();
 	canvasHeight = window.innerHeight;
 	applyCanvasSize();
 	boundary = new Rectangle(0, 0, canvasWidth, canvasHeight);
-	quadtree = new Quadtree(boundary, 4);
-	for (let i = 0; i < 10; i++) {
-		quadtree.insert(new helpers.Point2D(helpers.GetRandomInt(canvasWidth), helpers.GetRandomInt(canvasHeight)));
+	if (!window._hudToggling) {
+		quadtree = new Quadtree(boundary, 4);
+		for (let i = 0; i < 10; i++) {
+			quadtree.insert(new helpers.Point2D(helpers.GetRandomInt(canvasWidth), helpers.GetRandomInt(canvasHeight)));
+		}
 	}
 });
 // #endregion

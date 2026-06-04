@@ -5,9 +5,8 @@ import LissajousTable from "./LissajousTable.js";
 import FadeTrail from "../Utils/FadeTrail.js";
 
 // #region global variables
-const HUD_PANEL_WIDTH = 280;
 var canvasHeight = window.innerHeight;
-var canvasWidth = window.innerWidth - HUD_PANEL_WIDTH;
+var canvasWidth = window.getCanvasWidth();
 const whiteLineStrokeStyle = "rgba(255, 255, 255, 1.0)";
 var delta_t = 0.015;
 var t = helpers.range(0, 500, delta_t);
@@ -58,8 +57,9 @@ document.addEventListener('themechange', function(e) {
 
 // #region resize
 window.addEventListener('resize', function() {
-	canvasWidth  = window.innerWidth - HUD_PANEL_WIDTH;
+	canvasWidth  = window.getCanvasWidth();
 	canvasHeight = window.innerHeight;
+	if (window._hudToggling) return;
 	applyCanvasSize();
 	lissajousTable = new LissajousTable(canvasWidth, canvasHeight, lissFigureSize);
 	resetCanvas = true;

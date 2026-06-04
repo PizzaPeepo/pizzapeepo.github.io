@@ -4,9 +4,8 @@ import Vector2D from "../Utils/Vector2D.js";
 import FadeTrail from "../Utils/FadeTrail.js";
 
 // #region global variables
-const HUD_PANEL_WIDTH = 280;
 var canvasHeight = window.innerHeight;
-var canvasWidth = window.innerWidth - HUD_PANEL_WIDTH;
+var canvasWidth = window.getCanvasWidth();
 const whiteLineStrokeStyle = "rgba(255, 255, 255, 1.0)";
 var fadeAway = true;
 var liveResetCanvas = false;
@@ -61,8 +60,9 @@ document.addEventListener('themechange', function(e) {
 
 // #region resize
 window.addEventListener('resize', function() {
-	canvasWidth  = window.innerWidth - HUD_PANEL_WIDTH;
+	canvasWidth  = window.getCanvasWidth();
 	canvasHeight = window.innerHeight;
+	if (window._hudToggling) return;
 	applyCanvasSize();
 	center = new Vector2D(Math.floor(canvasWidth / 2), Math.floor(canvasHeight / 2));
 	lissFigureSize = Math.min(canvasWidth, canvasHeight) * 0.45;
