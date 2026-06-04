@@ -103,12 +103,13 @@
 		'  if(dot(c,c)>1.0)discard;',
 		'  float vis=clamp(vVis*1.8+0.4,0.0,1.0);',
 		'  if(vis<0.01)discard;',
-		'  vec3 dark=mix(vec3(0.40,0.22,0.06),vec3(0.99,0.85,0.47),(vLat*0.5+0.5));',
-		'  vec3 lite=mix(vec3(0.55,0.28,0.02),vec3(0.80,0.45,0.02),(vLat*0.5+0.5));',
+		'  vec3 dark=mix(vec3(0.72,0.40,0.12),vec3(1.0,0.95,0.60),(vLat*0.5+0.5));',
+		'  vec3 lite=mix(vec3(0.50,0.18,0.02),vec3(0.78,0.35,0.04),(vLat*0.5+0.5));',
 		'  vec3 col=mix(dark,lite,uLight);',
-		'  col=mix(col,vec3(1.0,0.95,0.75),uPulse*0.6);',
+		'  vec3 pulseCol=mix(vec3(1.0,0.95,0.75),vec3(0.90,0.42,0.06),uLight);',
+		'  col=mix(col,pulseCol,uPulse*0.6);',
 		'  float soft=1.0-smoothstep(0.3,1.0,dot(c,c));',
-		'  fragColor=vec4(col,vis*soft*0.9*uAlphaMul);',
+		'  fragColor=vec4(col,vis*soft*1.0*uAlphaMul);',
 		'}',
 	].join('\n');
 	var progG = gl.createProgram();
