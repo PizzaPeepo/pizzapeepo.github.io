@@ -68,6 +68,59 @@
 	gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
 	if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.error('[cardan]', gl.getProgramInfoLog(prog)); cvs.remove(); return; }
 
+	/* ── globe: dot-sphere shaders ── */
+	var VS_G = [
+		'#version 300 es', 'precision highp float;',
+		'in vec3 aPos;',
+		'uniform mat4 uGlobeMVP;',
+		'uniform float uAng;',
+		'uniform float uScale;',
+		'out float vVis;',
+		'out float vLat;',
+		'void main(){',
+		'  vec3 ax=normalize(vec3(sin(0.4102),cos(0.4102),0.0));',
+		'  float c=cos(uAng),s=sin(uAng);',
+		'  vec3 p=aPos*c+cross(ax,aPos)*s+ax*dot(ax,aPos)*(1.0-c);',
+		'  vVis=p.z;',
+		'  vLat=aPos.y;',
+		'  vec4 clip=uGlobeMVP*vec4(p*uScale,1.0);',
+		'  gl_Position=clip;',
+		'  float fade=clamp(p.z*1.8+0.5,0.0,1.0);',
+		'  gl_PointSize=clamp(fade*3.5,1.0,3.5);',
+		'}',
+	].join('\n');
+	var FS_G = [
+		'#version 300 es', 'precision highp float;',
+		'in float vVis;',
+		'in float vLat;',
+		'uniform float uLight;',
+		'out vec4 fragColor;',
+		'void main(){',
+		'  vec2 c=2.0*gl_PointCoord-1.0;',
+		'  if(dot(c,c)>1.0)discard;',
+		'  float vis=clamp(vVis*1.8+0.4,0.0,1.0);',
+		'  if(vis<0.01)discard;',
+		'  vec3 dark=mix(vec3(0.40,0.22,0.06),vec3(0.99,0.85,0.47),(vLat*0.5+0.5));',
+		'  vec3 lite=mix(vec3(0.55,0.28,0.02),vec3(0.80,0.45,0.02),(vLat*0.5+0.5));',
+		'  vec3 col=mix(dark,lite,uLight);',
+		'  float soft=1.0-smoothstep(0.3,1.0,dot(c,c));',
+		'  fragColor=vec4(col,vis*soft*0.9);',
+		'}',
+	].join('\n');
+	var progG = gl.createProgram();
+	var vsG = mkShader(gl.VERTEX_SHADER, VS_G), fsG = mkShader(gl.FRAGMENT_SHADER, FS_G);
+	if (vsG && fsG) {
+		gl.attachShader(progG, vsG); gl.attachShader(progG, fsG); gl.linkProgram(progG);
+		if (!gl.getProgramParameter(progG, gl.LINK_STATUS)) { console.error('[cardan globe]', gl.getProgramInfoLog(progG)); progG = null; }
+	} else { progG = null; }
+	var LOC_G = progG ? {
+		aPos:      gl.getAttribLocation(progG,  'aPos'),
+		uGlobeMVP: gl.getUniformLocation(progG, 'uGlobeMVP'),
+		uAng:      gl.getUniformLocation(progG, 'uAng'),
+		uScale:    gl.getUniformLocation(progG, 'uScale'),
+		uLight:    gl.getUniformLocation(progG, 'uLight'),
+	} : null;
+
 	var LOC = {
 		aPos:  gl.getAttribLocation(prog,  'aPos'),
 		aNorm: gl.getAttribLocation(prog,  'aNorm'),
@@ -234,6 +287,21 @@
 		buildNeonEdges(1.08, 0.11, 0.11,  0.024,  40),
 	];
 
+	/* ── globe: Fibonacci sphere, 480 points ── */
+	var GLOBE_N = 480;
+	(function(){
+		var pts = [], PHI = Math.PI*(3-Math.sqrt(5));
+		for(var i=0;i<GLOBE_N;i++){
+			var y=1-(i/(GLOBE_N-1))*2, r=Math.sqrt(1-y*y), th=PHI*i;
+			pts.push(r*Math.cos(th), y, r*Math.sin(th));
+		}
+		var gvbo = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, gvbo);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pts), gl.STATIC_DRAW);
+		gl.bindBuffer(gl.ARRAY_BUFFER, null);
+		window._cardanGlobeVBO = gvbo;
+	}());
+
 	/* ── matrix math (column-major, GL convention) ── */
 	function m4()    { return new Float32Array(16); }
 	function m3()    { return new Float32Array(9); }
@@ -306,9 +374,12 @@
 	var accAng         = 0;
 	var prevFrameTime  = t0;
 	var hoverStartTime = -1;
+	var gAng = 0;
+	var gSpeedY = 0.004, gTargetSpeedY = 0.004;
+
 	document.querySelectorAll('.card').forEach(function (card) {
-		card.addEventListener('mouseenter', function () { hoverStartTime = performance.now() * 0.001; });
-		card.addEventListener('mouseleave', function () { hoverStartTime = -1; });
+		card.addEventListener('mouseenter', function () { hoverStartTime = performance.now() * 0.001; gTargetSpeedY = 0.048; });
+		card.addEventListener('mouseleave', function () { hoverStartTime = -1; gTargetSpeedY = 0.004; });
 	});
 
 	function frame(now) {
@@ -381,6 +452,25 @@
 		});
 
 		gl.depthMask(true);
+
+		/* globe pass — inside frame(), depth-tested against ring depth */
+		if (progG && window._cardanGlobeVBO) {
+						gSpeedY += (gTargetSpeedY - gSpeedY) * 0.06;
+			gAng    += gSpeedY;
+			gl.useProgram(progG);
+			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+			gl.depthMask(false);
+			gl.uniformMatrix4fv(LOC_G.uGlobeMVP, false, mul(pv, offset));
+			gl.uniform1f(LOC_G.uAng, gAng);
+			gl.uniform1f(LOC_G.uScale, 0.2);
+			gl.uniform1f(LOC_G.uLight, isLite ? 1.0 : 0.0);
+			gl.bindBuffer(gl.ARRAY_BUFFER, window._cardanGlobeVBO);
+			gl.enableVertexAttribArray(LOC_G.aPos);
+			gl.vertexAttribPointer(LOC_G.aPos, 3, gl.FLOAT, false, 0, 0);
+			gl.drawArrays(gl.POINTS, 0, GLOBE_N);
+			gl.depthMask(true);
+			gl.bindBuffer(gl.ARRAY_BUFFER, null);
+		}
 
 		requestAnimationFrame(frame);
 	}
