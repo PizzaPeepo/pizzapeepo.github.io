@@ -289,6 +289,9 @@
     .card:nth-child(11) { animation-delay: 0.80s; }
     .card:nth-child(12) { animation-delay: 0.87s; }
 
+    /* once initial rise-in is done, cards are CSS-static so the filter FLIP can drive inline transform/opacity */
+    .grid.filters-ready .card { animation: none; opacity: 1; }
+
     .card:hover {
       transform: scale(1.08);
       box-shadow: 0 40px 80px rgba(0,0,0,0.65),
@@ -1107,15 +1110,157 @@
 
       var grid = document.getElementById('demoGrid');
 
+      /* ── FILTER TRANSITIONS (FLIP) ──
+         staying cards slide to their new grid slot; entering cards fade up from the
+         bottom; leaving cards fade in place (from "All") or sweep off to the nearest
+         viewport edge (when switching between two filters). */
+      var committedFilter = 'all';
+      var animating = false;
+      var timers = [];
+      var REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      function visibleUnder(filter, card) {
+        return filter === 'all' || (card.dataset.cat || '') === filter;
+      }
+
+      function markReady() { grid.classList.add('filters-ready'); }
+      setTimeout(markReady, 1500);   // let the initial rise-in finish first
+
+      function clearPreview() {       // undo any pill-hover preview before animating
+        cards.forEach(function (c) {
+          c.style.opacity = '';
+          if (c.classList.contains('card-pill-hover')) {
+            c.classList.remove('card-pill-hover');
+            c.dispatchEvent(new MouseEvent('mouseleave'));
+          }
+        });
+      }
+
+      function resetCard(card) {
+        var s = card.style;
+        s.transition = ''; s.transform = ''; s.opacity = '';
+        s.position = ''; s.left = ''; s.top = ''; s.width = ''; s.height = '';
+        s.zIndex = ''; s.pointerEvents = '';
+      }
+
+      function settle(filter) {       // snap to filter's final layout, drop all temp styles
+        timers.forEach(clearTimeout); timers = [];
+        cards.forEach(function (card) {
+          resetCard(card);
+          card.classList.toggle('f-hidden', !visibleUnder(filter, card));
+        });
+        grid.style.position = '';
+        grid.style.pointerEvents = '';
+        grid.style.minHeight = '';
+        grid.style.alignContent = '';
+        animating = false;
+      }
+
+      function applyFilter(newFilter) {
+        markReady();
+        var prevFilter = committedFilter;
+        if (newFilter === prevFilter && !animating) return;
+
+        clearPreview();
+        settle(prevFilter);           // cancel any in-flight anim, snap to settled prev layout
+        grid.classList.toggle('filtered', newFilter !== 'all');
+        committedFilter = newFilter;
+
+        if (REDUCE) { settle(newFilter); return; }
+
+        var isSwitch = prevFilter !== 'all';   // filter → filter (vs. All → filter)
+        var staying = [], entering = [], leaving = [];
+        var firstRects = new Map();
+        cards.forEach(function (card) {
+          var was = visibleUnder(prevFilter, card);
+          var will = visibleUnder(newFilter, card);
+          if (was) firstRects.set(card, card.getBoundingClientRect());
+          if (was && will) staying.push(card);
+          else if (!was && will) entering.push(card);
+          else if (was && !will) leaving.push(card);
+        });
+
+        if (!leaving.length && !entering.length) { settle(newFilter); return; }
+
+        animating = true;
+        var oldHeight = grid.getBoundingClientRect().height;
+        grid.style.position = 'relative';
+        grid.style.pointerEvents = 'none';
+        grid.style.minHeight = oldHeight + 'px';   // hold height so the footer doesn't jump mid-fade
+        grid.style.alignContent = 'start';         // keep rows content-sized — minHeight must not stretch them
+        var gridRect = grid.getBoundingClientRect();
+
+        /* ── mutate DOM to the LAST (post-filter) layout ── */
+        leaving.forEach(function (card) {          // pin out of flow so the grid reflows underneath
+          var r = firstRects.get(card), s = card.style;
+          s.transition = 'none';
+          s.position = 'absolute';
+          s.left = (r.left - gridRect.left) + 'px';
+          s.top = (r.top - gridRect.top) + 'px';
+          s.width = r.width + 'px';
+          s.height = r.height + 'px';
+          s.zIndex = '1';
+          s.opacity = '1';
+          s.transform = '';
+        });
+        entering.forEach(function (card) { card.classList.remove('f-hidden'); });
+        staying.forEach(function (card) { card.classList.remove('f-hidden'); });
+        cards.forEach(function (card) {
+          if (!visibleUnder(newFilter, card) && leaving.indexOf(card) === -1) {
+            card.classList.add('f-hidden');
+          }
+        });
+
+        var lastRects = new Map();
+        staying.forEach(function (card) { lastRects.set(card, card.getBoundingClientRect()); });
+
+        /* ── INVERT: place staying cards back at their old spot, prime entering cards ── */
+        staying.forEach(function (card) {
+          var f = firstRects.get(card), l = lastRects.get(card);
+          card.style.transition = 'none';
+          card.style.transform = 'translate(' + (f.left - l.left) + 'px,' + (f.top - l.top) + 'px)';
+          card.style.opacity = '1';
+        });
+        entering.forEach(function (card) {
+          card.style.transition = 'none';
+          card.style.opacity = '0';
+          card.style.transform = 'translateY(28px)';
+        });
+
+        /* ── PLAY (after the primed styles have committed) ── */
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            staying.forEach(function (card) {
+              card.style.transition = 'transform 0.5s cubic-bezier(0.22,1,0.36,1)';
+              card.style.transform = '';
+            });
+            entering.forEach(function (card, i) {
+              var d = Math.min(i, 8) * 0.04;       // gentle stagger
+              card.style.transition = 'opacity 0.5s ease ' + d + 's, transform 0.55s cubic-bezier(0.22,1,0.36,1) ' + d + 's';
+              card.style.opacity = '1';
+              card.style.transform = '';
+            });
+            leaving.forEach(function (card) {
+              var r = firstRects.get(card);
+              var dir = (r.left + r.width / 2) < window.innerWidth / 2 ? -1 : 1;
+              card.style.transition = 'transform 0.55s cubic-bezier(0.6,0,0.7,0.2), opacity 0.45s ease';
+              if (isSwitch) {
+                card.style.transform = 'translateX(' + (dir * (window.innerWidth * 0.9 + r.width)) + 'px) scale(0.85)';
+              } else {
+                card.style.transform = 'scale(0.96)';
+              }
+              card.style.opacity = '0';
+            });
+          });
+        });
+
+        timers.push(setTimeout(function () { settle(committedFilter); }, entering.length ? 950 : 620));
+      }
+
       pills.forEach(function (pill) {
         pill.addEventListener('click', function () {
-          var f = pill.dataset.filter;
           pills.forEach(function (p) { p.classList.toggle('active', p === pill); });
-          grid.classList.toggle('filtered', f !== 'all');
-          cards.forEach(function (card) {
-            var cat = card.dataset.cat || '';
-            card.classList.toggle('f-hidden', f !== 'all' && cat !== f);
-          });
+          applyFilter(pill.dataset.filter);
         });
 
         pill.addEventListener('mouseenter', function () {
