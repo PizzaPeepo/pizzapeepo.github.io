@@ -17,13 +17,13 @@ import { Octree } from './Octree.js';
 import { onWindowResize } from "../Utils/ResizeManager.js";
 
 // ── config ──
-const MAX = 65536;            // array capacity = largest selectable count
+const MAX = 100000;           // array capacity = largest selectable count
 const DISK_R = 300;           // disk radius in sim (pixel-scale) units
 const BASE_DISK_MASS = 5000;  // total disk mass; per-particle = BASE_DISK_MASS / count
-const THETA = 1.5;            // Barnes-Hut opening angle (higher = faster, looser)
+let theta = 1.5;              // Barnes-Hut opening angle (higher = faster, looser)
 
 // ── tunables (driven by the HUD) ──
-let count = 16384;
+let count = 10000;
 let G = 50;
 let coreMass = 10000;
 let spin = 1.0;
@@ -69,6 +69,7 @@ function flattenTree() { nNodes = 0; flattenNode(tree.root); }
 // ── render uniforms ──
 const sizeU = uniform(1.0);        // sphere radius, render (= sim) units
 const speedScale = uniform(0.0125); // maps speed → color ramp
+const gSignU = uniform(1.0);        // 1 = attractive (blue-orange), 0 = repulsive (cyan-magenta)
 
 // ── runtime ──
 let renderer, scene, camera, controls, mesh;
@@ -123,7 +124,7 @@ function step() {
 	flattenTree();
 
 	const coreSoft2 = coreSoft * coreSoft;
-	const theta2 = THETA * THETA;
+	const theta2 = theta * theta;
 	const n = nNodes;
 	for (let i = 0; i < count; i++) {
 		const xi = px[i], yi = py[i], zi = pz[i];
@@ -164,7 +165,86 @@ function uploadInstances() {
 	mesh.count = count;
 }
 
-function reset() { initDisk(); }
+let currentPreset = 'disk';
+
+function updateGColors(g) {
+	gSignU.value = g >= 0 ? 1.0 : 0.0;
+}
+
+function initRing() {
+	for (let i = 0; i < count; i++) {
+		const angle = (i / count) * Math.PI * 2;
+		px[i] = Math.cos(angle) * DISK_R;
+		py[i] = Math.sin(angle) * DISK_R;
+		pz[i] = gauss() * DISK_R * 0.01;
+		const Geff = Math.max(G, 1);
+		const vc = Math.sqrt(Geff * coreMass / (DISK_R + coreSoft)) * (spin || 1);
+		vx[i] = -Math.sin(angle) * vc;
+		vy[i] = Math.cos(angle) * vc;
+		vz[i] = gauss() * Math.abs(vc) * 0.01;
+		parts[i].mass = massEach;
+	}
+}
+
+function initCollapse() {
+	for (let i = 0; i < count; i++) {
+		let rx, ry, rz;
+		do {
+			rx = Math.random() * 2 - 1;
+			ry = Math.random() * 2 - 1;
+			rz = Math.random() * 2 - 1;
+		} while (rx * rx + ry * ry + rz * rz > 1);
+		px[i] = rx * DISK_R;
+		py[i] = ry * DISK_R;
+		pz[i] = rz * DISK_R * 0.25;
+		vx[i] = 0; vy[i] = 0; vz[i] = 0;
+		parts[i].mass = massEach;
+	}
+}
+
+function initGalaxyCollision() {
+	const half = Math.floor(count / 2);
+	const sigmaXY = DISK_R * 0.35;
+	const zThin = DISK_R * 0.02;
+	const zBulge = DISK_R * 0.08;
+	const sigmaBulge = DISK_R * 0.25;
+	const offsetX = DISK_R * 1.5;
+	const Geff = Math.max(G, 1);
+	const approachSpeed = Math.sqrt(Geff * coreMass / (offsetX * 2 + coreSoft)) * 0.6;
+	for (let pass = 0; pass < 2; pass++) {
+		const start = pass === 0 ? 0 : half;
+		const end = pass === 0 ? half : count;
+		const ox = pass === 0 ? -offsetX : offsetX;
+		const spinDir = pass === 0 ? 1.0 : -1.0;
+		const bulkVx = pass === 0 ? approachSpeed : -approachSpeed;
+		for (let i = start; i < end; i++) {
+			const gx = gauss() * sigmaXY, gy = gauss() * sigmaXY;
+			const r = Math.sqrt(gx * gx + gy * gy);
+			px[i] = ox + gx; py[i] = gy;
+			const bulge = Math.exp(-r * r / (2 * sigmaBulge * sigmaBulge));
+			pz[i] = gauss() * (zThin + zBulge * bulge);
+			const rDir = r < 0.001 ? 0.001 : r;
+			const rVel = Math.max(r, DISK_R * 0.05);
+			const vc = Math.sqrt(Geff * coreMass / (rVel + coreSoft)) * spin * spinDir;
+			vx[i] = bulkVx + (-gy / rDir) * vc;
+			vy[i] = (gx / rDir) * vc;
+			vz[i] = gauss() * Math.abs(vc) * 0.02;
+			parts[i].mass = massEach;
+		}
+	}
+}
+
+function applyPreset(name) {
+	currentPreset = name;
+	reset();
+}
+
+function reset() {
+	if (currentPreset === 'ring') initRing();
+	else if (currentPreset === 'collapse') initCollapse();
+	else if (currentPreset === 'galaxy') initGalaxyCollision();
+	else initDisk();
+}
 
 function setCount(n) {
 	count = n;
@@ -198,8 +278,10 @@ async function init() {
 	material.positionNode = positionLocal.mul(sizeU).add(attribute('instPos', 'vec3'));
 	material.colorNode = Fn(() => {
 		const s = attribute('instSpeed', 'float').mul(speedScale).saturate();
-		const base = color(0x1b4fff).mix(color(0xff7a1a), s); // blue → orange by speed
-		return base.mix(color(0xffffff), s.mul(s).mul(0.7));    // white-hot at the top end
+		const attract = color(0x1b4fff).mix(color(0xff7a1a), s); // blue → orange (gravity)
+		const repulse = color(0x00ddff).mix(color(0xee00ff), s); // cyan → magenta (antigravity)
+		const base = repulse.mix(attract, gSignU);
+		return base.mix(color(0xffffff), s.mul(s).mul(0.7));
 	})();
 	material.transparent = true;
 	material.depthWrite = false;
@@ -264,16 +346,27 @@ function wireUI() {
 		sl.addEventListener('input', () => { set(+sl.value); show(); });
 		show();
 	};
-	bindNum('gravSlider', 'gravValue', v => G = v, v => v.toFixed(0));
+	bindNum('gravSlider', 'gravValue', v => { G = v; updateGColors(v); }, v => v.toFixed(0));
 	bindNum('coreSlider', 'coreValue', v => coreMass = v, v => v.toLocaleString());
 	bindNum('spinSlider', 'spinValue', v => spin = v, v => v.toFixed(2));
 	bindNum('softSlider', 'softValue', v => coreSoft = v, v => v.toFixed(0));
 	bindNum('dtSlider', 'dtValue', v => dt = v, v => v.toFixed(3));
 	bindNum('sizeSlider', 'sizeValue', v => sizeU.value = v, v => v.toFixed(1));
+	bindNum('thetaSlider', 'thetaValue', v => theta = v, v => v.toFixed(2));
 
-	document.getElementById('countSelect').addEventListener('change', e => setCount(+e.target.value));
-	document.getElementById('countValue').textContent = count.toLocaleString();
+	const countSl = document.getElementById('countSlider');
+	const updateCount = () => {
+		const n = Math.max(1, Math.round(Math.pow(10, +countSl.value)));
+		setCount(n);
+	};
+	countSl.addEventListener('input', updateCount);
+	updateCount();
 	document.getElementById('resetButton').addEventListener('click', reset);
+	document.getElementById('presetDisk').addEventListener('click', () => applyPreset('disk'));
+	document.getElementById('presetRing').addEventListener('click', () => applyPreset('ring'));
+	document.getElementById('presetCollapse').addEventListener('click', () => applyPreset('collapse'));
+	document.getElementById('presetGalaxy').addEventListener('click', () => applyPreset('galaxy'));
+	updateGColors(G);
 	document.getElementById('burstButton').addEventListener('click', burst);
 	const pauseBtn = document.getElementById('pauseButton');
 	pauseBtn.addEventListener('click', () => {
