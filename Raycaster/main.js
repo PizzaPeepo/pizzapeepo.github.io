@@ -36,6 +36,7 @@ var drawMode = true;
 var isDrawing = false;
 var drawStart = null;
 var drawCurrent = null;
+var hoveredWall = null;
 
 function rebuildWalls() {
 	walls = [...randomWalls, ...canvasWalls, ...userWalls];
@@ -109,31 +110,41 @@ onWindowResize(function() {
 // #endregion
 
 // #region wall helpers
-function wallMidpoint(wall) {
-	return {
-		x: wall.offset.x + wall.direction.x * 0.5,
-		y: wall.offset.y + wall.direction.y * 0.5
-	};
+function distToSegment(px, py, wall) {
+	const ax = wall.offset.x, ay = wall.offset.y;
+	const bx = ax + wall.direction.x, by = ay + wall.direction.y;
+	const dx = bx - ax, dy = by - ay;
+	const lenSq = dx * dx + dy * dy;
+	if (lenSq === 0) return Math.hypot(px - ax, py - ay);
+	const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+	return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
-function removeClosestEditableWall(mx, my) {
+const REMOVE_THRESHOLD = 15;
+
+function findClosestEditableWall(mx, my) {
 	let closestDist = Infinity;
 	let closestSrc = null;
 	let closestIdx = -1;
 
 	for (let i = 0; i < randomWalls.length; i++) {
-		const mid = wallMidpoint(randomWalls[i]);
-		const d = Math.hypot(mx - mid.x, my - mid.y);
+		const d = distToSegment(mx, my, randomWalls[i]);
 		if (d < closestDist) { closestDist = d; closestSrc = randomWalls; closestIdx = i; }
 	}
 	for (let i = 0; i < userWalls.length; i++) {
-		const mid = wallMidpoint(userWalls[i]);
-		const d = Math.hypot(mx - mid.x, my - mid.y);
+		const d = distToSegment(mx, my, userWalls[i]);
 		if (d < closestDist) { closestDist = d; closestSrc = userWalls; closestIdx = i; }
 	}
 
-	if (closestIdx === -1 || closestDist > 200) return;
-	closestSrc.splice(closestIdx, 1);
+	if (closestIdx === -1 || closestDist > REMOVE_THRESHOLD) return null;
+	return { src: closestSrc, idx: closestIdx, wall: closestSrc[closestIdx] };
+}
+
+function removeClosestEditableWall(mx, my) {
+	const hit = findClosestEditableWall(mx, my);
+	if (!hit) return;
+	hit.src.splice(hit.idx, 1);
+	hoveredWall = null;
 	rebuildWalls();
 }
 // #endregion
@@ -269,6 +280,17 @@ function drawSourceGlow(pos) {
 	ctx.restore();
 }
 
+function drawHighlightedWall(wall) {
+	if (!wall) return;
+	ctx.save();
+	ctx.strokeStyle = isLight ? 'rgba(200, 40, 0, 0.9)' : 'rgba(255, 80, 60, 0.9)';
+	ctx.lineWidth = 4;
+	ctx.beginPath();
+	wall.Draw(ctx);
+	ctx.stroke();
+	ctx.restore();
+}
+
 function drawWallPreview() {
 	if (!isDrawing || !drawStart || !drawCurrent) return;
 	ctx.save();
@@ -327,6 +349,9 @@ canvas.addEventListener("mousemove", function (event) {
 	if (isDrawing) {
 		drawCurrent = { x: mouse.x, y: mouse.y };
 	}
+	const hit = findClosestEditableWall(mouse.x, mouse.y);
+	hoveredWall = hit ? hit.wall : null;
+	canvas.style.cursor = hoveredWall ? "pointer" : (drawMode ? "crosshair" : "default");
 });
 
 canvas.addEventListener("mousedown", function (event) {
@@ -390,6 +415,7 @@ function draw() {
 	drawVisibilityPolygon(intersectionPoints);
 	drawSourceGlow(rayCaster.position);
 	drawLines([...randomWalls, ...userWalls]);
+	drawHighlightedWall(hoveredWall);
 	drawCircle(rayCaster.position, 2, wallColor);
 	drawRays(rayCaster);
 	drawPoints(intersectionPoints);
