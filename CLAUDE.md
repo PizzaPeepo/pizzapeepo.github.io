@@ -25,12 +25,24 @@ Navigate to `http://localhost:8080`. All demos accessible from `index.html`.
 ### Module System
 All JS: native ES6 modules (`type="module"` in `<script>`, `import`/`export`). No bundler or transpiler.
 
-### Dual-Canvas Pattern
-Every demo: two stacked `<canvas>` elements:
+### Canvas Patterns
+Two patterns coexist — check which one a demo uses before editing.
+
+**Legacy dual-canvas** (older demos: Gravity, Raycaster, Lissajous, RotatingSquares, CircularMotion):
+two stacked `<canvas>` elements:
 - `backgroundCanvas` (z-index: 1) — persistent/slow-update drawings
 - `foregroundCanvas` (z-index: 2) — per-frame clear + interactive/animated elements
 
 Both fetched by ID in `main.js`, sized to `canvasWidth × canvasHeight` (typically 800×800).
+
+**Modern single-canvas + HUD** (Boids, DoublePendulum, and all newer demos: FlowField,
+GameOfLife, Waves, ReactionDiffusion, Voronoi, Physarum, Cloth, Maze, Fourier):
+one full-window `#backgroundCanvas` (z-index 0) plus a right-side `.hud-panel` (HTML
+scaffold copied between demos). Canvas width comes from `window.getCanvasWidth()`
+(`JS/hudUtils.js`); each `main.js` defines a local `bindSlider(id, valId, parse, onChange, fmt)`
+helper to wire HUD sliders. Standard hotkeys: Space=pause, R=reset, S=save-PNG.
+Compute-heavy demos (Waves, ReactionDiffusion, Voronoi, Physarum) simulate on a low-res
+offscreen buffer + typed array, then `drawImage`-scale up to the visible canvas.
 
 ### Animation Loop
 `window.requestAnimationFrame(draw)` recursive. FPS throttling uses `Date.now()` deltas, not `setInterval`.
@@ -49,7 +61,8 @@ Both fetched by ID in `main.js`, sized to `canvasWidth × canvasHeight` (typical
 ### Shared Scripts (`JS/`)
 | File | Purpose |
 |------|---------|
-| `theme.js` | Dark/light theme toggle — loaded by demo pages that have a `#themeToggle` button |
+| `theme.js` | Dark/light theme toggle — loaded by demo pages that have a `#themeToggle` button; fires `themechange` event |
+| `hudUtils.js` | HUD panel toggle + `window.getCanvasWidth()` (subtracts 280px panel on desktop, full width ≤700px mobile). Loaded by modern-HUD demos |
 
 ### Root-level Index Scripts
 These are IIFE-style (not ES6 modules), loaded only by `index.html`:
@@ -68,7 +81,15 @@ DemoName/
   *.js            <- demo-specific classes (Particle, Raycaster, LissajousFigure, etc.)
 ```
 
-HTML links shared CSS from `../CSS/`, includes back-to-mainpage link. Templates: `BoilerplateCode/HTMLWithCanvas.html`, `BoilerplateCode/mainWithCanvas.js`.
+HTML links shared CSS from `../CSS/`, includes back-to-mainpage link. Templates: `BoilerplateCode/HTMLWithCanvas.html`, `BoilerplateCode/mainWithCanvas.js`. For a modern-HUD demo, copy `FlowField/` as the starting point.
+
+### Adding a Demo — registration in 3 places
+Easy to miss any one; a new demo only shows fully when all three are done:
+1. `DemoName/DemoName.html` + `main.js` (copy an existing modern-HUD demo).
+2. `index.html`: add an `<a class="card">` to `#demoGrid` **and** a `CAT_MAP` entry (href-slug → filter category).
+3. `cardpreviews.js`: append the href slug to `ORDER` **and** a matching draw fn to `DEMOS` — the two arrays are index-aligned (the `// N:` comments track each index).
+
+`card-num` in the card is cosmetic; the "demos" count badge auto-counts `.card` elements.
 
 ### Key Demos
 - **GravitySimulation** — N-body gravity via RK4; `particle.js` elastic collision physics; three wall modes (none/infinite/collision)
@@ -83,8 +104,18 @@ HTML links shared CSS from `../CSS/`, includes back-to-mainpage link. Templates:
 - **Boids** — Reynolds flocking; `Boid.js` does separation/alignment/cohesion steering, reuses `GravitySimulation/SpatialHash.js` for neighbour queries. Single-canvas modern-HUD pattern; fillRect trail-fade
 - **DoublePendulum** — two modes (radio-switched): chaotic double pendulum (`DoublePendulum.js`, inline RK4 over the 4-D state, overlaid perturbed copies) and analytic pendulum-wave bank (`PendulumWave.js`). Single-canvas modern-HUD pattern
 - **pr0xmas** — holiday demo. **Outlier**: uses p5.js (loaded locally), not ES6 modules
+- **FlowField** — Simplex-noise flow field; particle streamlines with fade trails. Imports `Utils/simplexNoise.js` as a side effect (sets `window.SimplexNoise`). Modern-HUD
+- **GameOfLife** — Conway CA; paintable Uint8Array grid, Gosper glider gun preset, wrap toggle. Modern-HUD
+- **Waves** — ripple-tank interference; sum-of-circular-waves on offscreen buffer. Modern-HUD
+- **ReactionDiffusion** — Gray-Scott; double-buffered Float32 grids, feed/kill presets, brush seed. Modern-HUD
+- **Voronoi** — moving sites; per-pixel nearest-site cells + Bowyer-Watson Delaunay mesh (`Delaunay.js`). Modern-HUD
+- **Physarum** — slime-mould agents; sense-and-turn on a diffusing Float32 trail map. Modern-HUD
+- **Cloth** — Verlet spring mesh; grab/drag/tear, constraint relaxation, `hLink` map for O(1) quad cull. Modern-HUD
+- **Maze** — recursive-backtracker gen + animated A*/Dijkstra/BFS/DFS (binary-heap open set in `main.js`). Modern-HUD
+- **Fourier** — DFT of a drawn/preset closed path → epicycle chain re-traces it. Modern-HUD
 
 ### CSS (`CSS/`)
+- `theme.css` — main stylesheet (17KB): theme CSS vars + dark/light, HUD panel/nav/slider/toggle/backdrop classes used by modern demos
 - `fontStyles.css` — typography
 - `Slider.css` — styled range inputs
 - `horizontalDiv.css` — flex layout for control panels
