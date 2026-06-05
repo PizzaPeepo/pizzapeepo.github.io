@@ -67,7 +67,7 @@ function flattenNode(node) {
 function flattenTree() { nNodes = 0; flattenNode(tree.root); }
 
 // ── render uniforms ──
-const sizeU = uniform(4.0);        // sphere radius, render (= sim) units
+const sizeU = uniform(1.0);        // sphere radius, render (= sim) units
 const speedScale = uniform(0.0125); // maps speed → color ramp
 
 // ── runtime ──
