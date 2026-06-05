@@ -376,20 +376,20 @@
     // 18: Cloth — sagging hanging net
     function (ctx, w, h, t, hover) {
       var cols = 8, rows = 6, sx = w / (cols + 1), top = h * 0.18;
-      function sag(c, r) {
-        var x = sx * (c + 1);
-        var droop = Math.sin((c / cols) * Math.PI) * (r / rows) * h * 0.28;
-        var sway = Math.sin(t * 1.2 + r * 0.5) * 3 * (r / rows);
-        var y = top + r * (h * 0.62 / rows) + droop;
+      function sag(col, row) {
+        var x = sx * (col + 1);
+        var droop = Math.sin((col / cols) * Math.PI) * (row / rows) * h * 0.28;
+        var sway = Math.sin(t * 1.2 + row * 0.5) * 3 * (row / rows);
+        var y = top + row * (h * 0.62 / rows) + droop;
         return [x + sway, y];
       }
       ctx.lineWidth = 1;
       ctx.strokeStyle = g(0.4);
-      for (var r = 0; r <= rows; r++) {
-        for (var c = 0; c <= cols; c++) {
-          var p = sag(c, r);
-          if (c < cols) { var q = sag(c + 1, r); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); }
-          if (r < rows) { var u = sag(c, r + 1); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.strokeStyle = c % 2 ? c(0.3) : g(0.35); ctx.lineTo(u[0], u[1]); ctx.stroke(); ctx.strokeStyle = g(0.4); }
+      for (var row = 0; row <= rows; row++) {
+        for (var col = 0; col <= cols; col++) {
+          var p = sag(col, row);
+          if (col < cols) { var q = sag(col + 1, row); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); }
+          if (row < rows) { var u = sag(col, row + 1); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.strokeStyle = col % 2 ? c(0.3) : g(0.35); ctx.lineTo(u[0], u[1]); ctx.stroke(); ctx.strokeStyle = g(0.4); }
         }
       }
     },

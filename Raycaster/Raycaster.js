@@ -1,6 +1,10 @@
 import Line2D from "./Line2D.js";
 import Vector2D from "../Utils/Vector2D.js";
 
+// Ray length is arbitrary-but-large: it only needs to exceed any canvas dimension so every
+// ray reaches a wall before being cut at its closest intersection.
+const MAX_RAY_LENGTH = 10000;
+
 export default class Raycaster{
     constructor(tempPosition, tempRayCount){
         this._position = new Vector2D(tempPosition.x, tempPosition.y);
@@ -33,7 +37,7 @@ export default class Raycaster{
     ConstructRays(){
         // Raylength arbitrary large => just has to be larger then any canvas size
         // initial vector points straight up
-        const initialVector = new Vector2D(0, 10000);
+        const initialVector = new Vector2D(0, MAX_RAY_LENGTH);
         const delta_alpha = 2 * Math.PI / this.rayCount;
         for(let i = 0; i < this.rayCount; i++){
             const rotatedRay = new Line2D(this.position, initialVector.RotateCW(i*delta_alpha));
@@ -51,7 +55,7 @@ export default class Raycaster{
         let intersectionPoints = [];
         for(let i = 0; i < this.rays.length; i++){
             let closestIntersectionPoint;
-            let shortestDistance = 100000; // arbitrary large number
+            let shortestDistance = Infinity;
             for(let j = 0; j < walls.length; j++){
                 // save distance of all intersection points of all walls and only push the one that has the smallest distance
                 const intersectionPoint = this.rays[i].GetIntersectionPointWith(walls[j]);
@@ -74,7 +78,7 @@ export default class Raycaster{
     }
 
     CutRaysAtClosestIntersectionPoint(intersectionPoints){
-        if(intersectionPoints.length != this.rays.length) { 
+        if(intersectionPoints.length !== this.rays.length) { 
             console.log("Problem at raycaster.js method: CutRaysAtClosestIntersectionPoint, number of intersectionPoints is not equal to number of rays!");
             return; 
         }

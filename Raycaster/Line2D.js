@@ -4,7 +4,7 @@ import { epsilon } from "../Utils/helpers.js";
 export default class Line2D {
 	constructor(tempOffsetVec, tempDirectionVec) {
 		// objects are passed by REFERENCE in javascript (just as in C#)! => new Vector2D
-		if (!tempOffsetVec instanceof Vector2D || !(tempDirectionVec instanceof Vector2D)) {
+		if (!(tempOffsetVec instanceof Vector2D) || !(tempDirectionVec instanceof Vector2D)) {
 			console.log("Input parameter for Line is not a Vector2D!: " + typeof tempDirectionVec);
 			console.log(tempDirectionVec);
 		}
@@ -65,34 +65,6 @@ export default class Line2D {
 
 	GetPointOnLine(t) {
 		return new Vector2D(this.offset.x + t * this.direction.x, this.offset.y + t * this.direction.y);
-	}
-
-	static GetRandomLine2D(xmin, xmax, ymin, ymax) {
-		const offset = Vector2D.GetRandomVector(xmin, xmax, ymin, ymax);
-		const endPoint = Vector2D.GetRandomVector(xmin, xmax, ymin, ymax);
-		const direction = Vector2D.GetVectorBetween(offset, endPoint);
-		return new Line2D(offset, direction);
-	}
-
-	static GetRandomLines2D(numberOfLines, xmin, xmax, ymin, ymax) {
-		let lines = [];
-		// add random lines inside canvas
-		for (let i = 0; i < numberOfLines; i++) {
-			lines.push(this.GetRandomLine2D(xmin, xmax, ymin, ymax));
-		}
-		return lines;
-	}
-
-	static GetWallLines2D(canvasWidth, canvasHeight) {
-		let lines = [];
-		const origin = new Vector2D(0, 0);
-		const right = new Vector2D(canvasWidth, 0);
-		const down = new Vector2D(0, canvasHeight);
-		lines.push(new Line2D(origin, right));
-		lines.push(new Line2D(origin, down));
-		lines.push(new Line2D(right, down));
-		lines.push(new Line2D(down, right));
-		return lines;
 	}
 
 	Draw(context) {

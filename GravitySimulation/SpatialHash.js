@@ -1,4 +1,7 @@
 // Spatial hash grid for O(n) average-case collision broadphase.
+// Hash key: folds a 2D cell coordinate into one number. The multiplier must exceed the
+// largest expected |cy| so distinct (cx, cy) pairs never collide on the same key.
+const HASH_KEY_MULTIPLIER = 10000;
 // cellSize should be >= 2 * max particle radius so overlapping particles always share a cell or adjacent cells.
 export class SpatialHash {
 	constructor(cellSize) {
@@ -12,7 +15,7 @@ export class SpatialHash {
 	}
 
 	_key(cx, cy) {
-		return cx * 10000 + cy;
+		return cx * HASH_KEY_MULTIPLIER + cy;
 	}
 
 	insert(index, x, y) {

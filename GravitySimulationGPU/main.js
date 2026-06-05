@@ -14,6 +14,7 @@ import * as THREE from 'three/webgpu';
 import { Fn, attribute, positionLocal, uniform, color } from 'three/tsl';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Octree } from './Octree.js';
+import { onWindowResize } from "../Utils/ResizeManager.js";
 
 // ── config ──
 const MAX = 65536;            // array capacity = largest selectable count
@@ -217,7 +218,7 @@ async function init() {
 	controls.enableDamping = true;
 
 	initDisk();
-	window.addEventListener('resize', onResize);
+	onWindowResize(onResize);
 	wireUI();
 	renderer.setAnimationLoop(animate);
 }

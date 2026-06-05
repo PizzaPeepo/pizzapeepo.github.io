@@ -2,6 +2,9 @@ import * as helpers from "../Utils/helpers.js";
 import Vector2D from "../Utils/Vector2D.js";
 import { Rectangle } from "../Utils/rectangle.js";
 import { Quadtree } from "./Quadtree.js";
+import { onThemeChange } from "../Utils/ThemeManager.js";
+import { onWindowResize } from "../Utils/ResizeManager.js";
+import { setupCanvases } from "../Utils/CanvasManager.js";
 
 // #region global variables
 var canvasHeight = window.innerHeight;
@@ -17,18 +20,10 @@ var foregroundCanvas = document.getElementById("foregroundCanvas");
 var fgCtx = foregroundCanvas.getContext("2d");
 
 function applyCanvasSize() {
-	backgroundCanvas.width  = canvasWidth;
-	backgroundCanvas.height = canvasHeight;
-	backgroundCanvas.style.width  = canvasWidth + 'px';
-	backgroundCanvas.style.height = canvasHeight + 'px';
-	bgCtx.strokeStyle = whiteLineStrokeStyle;
-	bgCtx.lineWidth = 1;
-	foregroundCanvas.width  = canvasWidth;
-	foregroundCanvas.height = canvasHeight;
-	foregroundCanvas.style.width  = canvasWidth + 'px';
-	foregroundCanvas.style.height = canvasHeight + 'px';
-	fgCtx.strokeStyle = whiteLineStrokeStyle;
-	fgCtx.lineWidth = 1;
+	setupCanvases([
+		{ canvas: backgroundCanvas, configure: (ctx) => { ctx.strokeStyle = whiteLineStrokeStyle; ctx.lineWidth = 1; } },
+		{ canvas: foregroundCanvas, configure: (ctx) => { ctx.strokeStyle = whiteLineStrokeStyle; ctx.lineWidth = 1; } },
+	], canvasWidth, canvasHeight);
 }
 applyCanvasSize();
 // #endregion
@@ -42,14 +37,11 @@ function applyThemeColors(isLight) {
 	fgCtx.strokeStyle = drawColor;
 	bgCtx.strokeStyle = drawColor;
 }
-applyThemeColors(document.documentElement.classList.contains('light'));
-document.addEventListener('themechange', function(e) {
-	applyThemeColors(e.detail.isLight);
-});
+onThemeChange(applyThemeColors);
 // #endregion
 
 // #region resize
-window.addEventListener('resize', function() {
+onWindowResize(function() {
 	canvasWidth  = window.getCanvasWidth();
 	canvasHeight = window.innerHeight;
 	applyCanvasSize();
@@ -57,7 +49,7 @@ window.addEventListener('resize', function() {
 	if (!window._hudToggling) {
 		quadtree = new Quadtree(boundary, 4);
 		for (let i = 0; i < 10; i++) {
-			quadtree.insert(new helpers.Point2D(helpers.GetRandomInt(canvasWidth), helpers.GetRandomInt(canvasHeight)));
+			quadtree.insert(new Vector2D(helpers.GetRandomInt(canvasWidth), helpers.GetRandomInt(canvasHeight)));
 		}
 	}
 });
@@ -134,7 +126,7 @@ let quadtree = new Quadtree(boundary, 4);
 let area = new Rectangle(75, 190, 350, 200);
 
 for (let i = 0; i < 10; i++) {
-	let p = new helpers.Point2D(helpers.GetRandomInt(canvasWidth), helpers.GetRandomInt(canvasHeight));
+	let p = new Vector2D(helpers.GetRandomInt(canvasWidth), helpers.GetRandomInt(canvasHeight));
 	quadtree.insert(p);
 }
 
@@ -147,7 +139,7 @@ function draw() {
 	}
 
 	if (isLeftMouseDown) {
-		quadtree.insert(new helpers.Point2D(mouse.x, mouse.y));
+		quadtree.insert(new Vector2D(mouse.x, mouse.y));
 	}
 
 	if (isMiddleMouseDown) {
@@ -158,14 +150,10 @@ function draw() {
 	let querried = quadtree.queryArea(area);
 	quadtree.draw(fgCtx, drawColor);
 
-	fgCtx.beginPath();
 	helpers.drawRectangle(fgCtx, area, "rgba(0,255,0,1.0)");
-	fgCtx.stroke();
 
 	querried.forEach((p) => {
-		fgCtx.beginPath();
 		helpers.drawFilledCircle(fgCtx, p, 2, "rgba(0,255,0,1.0)", "rgba(0,255,0,1.0)");
-		fgCtx.stroke();
 	});
 
 	if (document.hidden) return;

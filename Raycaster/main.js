@@ -1,19 +1,24 @@
 import Vector2D from "../Utils/Vector2D.js";
 import Line2D from "./Line2D.js";
+import { GetRandomLines2D, GetWallLines2D } from "./LineFactory.js";
 import Raycaster from "./Raycaster.js";
 import "../Utils/simplexNoise.js";
 import * as helpers from "../Utils/helpers.js";
+import { onThemeChange } from "../Utils/ThemeManager.js";
+import { onWindowResize } from "../Utils/ResizeManager.js";
 
 // #region global variables
 var canvas_width = window.getCanvasWidth();
 var canvas_height = window.innerHeight;
 
 var numberOfRandomWalls = 6;
+// per-frame advance through simplex noise for the idle auto-wander of the ray source
+const NOISE_TIME_STEP = 0.0005;
 var raycount = 200;
 var randomWalls = [];
 var userWalls = [];
 var walls = [];
-let canvasWalls = Line2D.GetWallLines2D(canvas_width, canvas_height);
+let canvasWalls = GetWallLines2D(canvas_width, canvas_height);
 var initialRaycasterPosition = new Vector2D(Math.floor(canvas_width / 2), Math.floor(canvas_height / 2));
 var rayCaster = new Raycaster(initialRaycasterPosition, raycount);
 
@@ -37,7 +42,7 @@ function rebuildWalls() {
 }
 
 function GetAndSetRandomLinesAndWalls() {
-	randomWalls = Line2D.GetRandomLines2D(numberOfRandomWalls, 100, canvas_width - 100, 100, canvas_height - 100);
+	randomWalls = GetRandomLines2D(numberOfRandomWalls, 100, canvas_width - 100, 100, canvas_height - 100);
 	rebuildWalls();
 }
 
@@ -88,18 +93,15 @@ function applyThemeColors(light) {
 	wallColor = light ? 'rgba(20, 10, 0, 1.0)'  : 'rgba(255, 255, 255, 1.0)';
 	rayColor  = light ? 'rgba(20, 10, 0, 0.5)'  : 'rgba(255, 255, 255, 0.6)';
 }
-applyThemeColors(document.documentElement.classList.contains('light'));
-document.addEventListener('themechange', function(e) {
-	applyThemeColors(e.detail.isLight);
-});
+onThemeChange(applyThemeColors);
 // #endregion
 
 // #region resize
-window.addEventListener('resize', function() {
+onWindowResize(function() {
 	canvas_width  = window.getCanvasWidth();
 	canvas_height = window.innerHeight;
 	applyCanvasSize();
-	canvasWalls = Line2D.GetWallLines2D(canvas_width, canvas_height);
+	canvasWalls = GetWallLines2D(canvas_width, canvas_height);
 	rayCaster.position.x = Math.floor(canvas_width / 2);
 	rayCaster.position.y = Math.floor(canvas_height / 2);
 	if (!window._hudToggling) GetNewRandomLines();
@@ -367,8 +369,8 @@ function draw() {
 
 		let tempx = rayCaster.position.x + simplex.noise2D(simplexOffsetX, simplexOffsetY) * 200;
 		let tempy = rayCaster.position.y + simplex.noise2D(simplexOffsetY, simplexOffsetX) * 200;
-		simplexOffsetX += 0.0005;
-		simplexOffsetY += 0.0005;
+		simplexOffsetX += NOISE_TIME_STEP;
+		simplexOffsetY += NOISE_TIME_STEP;
 
 		if (tempx < 0 || tempx > canvas_width || tempy < 0 || tempy > canvas_height) {
 			rayCaster.position.x = Math.floor(canvas_width / 2);

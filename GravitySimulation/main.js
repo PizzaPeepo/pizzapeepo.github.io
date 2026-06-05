@@ -1,9 +1,13 @@
 import * as helpers from "../Utils/helpers.js";
 import * as RungeKutta from "../Utils/RungeKutta.js";
 import Particle from "./particle.js";
+import { GenerateRandomParticle, AddNRandomParticles } from "./ParticleFactory.js";
 import Vector2D from "../Utils/Vector2D.js";
 import { BarnesHutTree } from "./BarnesHutTree.js";
 import { SpatialHash } from "./SpatialHash.js";
+import { onThemeChange } from "../Utils/ThemeManager.js";
+import { onWindowResize } from "../Utils/ResizeManager.js";
+import { setupCanvases } from "../Utils/CanvasManager.js";
 
 // #region global variables
 var canvasHeight = window.innerHeight;
@@ -21,16 +25,16 @@ let fpsLastDrawTime = 0;
 var particleCount = 20;
 var particles = [];
 var dt = 0.01;
-const TRAIL_FADE = 0.04;
+const TRAIL_FADE_SPEED = 0.04;
 const MAX_TRAIL_SPEED = 60;
 
 let repullsionColors = [];
 let attractionColors = [];
-const LUT_SIZE = 64;
+const COLOR_LUT_SIZE = 64;
 let attractionLUT = [];
 let repulsionLUT = [];
 let sunColor;
-let fadeColor = 'rgba(24,18,14,' + TRAIL_FADE + ')';
+let fadeColor = 'rgba(24,18,14,' + TRAIL_FADE_SPEED + ')';
 
 const themeColors = {
 	dark: {
@@ -59,21 +63,23 @@ let accelBuf = new Float64Array(6000 * 2);
 let _sh = null, _shCellSize = 0;
 
 let collisionSparksEnabled = true;
-// excitation field — impact energy that decays + propagates → collision color waves
-const EXC_DECAY  = 0.96;   // per-frame fade (wave trailing edge)
-const EXC_SOFT   = 1.8;    // impact deadzone — soft touches below this add nothing
-const EXC_GAIN   = 0.25;   // impact→excitation conversion above deadzone
-const EXC_SPREAD = 0.75;   // per-hop transfer (<1 → finite wave radius ∝ impact)
-const EXC_FLOOR  = 0.04;   // min excitation that conducts (resting clumps stay dark)
-const EXC_GAMMA  = 3.4;    // intensity curve: >1 crushes soft touches, keeps hard impacts vivid
-const EXC_HUE_SWEEP = 720; // hue deg: radial gradient center to edge across half-diagonal (>360 wraps to bands)
-const EXC_VIS    = 1.3;    // perceptual alpha boost — moderate impacts visible, soft still ~0
-const HUE_SHIFT_SPEED = 30; // degrees/sec — shifts entire hue gradient over time
+// Excitation field — impact energy that decays + propagates into collision colour waves.
+const EXCITATION = Object.freeze({
+	DECAY: 0.96, // per-frame fade (wave trailing edge)
+	SOFT: 1.8, // impact deadzone — soft touches below this add nothing
+	GAIN: 0.25, // impact→excitation conversion above the deadzone
+	SPREAD: 0.75, // per-hop transfer (<1 → finite wave radius ∝ impact)
+	FLOOR: 0.04, // min excitation that still conducts (resting clumps stay dark)
+	GAMMA: 3.4, // intensity curve: >1 crushes soft touches, keeps hard impacts vivid
+	HUE_SWEEP: 720, // hue degrees across the half-diagonal (>360 wraps into bands)
+	VIS: 1.3, // perceptual alpha boost — moderate impacts visible, soft still ~0
+	HUE_SHIFT_SPEED: 30, // degrees/sec — shifts the entire hue gradient over time
+});
 let glowEnabled = true;
 let forceBrushAttract = false;
 let forceBrushRepel = false;
-const BRUSH_STRENGTH = 5e6;
-const BRUSH_SOFT2 = 2500;
+const BRUSH_FORCE_STRENGTH = 5e6;
+const BRUSH_SOFT_RADIUS_SQ = 2500;
 let attractionSprites = null, repulsionSprites = null;
 
 var initial_gravitationalConst = 50;
@@ -124,7 +130,7 @@ function GenerateRandomizedParticles(particleCount) {
 			sunMass
 		)
 	);
-	particles = Particle.AddNRandomParticles(
+	particles = AddNRandomParticles(
 		particles,
 		particleCount - 1,
 		xmin,
@@ -180,35 +186,27 @@ var foregroundCanvas = document.getElementById("foregroundCanvas");
 var fgCtx = foregroundCanvas.getContext("2d");
 
 function applyCanvasSize() {
-	backgroundCanvas.width  = canvasWidth;
-	backgroundCanvas.height = canvasHeight;
-	backgroundCanvas.style.width  = canvasWidth  + 'px';
-	backgroundCanvas.style.height = canvasHeight + 'px';
-	bgCtx.strokeStyle = whiteLineStrokeStyle;
-	bgCtx.lineWidth = 2;
-	foregroundCanvas.width  = canvasWidth;
-	foregroundCanvas.height = canvasHeight;
-	foregroundCanvas.style.width  = canvasWidth  + 'px';
-	foregroundCanvas.style.height = canvasHeight + 'px';
-	fgCtx.strokeStyle = whiteLineStrokeStyle;
-	fgCtx.lineWidth = 2;
+	setupCanvases([
+		{ canvas: backgroundCanvas, configure: (ctx) => { ctx.strokeStyle = whiteLineStrokeStyle; ctx.lineWidth = 2; } },
+		{ canvas: foregroundCanvas, configure: (ctx) => { ctx.strokeStyle = whiteLineStrokeStyle; ctx.lineWidth = 2; } },
+	], canvasWidth, canvasHeight);
 }
 applyCanvasSize();
 
-window.addEventListener('resize', function () {
+onWindowResize(function () {
 	canvasWidth  = window.getCanvasWidth();
 	canvasHeight = window.innerHeight;
 	applyCanvasSize();
 	if (!window._hudToggling) resetCanvas = true;
 });
 
-// Bake a palette into LUT_SIZE ready-to-use rgba strings, indexed by a clamped [0,1] value.
+// Bake a palette into COLOR_LUT_SIZE ready-to-use rgba strings, indexed by a clamped [0,1] value.
 // Lets the hot draw/trail loops index a string instead of allocating a ColorRGBA (+ its string)
 // per particle per frame. 64 steps is visually continuous.
 function buildColorLUT(palette) {
-	const lut = new Array(LUT_SIZE);
-	for (let i = 0; i < LUT_SIZE; i++) {
-		lut[i] = helpers.ColorRGBA.LinearInterpolateColors(palette, i / (LUT_SIZE - 1)).RGBA;
+	const lut = new Array(COLOR_LUT_SIZE);
+	for (let i = 0; i < COLOR_LUT_SIZE; i++) {
+		lut[i] = helpers.ColorRGBA.LinearInterpolateColors(palette, i / (COLOR_LUT_SIZE - 1)).RGBA;
 	}
 	return lut;
 }
@@ -216,8 +214,8 @@ function buildColorLUT(palette) {
 // Pre-bake one 32×32 OffscreenCanvas per LUT slot: radial gradient from full color at center to
 // transparent at edge. drawImage scales to particle glow radius, so no per-frame gradient alloc.
 function buildGlowSprites(lut) {
-	const sprites = new Array(LUT_SIZE);
-	for (let i = 0; i < LUT_SIZE; i++) {
+	const sprites = new Array(COLOR_LUT_SIZE);
+	for (let i = 0; i < COLOR_LUT_SIZE; i++) {
 		const off = new OffscreenCanvas(32, 32);
 		const ctx = off.getContext('2d');
 		const c = lut[i];
@@ -245,14 +243,11 @@ function applyThemeColors(isLight) {
 	attractionSprites = buildGlowSprites(attractionLUT);
 	repulsionSprites  = buildGlowSprites(repulsionLUT);
 	fadeColor = isLight
-		? 'rgba(245,237,224,' + TRAIL_FADE + ')'
-		: 'rgba(24,18,14,' + TRAIL_FADE + ')';
+		? 'rgba(245,237,224,' + TRAIL_FADE_SPEED + ')'
+		: 'rgba(24,18,14,' + TRAIL_FADE_SPEED + ')';
 	bgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 }
-applyThemeColors(document.documentElement.classList.contains('light'));
-document.addEventListener('themechange', function (e) {
-	applyThemeColors(e.detail.isLight);
-});
+onThemeChange(applyThemeColors);
 // #endregion
 
 // #region Inputs
@@ -437,7 +432,7 @@ particleCountSlider.oninput = function () {
 
 	let overlappingCounter = 0;
 	while (particleCount < targetCount) {
-		const particle = Particle.GenerateRandomParticle(
+		const particle = GenerateRandomParticle(
 			xmin, xmax, ymin, ymax,
 			vxMin, vxMax, vyMin, vyMax,
 			radiusMin, radiusMax, massMin, massMax
@@ -841,6 +836,7 @@ let isMiddleMouseDown = false; // button 1
 let isRightMouseDown = false; // button 2
 let mouse = new Vector2D(0, 0);
 let dragStart = null;
+let sunFollowPos = null; // eased sun target while right-dragging (was Particle._lastMousePos)
 
 function SetPointerOnCanvas(myBool) {
 	if (pointerOnCanvas === !myBool) {
@@ -890,6 +886,7 @@ foregroundCanvas.addEventListener("mousedown", function (event) {
 		}
 		case 2: {
 			isRightMouseDown = true;
+			sunFollowPos = { x: particles[0].position.x, y: particles[0].position.y };
 			break;
 		}
 	}
@@ -937,13 +934,13 @@ foregroundCanvas.addEventListener("mousemove", function (event) {
 //#endregion
 // #endregion
 
-// radial canvas-position to hue: smooth gradient from center out, EXC_HUE_SWEEP deg across the half-diagonal
+// radial canvas-position to hue: smooth gradient from center out, EXCITATION.HUE_SWEEP deg across the half-diagonal
 function excHueAt(p) {
 	const dx = p.position.x - canvasWidth * 0.5, dy = p.position.y - canvasHeight * 0.5;
 	const r = Math.sqrt(dx * dx + dy * dy);
 	const maxR = 0.5 * Math.sqrt(canvasWidth * canvasWidth + canvasHeight * canvasHeight) || 1;
-	const timeShift = (Date.now() * HUE_SHIFT_SPEED / 1000) % 360;
-	return (r / maxR * EXC_HUE_SWEEP + timeShift) % 360;
+	const timeShift = (Date.now() * EXCITATION.HUE_SHIFT_SPEED / 1000) % 360;
+	return (r / maxR * EXCITATION.HUE_SWEEP + timeShift) % 360;
 }
 
 function resolveCollision(i, k) {
@@ -966,9 +963,9 @@ function resolveCollision(i, k) {
 		const m1 = (2 * pk.mass) / totalMass, m2 = (2 * pi.mass) / totalMass;
 		pi.velocity.x = v1x - m1 * approach * nx; pi.velocity.y = v1y - m1 * approach * ny;
 		pk.velocity.x = v2x + m2 * approach * nx; pk.velocity.y = v2y + m2 * approach * ny;
-		if (collisionSparksEnabled && !pi._isHeavyParticle && !pk._isHeavyParticle) {
+		if (collisionSparksEnabled && !pi.isHeavyParticle && !pk.isHeavyParticle) {
 			// generation — soft-knee: soft touches add ~0, hard hits saturate toward 1
-			const gain = Math.max(0, Math.abs(approach) - EXC_SOFT) * EXC_GAIN;
+			const gain = Math.max(0, Math.abs(approach) - EXCITATION.SOFT) * EXCITATION.GAIN;
 			if (gain > 0) {
 				pi._hue = excHueAt(pi);
 				pk._hue = excHueAt(pk);
@@ -977,14 +974,14 @@ function resolveCollision(i, k) {
 			}
 		}
 	}
-	if (collisionSparksEnabled && !pi._isHeavyParticle && !pk._isHeavyParticle) {
+	if (collisionSparksEnabled && !pi.isHeavyParticle && !pk.isHeavyParticle) {
 		// propagation — touching neighbors conduct heat (old _e → _eNext): 1 hop/frame
-		if ((pi._e || 0) > EXC_FLOOR) {
-			const cand = pi._e * EXC_SPREAD;
+		if ((pi._e || 0) > EXCITATION.FLOOR) {
+			const cand = pi._e * EXCITATION.SPREAD;
 			if (cand > (pk._eNext || 0)) { pk._eNext = cand; pk._hue = excHueAt(pk); }
 		}
-		if ((pk._e || 0) > EXC_FLOOR) {
-			const cand = pk._e * EXC_SPREAD;
+		if ((pk._e || 0) > EXCITATION.FLOOR) {
+			const cand = pk._e * EXCITATION.SPREAD;
 			if (cand > (pi._eNext || 0)) { pi._eNext = cand; pi._hue = excHueAt(pi); }
 		}
 	}
@@ -1122,23 +1119,9 @@ function startAnimating(fps) {
 	draw();
 }
 
-function draw() {
-	// stop
-	if (stop || document.hidden) {
-		if (document.hidden && !stop) document.addEventListener(
-			'visibilitychange', () => { if (!document.hidden) draw(); }, { once: true });
-		return;
-	}
-
-	// request another frame
-	window.requestAnimationFrame(draw);
-
-	if (resetCanvas) {
-		GenerateRandomizedParticles(particleCount);
-		then = Date.now();
-		resetCanvas = false;
-	}
-
+// Advance the simulation one fixed step: leapfrog integration, collisions, wall handling,
+// force recomputation (Barnes-Hut or direct) and the optional force brush. Runs every frame.
+function stepPhysics() {
 	// Leapfrog velocity Verlet: half-kick → drift → recompute accel → half-kick
 	// 1 force evaluation per step (vs RK4's 4), symplectic → conserves energy for orbits
 	for (const p of particles) {
@@ -1154,7 +1137,7 @@ function draw() {
 	// excitation field — decay previous frame into _eNext (double-buffered → clean 1-hop wave)
 	if (collisionSparksEnabled) {
 		// hue now positional via excHueAt() — no global drift
-		for (let i = 1; i < particles.length; i++) particles[i]._eNext = (particles[i]._e || 0) * EXC_DECAY;
+		for (let i = 1; i < particles.length; i++) particles[i]._eNext = (particles[i]._e || 0) * EXCITATION.DECAY;
 	}
 
 	if (particleCollisionsEnabled) {
@@ -1284,13 +1267,184 @@ function draw() {
 		for (let i = 1; i < particles.length; i++) {
 			const dx = mouse.x - particles[i].position.x;
 			const dy = mouse.y - particles[i].position.y;
-			const r2 = dx * dx + dy * dy + BRUSH_SOFT2;
+			const r2 = dx * dx + dy * dy + BRUSH_SOFT_RADIUS_SQ;
 			const r  = Math.sqrt(r2);
-			const f  = sign * BRUSH_STRENGTH * dtNum / (r2 * r);
+			const f  = sign * BRUSH_FORCE_STRENGTH * dtNum / (r2 * r);
 			particles[i].velocity.x += f * dx;
 			particles[i].velocity.y += f * dy;
 		}
 	}
+}
+
+// Render one frame: trails, glows, particle bodies, collision sparks, sun coronae and the
+// pointer/drag overlays. Throttled to the target FPS by draw().
+function renderScene() {
+	fgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+	// fade bg canvas toward background color, then stamp current positions as trail dots
+	bgCtx.fillStyle = fadeColor;
+	bgCtx.fillRect(0, 0, canvasWidth, canvasHeight);
+	const trailLUT = gravitationalConst >= 0 ? attractionLUT : repulsionLUT;
+	for (let pi = 0; pi < particles.length; pi++) {
+		const particle = particles[pi];
+		if (particle.isHeavyParticle) continue;
+		const vx = particle.velocity.x, vy = particle.velocity.y;
+		const speedPct = Math.min(1, Math.sqrt(vx * vx + vy * vy) / MAX_TRAIL_SPEED);
+		bgCtx.fillStyle = trailLUT[(speedPct * (COLOR_LUT_SIZE - 1)) | 0];
+		bgCtx.fillRect(particle.position.x - 1, particle.position.y - 1, 2, 2);
+	}
+
+	// draw particles — glow pass (additive blend via lighter composite)
+	const drawLUT    = gravitationalConst >= 0 ? attractionLUT    : repulsionLUT;
+	const drawSprites = gravitationalConst >= 0 ? attractionSprites : repulsionSprites;
+	if (glowEnabled && drawSprites) {
+		fgCtx.globalCompositeOperation = 'lighter';
+		for (let pi = 1; pi < particles.length; pi++) {
+			const particle = particles[pi];
+			const accLen = particle.acceleration.length;
+			const slot = Math.min(COLOR_LUT_SIZE - 1, accLen > 100 ? COLOR_LUT_SIZE - 1 : (accLen / 100 * (COLOR_LUT_SIZE - 1)) | 0);
+			const gr = particle.radius * 3;
+			fgCtx.drawImage(drawSprites[slot], particle.position.x - gr, particle.position.y - gr, gr * 2, gr * 2);
+		}
+		fgCtx.globalCompositeOperation = 'source-over';
+	}
+
+	// hard core pass — solid white bodies
+	for (let pi = 1; pi < particles.length; pi++) {
+		particles[pi].Draw(fgCtx, whiteLineStrokeStyle, whiteLineStrokeStyle);
+	}
+
+	// collision color overlay — energy from impact cascades — soft touches stay dark
+	if (collisionSparksEnabled) {
+		for (let pi = 1; pi < particles.length; pi++) {
+			const particle = particles[pi];
+			const e = particle._e || 0;
+			if (e < 0.02) continue;                       // soft / faint → invisible
+			const d = Math.min(1, Math.pow(e, EXCITATION.GAMMA) * EXCITATION.VIS);           // perceptual intensity
+			fgCtx.globalAlpha = d;                        // brightness = energy → wavefront ridge
+			const sat   = Math.round(40 + 40 * d);        // peaks at 80% — pastel range
+			const light = Math.round(90 - 15 * d);        // 75–90% lightness — always pale
+			const hsl = `hsl(${particle._hue},${sat}%,${light}%)`;
+			particle.Draw(fgCtx, hsl, hsl);
+		}
+		fgCtx.globalAlpha = 1;
+	}
+
+	// sun(s) — radial gradient corona
+	for (let pi = 0; pi < particles.length; pi++) {
+		if (particles[pi].isHeavyParticle) {
+			const particle = particles[pi];
+			if (pi === 0) {
+				const dist = Math.floor(helpers.Distance(particle.position.x, particle.position.y, mouse.x, mouse.y));
+				if (dist < 50 && particle.radius < sunRadius * 1.2) particle.radius += 0.2;
+				else if (particle.radius > sunRadius) particle.radius -= 0.2;
+			}
+			drawSunCorona(particle);
+		}
+	}
+
+	if (isRightMouseDown && sunFollowPos) {
+		sunFollowPos.x += (mouse.x - sunFollowPos.x) * 0.05;
+		sunFollowPos.y += (mouse.y - sunFollowPos.y) * 0.05;
+		particles[0].position.x = sunFollowPos.x;
+		particles[0].position.y = sunFollowPos.y;
+	}
+
+	if (isLeftMouseDown && dragStart) {
+		const dx = mouse.x - dragStart.x;
+		const dy = mouse.y - dragStart.y;
+		fgCtx.save();
+		fgCtx.strokeStyle = 'rgba(255,255,255,0.8)';
+		fgCtx.fillStyle = 'rgba(255,255,255,0.8)';
+		fgCtx.lineWidth = 2;
+		fgCtx.beginPath();
+		fgCtx.arc(dragStart.x, dragStart.y, 4, 0, Math.PI * 2);
+		fgCtx.fill();
+		const dist = Math.sqrt(dx * dx + dy * dy);
+		if (dist > 5) {
+			const angle = Math.atan2(dy, dx);
+			const headLen = 10;
+			fgCtx.beginPath();
+			fgCtx.moveTo(dragStart.x, dragStart.y);
+			fgCtx.lineTo(mouse.x, mouse.y);
+			fgCtx.stroke();
+			fgCtx.beginPath();
+			fgCtx.moveTo(mouse.x, mouse.y);
+			fgCtx.lineTo(mouse.x - headLen * Math.cos(angle - Math.PI / 6), mouse.y - headLen * Math.sin(angle - Math.PI / 6));
+			fgCtx.lineTo(mouse.x - headLen * Math.cos(angle + Math.PI / 6), mouse.y - headLen * Math.sin(angle + Math.PI / 6));
+			fgCtx.closePath();
+			fgCtx.fill();
+
+			// trajectory preview — forward simulate under sun gravity
+			const simDt2 = parseFloat(dt) * 2;
+			let sx = dragStart.x, sy = dragStart.y;
+			let svx = dx, svy = dy;
+			fgCtx.fillStyle = 'rgba(255,255,255,0.22)';
+			for (let step = 0; step < 600; step++) {
+				const sun = particles[0];
+				const gdx = sun.position.x - sx;
+				const gdy = sun.position.y - sy;
+				const gr2 = gdx * gdx + gdy * gdy + 1;
+				const gf  = +gravitationalConst * sun.mass / (gr2 * Math.sqrt(gr2));
+				svx += gdx * gf * simDt2;
+				svy += gdy * gf * simDt2;
+				sx  += svx * simDt2;
+				sy  += svy * simDt2;
+				if (step % 4 === 0) fgCtx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
+			}
+		}
+		fgCtx.restore();
+	}
+
+	// force brush indicator
+	if (pointerOnCanvas && (forceBrushAttract || forceBrushRepel)) {
+		fgCtx.save();
+		fgCtx.strokeStyle = forceBrushAttract ? 'rgba(255,200,80,0.7)' : 'rgba(80,200,255,0.7)';
+		fgCtx.fillStyle   = fgCtx.strokeStyle;
+		fgCtx.lineWidth   = 2;
+		fgCtx.setLineDash([5, 5]);
+		fgCtx.beginPath();
+		fgCtx.arc(mouse.x, mouse.y, 45, 0, Math.PI * 2);
+		fgCtx.stroke();
+		fgCtx.setLineDash([]);
+		fgCtx.font = '12px system-ui';
+		fgCtx.fillText(forceBrushAttract ? '▼ attract' : '▲ repel', mouse.x + 50, mouse.y + 4);
+		fgCtx.restore();
+	}
+}
+
+// Update the rolling FPS average shown in the HUD badge.
+function updateFpsCounter() {
+	// TESTING...Report #seconds since start and achieved fps.
+	if (fpsLastDrawTime > 0) {
+		fpsBuffer[fpsBufferIdx] = now - fpsLastDrawTime;
+		fpsBufferIdx = (fpsBufferIdx + 1) % FPS_BUFFER_SIZE;
+		if (fpsBufferCount < FPS_BUFFER_SIZE) fpsBufferCount++;
+		let sum = 0;
+		for (let i = 0; i < fpsBufferCount; i++) sum += fpsBuffer[i];
+		fpsValue.innerHTML = Math.round(1000 / (sum / fpsBufferCount)) + " fps";
+	}
+	fpsLastDrawTime = now;
+}
+
+function draw() {
+	// stop
+	if (stop || document.hidden) {
+		if (document.hidden && !stop) document.addEventListener(
+			'visibilitychange', () => { if (!document.hidden) draw(); }, { once: true });
+		return;
+	}
+
+	// request another frame
+	window.requestAnimationFrame(draw);
+
+	if (resetCanvas) {
+		GenerateRandomizedParticles(particleCount);
+		then = Date.now();
+		resetCanvas = false;
+	}
+
+	stepPhysics();
 
 	// calc elapsed time since last loop
 	now = Date.now();
@@ -1302,149 +1456,8 @@ function draw() {
 		// Also, adjust for fpsInterval not being multiple of 16.67
 		then = now - (elapsed % fpsInterval);
 
-		fgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
-
-		// fade bg canvas toward background color, then stamp current positions as trail dots
-		bgCtx.fillStyle = fadeColor;
-		bgCtx.fillRect(0, 0, canvasWidth, canvasHeight);
-		const trailLUT = gravitationalConst >= 0 ? attractionLUT : repulsionLUT;
-		for (let pi = 0; pi < particles.length; pi++) {
-			const particle = particles[pi];
-			if (particle.isHeavyParticle) continue;
-			const vx = particle.velocity.x, vy = particle.velocity.y;
-			const speedPct = Math.min(1, Math.sqrt(vx * vx + vy * vy) / MAX_TRAIL_SPEED);
-			bgCtx.fillStyle = trailLUT[(speedPct * (LUT_SIZE - 1)) | 0];
-			bgCtx.fillRect(particle.position.x - 1, particle.position.y - 1, 2, 2);
-		}
-
-		// draw particles — glow pass (additive blend via lighter composite)
-		const drawLUT    = gravitationalConst >= 0 ? attractionLUT    : repulsionLUT;
-		const drawSprites = gravitationalConst >= 0 ? attractionSprites : repulsionSprites;
-		if (glowEnabled && drawSprites) {
-			fgCtx.globalCompositeOperation = 'lighter';
-			for (let pi = 1; pi < particles.length; pi++) {
-				const particle = particles[pi];
-				const accLen = particle.acceleration.length;
-				const slot = Math.min(LUT_SIZE - 1, accLen > 100 ? LUT_SIZE - 1 : (accLen / 100 * (LUT_SIZE - 1)) | 0);
-				const gr = particle.radius * 3;
-				fgCtx.drawImage(drawSprites[slot], particle.position.x - gr, particle.position.y - gr, gr * 2, gr * 2);
-			}
-			fgCtx.globalCompositeOperation = 'source-over';
-		}
-
-		// hard core pass — solid white bodies
-		for (let pi = 1; pi < particles.length; pi++) {
-			particles[pi].Draw(fgCtx, whiteLineStrokeStyle, whiteLineStrokeStyle);
-		}
-
-		// collision color overlay — energy from impact cascades — soft touches stay dark
-		if (collisionSparksEnabled) {
-			for (let pi = 1; pi < particles.length; pi++) {
-				const particle = particles[pi];
-				const e = particle._e || 0;
-				if (e < 0.02) continue;                       // soft / faint → invisible
-				const d = Math.min(1, Math.pow(e, EXC_GAMMA) * EXC_VIS);           // perceptual intensity
-				fgCtx.globalAlpha = d;                        // brightness = energy → wavefront ridge
-				const sat   = Math.round(40 + 40 * d);        // peaks at 80% — pastel range
-				const light = Math.round(90 - 15 * d);        // 75–90% lightness — always pale
-				const hsl = `hsl(${particle._hue},${sat}%,${light}%)`;
-				particle.Draw(fgCtx, hsl, hsl);
-			}
-			fgCtx.globalAlpha = 1;
-		}
-
-		// sun(s) — radial gradient corona
-		for (let pi = 0; pi < particles.length; pi++) {
-			if (particles[pi].isHeavyParticle) {
-				const particle = particles[pi];
-				if (pi === 0) {
-					const dist = Math.floor(helpers.Distance(particle.position.x, particle.position.y, mouse.x, mouse.y));
-					if (dist < 50 && particle.radius < sunRadius * 1.2) particle.radius += 0.2;
-					else if (particle.radius > sunRadius) particle.radius -= 0.2;
-				}
-				drawSunCorona(particle);
-			}
-		}
-
-		if (isRightMouseDown) {
-			particles[0].lastMousePos.x += (mouse.x - particles[0].lastMousePos.x) * 0.05;
-			particles[0].lastMousePos.y += (mouse.y - particles[0].lastMousePos.y) * 0.05;
-			particles[0].position.x = particles[0].lastMousePos.x;
-			particles[0].position.y = particles[0].lastMousePos.y;
-		}
-
-		if (isLeftMouseDown && dragStart) {
-			const dx = mouse.x - dragStart.x;
-			const dy = mouse.y - dragStart.y;
-			fgCtx.save();
-			fgCtx.strokeStyle = 'rgba(255,255,255,0.8)';
-			fgCtx.fillStyle = 'rgba(255,255,255,0.8)';
-			fgCtx.lineWidth = 2;
-			fgCtx.beginPath();
-			fgCtx.arc(dragStart.x, dragStart.y, 4, 0, Math.PI * 2);
-			fgCtx.fill();
-			const dist = Math.sqrt(dx * dx + dy * dy);
-			if (dist > 5) {
-				const angle = Math.atan2(dy, dx);
-				const headLen = 10;
-				fgCtx.beginPath();
-				fgCtx.moveTo(dragStart.x, dragStart.y);
-				fgCtx.lineTo(mouse.x, mouse.y);
-				fgCtx.stroke();
-				fgCtx.beginPath();
-				fgCtx.moveTo(mouse.x, mouse.y);
-				fgCtx.lineTo(mouse.x - headLen * Math.cos(angle - Math.PI / 6), mouse.y - headLen * Math.sin(angle - Math.PI / 6));
-				fgCtx.lineTo(mouse.x - headLen * Math.cos(angle + Math.PI / 6), mouse.y - headLen * Math.sin(angle + Math.PI / 6));
-				fgCtx.closePath();
-				fgCtx.fill();
-
-				// trajectory preview — forward simulate under sun gravity
-				const simDt2 = parseFloat(dt) * 2;
-				let sx = dragStart.x, sy = dragStart.y;
-				let svx = dx, svy = dy;
-				fgCtx.fillStyle = 'rgba(255,255,255,0.22)';
-				for (let step = 0; step < 600; step++) {
-					const sun = particles[0];
-					const gdx = sun.position.x - sx;
-					const gdy = sun.position.y - sy;
-					const gr2 = gdx * gdx + gdy * gdy + 1;
-					const gf  = +gravitationalConst * sun.mass / (gr2 * Math.sqrt(gr2));
-					svx += gdx * gf * simDt2;
-					svy += gdy * gf * simDt2;
-					sx  += svx * simDt2;
-					sy  += svy * simDt2;
-					if (step % 4 === 0) fgCtx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
-				}
-			}
-			fgCtx.restore();
-		}
-
-		// force brush indicator
-		if (pointerOnCanvas && (forceBrushAttract || forceBrushRepel)) {
-			fgCtx.save();
-			fgCtx.strokeStyle = forceBrushAttract ? 'rgba(255,200,80,0.7)' : 'rgba(80,200,255,0.7)';
-			fgCtx.fillStyle   = fgCtx.strokeStyle;
-			fgCtx.lineWidth   = 2;
-			fgCtx.setLineDash([5, 5]);
-			fgCtx.beginPath();
-			fgCtx.arc(mouse.x, mouse.y, 45, 0, Math.PI * 2);
-			fgCtx.stroke();
-			fgCtx.setLineDash([]);
-			fgCtx.font = '12px system-ui';
-			fgCtx.fillText(forceBrushAttract ? '▼ attract' : '▲ repel', mouse.x + 50, mouse.y + 4);
-			fgCtx.restore();
-		}
-
-		// TESTING...Report #seconds since start and achieved fps.
-		if (fpsLastDrawTime > 0) {
-			fpsBuffer[fpsBufferIdx] = now - fpsLastDrawTime;
-			fpsBufferIdx = (fpsBufferIdx + 1) % FPS_BUFFER_SIZE;
-			if (fpsBufferCount < FPS_BUFFER_SIZE) fpsBufferCount++;
-			let sum = 0;
-			for (let i = 0; i < fpsBufferCount; i++) sum += fpsBuffer[i];
-			fpsValue.innerHTML = Math.round(1000 / (sum / fpsBufferCount)) + " fps";
-		}
-		fpsLastDrawTime = now;
+		renderScene();
+		updateFpsCounter();
 	}
 }
 

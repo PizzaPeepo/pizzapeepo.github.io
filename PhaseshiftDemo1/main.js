@@ -1,6 +1,9 @@
 import * as helpers from "../Utils/helpers.js";
 import Vector2D from "../Utils/Vector2D.js";
 import Line2D from "../Raycaster/Line2D.js";
+import { onThemeChange } from "../Utils/ThemeManager.js";
+import { onWindowResize } from "../Utils/ResizeManager.js";
+import { setupCanvases } from "../Utils/CanvasManager.js";
 
 // #region global variables
 var canvasHeight = window.innerHeight;
@@ -33,16 +36,10 @@ var foregroundCanvas = document.getElementById("foregroundCanvas");
 var fgCtx = foregroundCanvas.getContext("2d");
 
 function applyCanvasSize() {
-	backgroundCanvas.width  = canvasWidth;
-	backgroundCanvas.height = canvasHeight;
-	backgroundCanvas.style.width  = canvasWidth + 'px';
-	backgroundCanvas.style.height = canvasHeight + 'px';
-	bgCtx.lineWidth = 2;
-	foregroundCanvas.width  = canvasWidth;
-	foregroundCanvas.height = canvasHeight;
-	foregroundCanvas.style.width  = canvasWidth + 'px';
-	foregroundCanvas.style.height = canvasHeight + 'px';
-	fgCtx.lineWidth = 2;
+	setupCanvases([
+		{ canvas: backgroundCanvas, configure: (ctx) => { ctx.lineWidth = 2; } },
+		{ canvas: foregroundCanvas, configure: (ctx) => { ctx.lineWidth = 2; } },
+	], canvasWidth, canvasHeight);
 }
 applyCanvasSize();
 // #endregion
@@ -72,14 +69,11 @@ function applyThemeColors(isLight) {
 	lineColor = isLight ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.5)';
 	drawStaticLines();
 }
-applyThemeColors(document.documentElement.classList.contains('light'));
-document.addEventListener('themechange', function(e) {
-	applyThemeColors(e.detail.isLight);
-});
+onThemeChange(applyThemeColors);
 // #endregion
 
 // #region resize
-window.addEventListener('resize', function() {
+onWindowResize(function() {
 	canvasWidth  = window.innerWidth;
 	canvasHeight = window.innerHeight;
 	applyCanvasSize();
@@ -104,14 +98,7 @@ function draw() {
 	for (let j = 0; j < lines.length; j++) {
 		const pointOrigin = lines[j].GetPointOnLine(Math.sin(t[i] + j * shift_angle));
 		const strokeStyle = "hsl(" + hue + ", 100%,  70%)";
-		fgCtx.beginPath();
-		fgCtx.save();
-		fgCtx.fillStyle = strokeStyle;
-		fgCtx.strokeStyle = strokeStyle;
 		helpers.drawFilledCircle(fgCtx, pointOrigin, 5, strokeStyle, strokeStyle);
-		fgCtx.fill();
-		fgCtx.stroke();
-		fgCtx.restore();
 	}
 
 	i++;

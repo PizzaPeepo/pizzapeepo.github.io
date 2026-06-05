@@ -103,9 +103,7 @@ export class Quadtree {
 	}
 
 	draw(context, strokeStyle, fillStyle) {
-		context.beginPath();
-		helpers.drawRectangle(context, this.boundary, strokeStyle, fillStyle);
-		context.stroke();
+		helpers.drawRectangle(context, this.boundary, strokeStyle);
 
 		if (this.divided) {
 			this.NW.draw(context, strokeStyle, fillStyle);
@@ -115,9 +113,7 @@ export class Quadtree {
 		}
 
 		this.points.forEach((p) => {
-			context.beginPath();
 			helpers.drawFilledCircle(context, p, 1, strokeStyle, fillStyle);
-			context.stroke();
 		});
 	}
 }

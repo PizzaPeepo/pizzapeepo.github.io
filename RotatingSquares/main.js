@@ -2,6 +2,9 @@ import * as helpers from "../Utils/helpers.js";
 import Polygon from "../Utils/polygon.js";
 import Vector2D from "../Utils/Vector2D.js";
 import FadeTrail from "../Utils/FadeTrail.js";
+import { onThemeChange } from "../Utils/ThemeManager.js";
+import { onWindowResize } from "../Utils/ResizeManager.js";
+import { setupCanvases } from "../Utils/CanvasManager.js";
 
 // #region global variables
 var canvasHeight = window.innerHeight;
@@ -44,12 +47,9 @@ var backgroundCanvas = document.getElementById("backgroundCanvas");
 var bgCtx = backgroundCanvas.getContext("2d");
 
 function applyCanvasSize() {
-	backgroundCanvas.width  = canvasWidth;
-	backgroundCanvas.height = canvasHeight;
-	backgroundCanvas.style.width  = canvasWidth + 'px';
-	backgroundCanvas.style.height = canvasHeight + 'px';
-	bgCtx.strokeStyle = strokeColor;
-	bgCtx.lineWidth = 2;
+	setupCanvases([
+		{ canvas: backgroundCanvas, configure: (ctx) => { ctx.strokeStyle = strokeColor; ctx.lineWidth = 2; } },
+	], canvasWidth, canvasHeight);
 }
 applyCanvasSize();
 // #endregion
@@ -60,14 +60,11 @@ function applyThemeColors(isLight) {
 	strokeColor = isLight ? 'rgba(20, 10, 0, 1.0)' : 'rgba(255, 255, 255, 1.0)';
 	bgCtx.strokeStyle = strokeColor;
 }
-applyThemeColors(document.documentElement.classList.contains('light'));
-document.addEventListener('themechange', function(e) {
-	applyThemeColors(e.detail.isLight);
-});
+onThemeChange(applyThemeColors);
 // #endregion
 
 // #region resize
-window.addEventListener('resize', function() {
+onWindowResize(function() {
 	canvasWidth  = window.getCanvasWidth();
 	canvasHeight = window.innerHeight;
 	if (window._hudToggling) return;

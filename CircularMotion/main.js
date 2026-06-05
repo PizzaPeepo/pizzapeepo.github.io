@@ -2,6 +2,8 @@ import * as helpers from "../Utils/helpers.js";
 import Vector2D from "../Utils/Vector2D.js";
 import Circle from "./circle.js";
 import FadeTrail from "../Utils/FadeTrail.js";
+import { onThemeChange } from "../Utils/ThemeManager.js";
+import { onWindowResize } from "../Utils/ResizeManager.js";
 
 // #region global variables
 var canvasHeight = window.innerHeight;
@@ -53,12 +55,7 @@ function drawTrailFrame(ctx, tVal, opacity) {
 	for (let j = 0; j < circles.length; j++) {
 		const angle = multiplier * (circles.length - j) * tVal;
 		const colorStyle = getColor(j, angle);
-		ctx.beginPath();
-		ctx.save();
 		circles[j].DrawPointOnCircle(ctx, angle, pointRadius, colorStyle, colorStyle);
-		ctx.fill();
-		ctx.stroke();
-		ctx.restore();
 	}
 	ctx.restore();
 }
@@ -93,14 +90,11 @@ applyCanvasSize();
 function applyThemeColors(isLight) {
 	document.body.style.background = isLight ? '#f5ede0' : '#18140e';
 }
-applyThemeColors(document.documentElement.classList.contains('light'));
-document.addEventListener('themechange', function(e) {
-	applyThemeColors(e.detail.isLight);
-});
+onThemeChange(applyThemeColors);
 // #endregion
 
 // #region resize
-window.addEventListener('resize', function() {
+onWindowResize(function() {
 	canvasWidth = window.getCanvasWidth();
 	canvasHeight = window.innerHeight;
 	if (window._hudToggling) return;
@@ -248,16 +242,11 @@ function draw() {
 		const angle = multiplier * (circles.length - j) * t[i];
 		const colorStyle = getColor(j, angle);
 
-		fgCtx.beginPath();
-		fgCtx.save();
 		let borderStrokeStyle = colorStyle;
 		if (showBlackBorderAroundPoints) {
 			borderStrokeStyle = "rgba(0, 0, 0, 1.0)";
 		}
 		circles[j].DrawPointOnCircle(fgCtx, angle, pointRadius, borderStrokeStyle, colorStyle);
-		fgCtx.fill();
-		fgCtx.stroke();
-		fgCtx.restore();
 	}
 
 	if (showWhiteLines) {

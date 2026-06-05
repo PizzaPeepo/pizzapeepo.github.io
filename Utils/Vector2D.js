@@ -89,68 +89,59 @@ export default class Vector2D {
 		return Math.abs(0 - this.DotProduct(otherVector)) < helpers.epsilon ? true : false;
 	}
 
-	_RotateCCW(alpha_radian) {
-		const tempX = this.x * Math.cos(alpha_radian) - this.y * Math.sin(alpha_radian);
-		const tempY = this.x * Math.sin(alpha_radian) + this.y * Math.cos(alpha_radian);
-		this.x = tempX;
-		this.y = tempY;
+	// Core rotation — mutates in place and refreshes the cached length. Pass sin/cos of the
+	// angle; clockwise is counter-clockwise with a negated sine, so every public variant below
+	// routes through these two helpers (single source of truth for the rotation math).
+	_applyRotation(sinAngle, cosAngle) {
+		const rotatedX = this.x * cosAngle - this.y * sinAngle;
+		const rotatedY = this.x * sinAngle + this.y * cosAngle;
+		this.x = rotatedX;
+		this.y = rotatedY;
 		this.UpdateLength();
+		return this;
 	}
 
-	_RotateCCWAroundPoint(center, alpha_radian) {
-		const tempX =
-			(this.x - center.x) * Math.cos(alpha_radian) - (this.y - center.y) * Math.sin(alpha_radian) + center.x;
-		const tempY =
-			(this.x - center.x) * Math.sin(alpha_radian) + (this.y - center.y) * Math.cos(alpha_radian) + center.y;
-		this.x = tempX;
-		this.y = tempY;
+	_applyRotationAroundPoint(center, sinAngle, cosAngle) {
+		const dx = this.x - center.x;
+		const dy = this.y - center.y;
+		this.x = dx * cosAngle - dy * sinAngle + center.x;
+		this.y = dx * sinAngle + dy * cosAngle + center.y;
 		this.UpdateLength();
+		return this;
 	}
 
+	// In-place (mutating) variants — modify this vector and return it for chaining.
+	RotateCCWInPlace(alpha_radian) {
+		return this._applyRotation(Math.sin(alpha_radian), Math.cos(alpha_radian));
+	}
+
+	RotateCWInPlace(alpha_radian) {
+		return this._applyRotation(-Math.sin(alpha_radian), Math.cos(alpha_radian));
+	}
+
+	RotateCCWAroundPointInPlace(center, alpha_radian) {
+		return this._applyRotationAroundPoint(center, Math.sin(alpha_radian), Math.cos(alpha_radian));
+	}
+
+	RotateCWAroundPointInPlace(center, alpha_radian) {
+		return this._applyRotationAroundPoint(center, -Math.sin(alpha_radian), Math.cos(alpha_radian));
+	}
+
+	// Immutable variants — return a rotated copy, leaving this vector unchanged.
 	RotateCCW(alpha_radian) {
-		const tempX = this.x * Math.cos(alpha_radian) - this.y * Math.sin(alpha_radian);
-		const tempY = this.x * Math.sin(alpha_radian) + this.y * Math.cos(alpha_radian);
-		return new Vector2D(tempX, tempY);
-	}
-
-	RotateCCWAroundPoint(center, alpha_radian) {
-		const tempX =
-			(this.x - center.x) * Math.cos(alpha_radian) - (this.y - center.y) * Math.sin(alpha_radian) + center.x;
-		const tempY =
-			(this.x - center.x) * Math.sin(alpha_radian) + (this.y - center.y) * Math.cos(alpha_radian) + center.y;
-		return new Vector2D(tempX, tempY);
-	}
-
-	_RotateCW(alpha_radian) {
-		const tempX = this.x * Math.cos(alpha_radian) + this.y * Math.sin(alpha_radian);
-		const tempY = -(this.x * Math.sin(alpha_radian)) + this.y * Math.cos(alpha_radian);
-		this.x = tempX;
-		this.y = tempY;
-		this.UpdateLength();
-	}
-
-	_RotateCWAroundPoint(center, alpha_radian) {
-		const tempX =
-			(this.x - center.x) * Math.cos(alpha_radian) + (this.y - center.y) * Math.sin(alpha_radian) + center.x;
-		const tempY =
-			-(this.x - center.x) * Math.sin(alpha_radian) + (this.y - center.y) * Math.cos(alpha_radian) + center.y;
-		this.x = tempX;
-		this.y = tempY;
-		this.UpdateLength();
+		return this.Clone()._applyRotation(Math.sin(alpha_radian), Math.cos(alpha_radian));
 	}
 
 	RotateCW(alpha_radian) {
-		const tempX = this.x * Math.cos(alpha_radian) + this.y * Math.sin(alpha_radian);
-		const tempY = -(this.x * Math.sin(alpha_radian)) + this.y * Math.cos(alpha_radian);
-		return new Vector2D(tempX, tempY);
+		return this.Clone()._applyRotation(-Math.sin(alpha_radian), Math.cos(alpha_radian));
+	}
+
+	RotateCCWAroundPoint(center, alpha_radian) {
+		return this.Clone()._applyRotationAroundPoint(center, Math.sin(alpha_radian), Math.cos(alpha_radian));
 	}
 
 	RotateCWAroundPoint(center, alpha_radian) {
-		const tempX =
-			(this.x - center.x) * Math.cos(alpha_radian) + (this.y - center.y) * Math.sin(alpha_radian) + center.x;
-		const tempY =
-			-(this.x - center.x) * Math.sin(alpha_radian) + (this.y - center.y) * Math.cos(alpha_radian) + center.y;
-		return new Vector2D(tempX, tempY);
+		return this.Clone()._applyRotationAroundPoint(center, -Math.sin(alpha_radian), Math.cos(alpha_radian));
 	}
 
 	Clone() {

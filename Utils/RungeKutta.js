@@ -1,4 +1,3 @@
-import * as helpers from "../Utils/helpers.js";
 import Vector2D from "./Vector2D.js";
 import Particle from "../GravitySimulation/particle.js";
 
@@ -28,33 +27,7 @@ export function RK4_2D(r, t, dt, diffEq) {
 	return resultVec;
 }
 
-const SOFTENING_SQ = 25; // 5px Plummer softening — prevents force singularity at close range
-
-function CalcGravForce(targetParticleIndex, particles, gravConst) {
-	let forceVec = new Vector2D(0, 0);
-	const tp = particles[targetParticleIndex];
-	for (let i = 0; i < particles.length; i++) {
-		if (i !== targetParticleIndex) {
-			const dx = particles[i].position.x - tp.position.x;
-			const dy = particles[i].position.y - tp.position.y;
-			const r2 = dx * dx + dy * dy + SOFTENING_SQ;
-			const r3 = r2 * Math.sqrt(r2);
-			forceVec.x += particles[i].mass * dx / r3;
-			forceVec.y += particles[i].mass * dy / r3;
-		}
-	}
-	forceVec = forceVec.Multiply(gravConst);
-	forceVec = forceVec.Multiply(tp.mass);
-	return forceVec;
-}
-
-// Returns array of [ax, ay] for every particle — used by leapfrog integrator
-export function computeAllAccelerations(particles, gravConst) {
-	return particles.map((_, i) => {
-		const a = CalcGravAcceleration(i, particles, gravConst);
-		return [a.x, a.y];
-	});
-}
+const GRAVITY_SOFTENING_SQ = 25; // 5px Plummer softening — prevents force singularity at close range
 
 // Zero-allocation variant: writes [ax, ay, ax, ay, ...] directly into a pre-allocated Float64Array.
 // buf must have length >= particles.length * 2.
@@ -68,7 +41,7 @@ export function computeAllAccelerationsInto(particles, gravConst, buf) {
 			if (j !== i) {
 				const dx = particles[j].position.x - tpx;
 				const dy = particles[j].position.y - tpy;
-				const r2 = dx * dx + dy * dy + SOFTENING_SQ;
+				const r2 = dx * dx + dy * dy + GRAVITY_SOFTENING_SQ;
 				const r3 = r2 * Math.sqrt(r2);
 				ax += particles[j].mass * dx / r3;
 				ay += particles[j].mass * dy / r3;
@@ -77,104 +50,6 @@ export function computeAllAccelerationsInto(particles, gravConst, buf) {
 		buf[2 * i]     = gravConst * ax;
 		buf[2 * i + 1] = gravConst * ay;
 	}
-}
-
-function CalcGravAcceleration(targetParticleIndex, particles, gravConst) {
-	let forceVec = new Vector2D(0, 0);
-	forceVec = CalcGravForce(targetParticleIndex, particles, gravConst);
-	return forceVec.Multiply(1 / particles[targetParticleIndex].mass);
-}
-
-export function RK4_ParticlesInGravField(targetParticleIndex, particles, dt, gravConst) {
-	let initial = new Particle(new Vector2D(0, 0), new Vector2D(0, 0), new Vector2D(0, 0), 1, 1);
-	initial = particles[targetParticleIndex].DeepCopy();
-	let tempParticles = [];
-	particles.forEach((particle) => {
-		tempParticles.push(particle.DeepCopy());
-	});
-	let accel = new Vector2D(0, 0);
-	accel = CalcGravAcceleration(targetParticleIndex, particles, gravConst);
-
-	let x1 = initial.position.x;
-	let y1 = initial.position.y;
-	let vx1 = initial.velocity.x;
-	let vy1 = initial.velocity.y;
-	let ax1 = accel.x;
-	let ay1 = accel.y;
-
-	// console.log(x1);
-	// console.log(y1);
-	// console.log(vx1);
-	// console.log(vy1);
-	// console.log(ax1);
-	// console.log(ay1);
-
-	let x2 = initial.position.x + 0.5 * vx1 * dt;
-	let y2 = initial.position.y + 0.5 * vy1 * dt;
-	let vx2 = initial.velocity.x + 0.5 * ax1 * dt;
-	let vy2 = initial.velocity.y + 0.5 * ay1 * dt;
-	tempParticles[targetParticleIndex] = new Particle(
-		new Vector2D(x2, y2),
-		new Vector2D(vx2, vy2),
-		new Vector2D(0, 0), // doesn't matter what values are here in this step
-		initial.radius,
-		initial.mass
-	);
-	accel = CalcGravAcceleration(targetParticleIndex, tempParticles, gravConst);
-	let ax2 = accel.x;
-	let ay2 = accel.y;
-
-	// console.log(x2);
-	// console.log(y2);
-	// console.log(vx2);
-	// console.log(vy2);
-	// console.log(ax2);
-	// console.log(ay2);
-
-	let x3 = initial.position.x + 0.5 * vx2 * dt;
-	let y3 = initial.position.y + 0.5 * vy2 * dt;
-	let vx3 = initial.velocity.x + 0.5 * ax2 * dt;
-	let vy3 = initial.velocity.y + 0.5 * ay2 * dt;
-	tempParticles[targetParticleIndex] = new Particle(
-		new Vector2D(x3, y3),
-		new Vector2D(vx3, vy3),
-		new Vector2D(0, 0), // doesn't matter what values are here in this step
-		initial.radius,
-		initial.mass
-	);
-	accel = CalcGravAcceleration(targetParticleIndex, tempParticles, gravConst);
-	let ax3 = accel.x;
-	let ay3 = accel.y;
-
-	let x4 = initial.position.x + vx3 * dt;
-	let y4 = initial.position.y + vy3 * dt;
-	let vx4 = initial.velocity.x + ax3 * dt;
-	let vy4 = initial.velocity.y + ay3 * dt;
-	tempParticles[targetParticleIndex] = new Particle(
-		new Vector2D(x4, y4),
-		new Vector2D(vx4, vy4),
-		new Vector2D(0, 0), // doesn't matter what values are here in this step
-		initial.radius,
-		initial.mass
-	);
-	accel = CalcGravAcceleration(targetParticleIndex, tempParticles, gravConst);
-	let ax4 = accel.x;
-	let ay4 = accel.y;
-
-	let xfinal = initial.position.x + (1 / 6) * (vx1 + 2 * vx2 + 2 * vx3 + vx4) * dt;
-	let yfinal = initial.position.y + (1 / 6) * (vy1 + 2 * vy2 + 2 * vy3 + vy4) * dt;
-	let vxfinal = initial.velocity.x + (1 / 6) * (ax1 + 2 * ax2 + 2 * ax3 + ax4) * dt;
-	let vyfinal = initial.velocity.y + (1 / 6) * (ay1 + 2 * ay2 + 2 * ay3 + ay4) * dt;
-	let axfinal = (1 / 6) * (ax1 + 2 * ax2 + 2 * ax3 + ax4);
-	let ayfinal = (1 / 6) * (ay1 + 2 * ay2 + 2 * ay3 + ay4);
-
-	return new Particle(
-		new Vector2D(xfinal, yfinal),
-		new Vector2D(vxfinal, vyfinal),
-		new Vector2D(axfinal, ayfinal),
-		initial.radius,
-		initial.mass
-	);
 }
 
 // Barnes-Hut variant: uses a pre-built BH tree for O(n log n) force approximation.

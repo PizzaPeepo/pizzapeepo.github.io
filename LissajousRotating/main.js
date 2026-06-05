@@ -2,6 +2,9 @@ import RotatingLissajousFigure from "./RotatingLissajousFigure.js";
 import * as helpers from "../Utils/helpers.js";
 import Vector2D from "../Utils/Vector2D.js";
 import FadeTrail from "../Utils/FadeTrail.js";
+import { onThemeChange } from "../Utils/ThemeManager.js";
+import { onWindowResize } from "../Utils/ResizeManager.js";
+import { setupCanvases } from "../Utils/CanvasManager.js";
 
 // #region global variables
 var canvasHeight = window.innerHeight;
@@ -32,18 +35,10 @@ var foregroundCanvas = document.getElementById("foregroundCanvas");
 var fgCtx = foregroundCanvas.getContext("2d");
 
 function applyCanvasSize() {
-	backgroundCanvas.width  = canvasWidth;
-	backgroundCanvas.height = canvasHeight;
-	backgroundCanvas.style.width  = canvasWidth + 'px';
-	backgroundCanvas.style.height = canvasHeight + 'px';
-	bgCtx.strokeStyle = whiteLineStrokeStyle;
-	bgCtx.lineWidth = 2;
-	foregroundCanvas.width  = canvasWidth;
-	foregroundCanvas.height = canvasHeight;
-	foregroundCanvas.style.width  = canvasWidth + 'px';
-	foregroundCanvas.style.height = canvasHeight + 'px';
-	fgCtx.strokeStyle = whiteLineStrokeStyle;
-	fgCtx.lineWidth = 2;
+	setupCanvases([
+		{ canvas: backgroundCanvas, configure: (ctx) => { ctx.strokeStyle = whiteLineStrokeStyle; ctx.lineWidth = 2; } },
+		{ canvas: foregroundCanvas, configure: (ctx) => { ctx.strokeStyle = whiteLineStrokeStyle; ctx.lineWidth = 2; } },
+	], canvasWidth, canvasHeight);
 }
 applyCanvasSize();
 // #endregion
@@ -52,14 +47,11 @@ applyCanvasSize();
 function applyThemeColors(isLight) {
 	backgroundCanvas.style.background = isLight ? '#f5ede0' : '#18140e';
 }
-applyThemeColors(document.documentElement.classList.contains('light'));
-document.addEventListener('themechange', function(e) {
-	applyThemeColors(e.detail.isLight);
-});
+onThemeChange(applyThemeColors);
 // #endregion
 
 // #region resize
-window.addEventListener('resize', function() {
+onWindowResize(function() {
 	canvasWidth  = window.getCanvasWidth();
 	canvasHeight = window.innerHeight;
 	if (window._hudToggling) return;

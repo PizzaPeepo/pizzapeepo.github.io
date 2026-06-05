@@ -50,13 +50,21 @@ offscreen buffer + typed array, then `drawImage`-scale up to the visible canvas.
 ### Shared Utilities (`Utils/`)
 | File | Purpose |
 |------|---------|
-| `Vector2D.js` | 2D vector — arithmetic, rotation (CW/CCW), normalization, dot/cross product |
-| `helpers.js` | `ColorRGBA`, `Point2D`, draw helpers (`drawCircle`, `drawRectangle`, etc.), math utils (`range`, `make2DArray`), `GetMousePos` |
-| `RungeKutta.js` | RK4 ODE integrators — `RK4_1D`, `RK4_2D`, `RK4_ParticlesInGravField` |
+| `Vector2D.js` | 2D vector — arithmetic, rotation (immutable `RotateCW/CCW`* + mutating `*InPlace`), normalization, dot/cross product |
+| `helpers.js` | `ColorRGBA`, draw helpers (`path*` build geometry / `draw*` build+stroke/fill, e.g. `drawCircle`, `drawRectangle`), math utils (`range`, `make2DArray`), `GetMousePos` |
+| `RungeKutta.js` | RK4 ODE integrators — `RK4_1D`, `RK4_2D`, `RK4_ParticlesInGravField_BH`; `computeAllAccelerationsInto` (direct N-body accel) |
 | `rectangle.js` | `Rectangle` for Quadtree (`containsPoint`, `intersects`) |
 | `perlin.js` / `simplexNoise.js` | Noise generation |
 | `bignumber.js` | Big number arithmetic |
 | `FadeTrail.js` | Ring-buffer fade trail — eliminates `fillRect` ghosting; `push(data)`, `render(speed, fn)`, `reset()` |
+| `sliders.js` | `createSlider`, `createLinkedRangeSliders` — wire range inputs to labels + callbacks |
+| `CanvasManager.js` | `setupCanvases(entries, w, h)` — size canvases (+ optional per-canvas `configure`) and return their 2D contexts |
+| `ThemeManager.js` | `onThemeChange(cb)` — fires `cb(isLight)` now + on every `themechange` event |
+| `ResizeManager.js` | `onWindowResize(handler, debounceMs?)` — register an optionally-debounced `resize` handler |
+
+Demo-specific factories live next to their demo, not in `Utils/`: `Raycaster/LineFactory.js`
+(`GetRandomLines2D`, `GetWallLines2D`) and `GravitySimulation/ParticleFactory.js`
+(`GenerateRandomParticle`, `AddNRandomParticles`).
 
 ### Shared Scripts (`JS/`)
 | File | Purpose |

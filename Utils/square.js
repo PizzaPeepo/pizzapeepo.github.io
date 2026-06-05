@@ -69,7 +69,7 @@ export default class Square {
 			)
 		);
 		for (let i = 0; i < 4; i++) {
-			this._cornerPoints[i]._RotateCCWAroundPoint(this.center, this.alpha);
+			this._cornerPoints[i].RotateCCWAroundPointInPlace(this.center, this.alpha);
 			// this._cornerPoints[i].x = Math.floor(this._cornerPoints[i].x);
 			// this._cornerPoints[i].y = Math.floor(this._cornerPoints[i].y);
 		}

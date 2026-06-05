@@ -2,9 +2,9 @@
 // nothing by subdividing finer — leaves bottom out here. Without this floor, dense clumps
 // (e.g. tiny particles that never collide) split to sub-pixel leaves, exploding node count
 // and force-eval traversal cost → severe slowdown.
-const BH_SOFTENING = 5;
-const BH_SOFTENING2 = BH_SOFTENING * BH_SOFTENING; // 25
-const BH_MIN_CELL = BH_SOFTENING;
+const BH_SOFTENING_RADIUS = 5;
+const BH_SOFTENING_RADIUS_SQ = BH_SOFTENING_RADIUS * BH_SOFTENING_RADIUS; // 25
+const BH_MIN_CELL = BH_SOFTENING_RADIUS;
 
 class BHNode {
 	constructor() {
@@ -76,7 +76,7 @@ class BHNode {
 		if (this.children === null) {
 			if (this.particle === excludeParticle) return;
 			const dx = this.cx - px, dy = this.cy - py;
-			const r2s = dx * dx + dy * dy + BH_SOFTENING2; // Plummer softening
+			const r2s = dx * dx + dy * dy + BH_SOFTENING_RADIUS_SQ; // Plummer softening
 			const f = gravConst * this.totalMass / (r2s * Math.sqrt(r2s));
 			tree._ax += f * dx; tree._ay += f * dy;
 			return;
@@ -88,7 +88,7 @@ class BHNode {
 			const s = this.w > this.h ? this.w : this.h;
 			// s/r < theta  ⇔  s² < theta²·r²  (both sides positive) — avoids sqrt + division
 			if (s * s < theta2 * r2) {
-				const sr2 = r2 + BH_SOFTENING2; // Plummer softening
+				const sr2 = r2 + BH_SOFTENING_RADIUS_SQ; // Plummer softening
 				const f = gravConst * this.totalMass / (sr2 * Math.sqrt(sr2));
 				tree._ax += f * dx; tree._ay += f * dy;
 				return;

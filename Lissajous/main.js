@@ -3,6 +3,9 @@ import * as helpers from "../Utils/helpers.js";
 import Lissajous from "./LissajousFigure.js";
 import LissajousTable from "./LissajousTable.js";
 import FadeTrail from "../Utils/FadeTrail.js";
+import { onThemeChange } from "../Utils/ThemeManager.js";
+import { onWindowResize } from "../Utils/ResizeManager.js";
+import { setupCanvases } from "../Utils/CanvasManager.js";
 
 // #region global variables
 var canvasHeight = window.innerHeight;
@@ -29,18 +32,10 @@ var foregroundCanvas = document.getElementById("foregroundCanvas");
 var fgCtx = foregroundCanvas.getContext("2d");
 
 function applyCanvasSize() {
-	backgroundCanvas.width  = canvasWidth;
-	backgroundCanvas.height = canvasHeight;
-	backgroundCanvas.style.width  = canvasWidth + 'px';
-	backgroundCanvas.style.height = canvasHeight + 'px';
-	bgCtx.strokeStyle = whiteLineStrokeStyle;
-	bgCtx.lineWidth = 2;
-	foregroundCanvas.width  = canvasWidth;
-	foregroundCanvas.height = canvasHeight;
-	foregroundCanvas.style.width  = canvasWidth + 'px';
-	foregroundCanvas.style.height = canvasHeight + 'px';
-	fgCtx.strokeStyle = whiteLineStrokeStyle;
-	fgCtx.lineWidth = 2;
+	setupCanvases([
+		{ canvas: backgroundCanvas, configure: (ctx) => { ctx.strokeStyle = whiteLineStrokeStyle; ctx.lineWidth = 2; } },
+		{ canvas: foregroundCanvas, configure: (ctx) => { ctx.strokeStyle = whiteLineStrokeStyle; ctx.lineWidth = 2; } },
+	], canvasWidth, canvasHeight);
 }
 applyCanvasSize();
 // #endregion
@@ -49,14 +44,11 @@ applyCanvasSize();
 function applyThemeColors(isLight) {
 	backgroundCanvas.style.background = isLight ? '#f5ede0' : '#18140e';
 }
-applyThemeColors(document.documentElement.classList.contains('light'));
-document.addEventListener('themechange', function(e) {
-	applyThemeColors(e.detail.isLight);
-});
+onThemeChange(applyThemeColors);
 // #endregion
 
 // #region resize
-window.addEventListener('resize', function() {
+onWindowResize(function() {
 	canvasWidth  = window.getCanvasWidth();
 	canvasHeight = window.innerHeight;
 	if (window._hudToggling) return;
@@ -170,7 +162,7 @@ function draw() {
 			bgCtx.globalAlpha = opacity;
 			for (let row = 0; row < lissajousTable.rows; row++) {
 				for (let col = 0; col < lissajousTable.cols; col++) {
-					if ((row === 0) & (col === 0)) continue;
+					if ((row === 0) && (col === 0)) continue;
 					lissajousTable.figures[row][col].Draw(bgCtx, _dummyCtx, t[frameIdx], t[frameIdx + 1]);
 				}
 			}
@@ -179,14 +171,14 @@ function draw() {
 		// Draw fgCtx head dots for current step only
 		for (let row = 0; row < lissajousTable.rows; row++) {
 			for (let col = 0; col < lissajousTable.cols; col++) {
-				if ((row === 0) & (col === 0)) continue;
+				if ((row === 0) && (col === 0)) continue;
 				lissajousTable.figures[row][col].Draw(_dummyCtx, fgCtx, t[i], t[i + 1]);
 			}
 		}
 	} else {
 		for (let row = 0; row < lissajousTable.rows; row++) {
 			for (let col = 0; col < lissajousTable.cols; col++) {
-				if ((row === 0) & (col === 0)) {
+				if ((row === 0) && (col === 0)) {
 					continue;
 				}
 				lissajousTable.figures[row][col].Draw(bgCtx, fgCtx, t[i], t[i + 1]);

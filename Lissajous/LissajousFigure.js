@@ -40,7 +40,7 @@ export default class Lissajous {
 	}
 
 	set center(newPosVec) {
-		this._center.UpdatePositon(newPosVec.x, newPosVec.y);
+		this._center.Update(newPosVec.x, newPosVec.y);
 	}
 
 	get cellSize() {
@@ -132,13 +132,10 @@ export default class Lissajous {
 		fgContext.arc(newPos.x, newPos.y, Math.ceil(this.cellSize * 0.03), 0, 2 * Math.PI);
 		fgContext.fill();
 
-		fgContext.strokeStyle = whiteLinestrokeStyle;
 		if (this.showHorizontalLine) {
 			helpers.drawHorizontalLine(fgContext, newPos.y, fgContext.canvas.clientWidth, whiteLinestrokeStyle);
-			fgContext.stroke();
 		} else if (this.showVerticalLine) {
 			helpers.drawVerticalLine(fgContext, newPos.x, fgContext.canvas.clientHeight, whiteLinestrokeStyle);
-			fgContext.stroke();
 		}
 	}
 }

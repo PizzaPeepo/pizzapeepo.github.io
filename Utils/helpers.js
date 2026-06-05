@@ -16,7 +16,7 @@ export function Sin(alpha, radian = true) {
 }
 
 export function Cos(alpha, radian = true) {
-	return radian === true ? Math.sin(alpha) : Math.sin(DegreeToRadian(alpha));
+	return radian === true ? Math.cos(alpha) : Math.cos(DegreeToRadian(alpha));
 }
 // #endregion
 
@@ -41,7 +41,7 @@ export function GetRandomGaussianNormal_BoxMuller(min, max, skew = 1) {
 	let num = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
 
 	num = num / 10.0 + 0.5; // Translate to 0 -> 1
-	if (num > 1 || num < 0) num = GetRandomGaussianNormal_BoxMueller(min, max, skew); // resample between 0 and 1 if out of range
+	if (num > 1 || num < 0) num = GetRandomGaussianNormal_BoxMuller(min, max, skew); // resample between 0 and 1 if out of range
 	num = Math.pow(num, skew); // Skew
 	num *= max - min; // Stretch to fill range
 	num += min; // offset to min
@@ -56,32 +56,67 @@ export function Distance(x1, y1, x2, y2) {
 }
 
 // #region drawing functions
-export function drawHorizontalLine(context, posY, canvasWidth, rgbaStroke) {
-	context.strokeStyle = rgbaStroke;
+// Path primitives — append geometry to the current path only. The caller controls
+// beginPath() and stroke()/fill(), e.g. to batch many shapes into one stroke.
+export function pathHorizontalLine(context, posY, width) {
 	context.moveTo(0, posY);
-	context.lineTo(canvasWidth, posY);
+	context.lineTo(width, posY);
 }
 
-export function drawVerticalLine(context, posX, canvasHeigth, rgbaStroke) {
-	context.strokeStyle = rgbaStroke;
+export function pathVerticalLine(context, posX, height) {
 	context.moveTo(posX, 0);
-	context.lineTo(posX, canvasHeigth);
+	context.lineTo(posX, height);
 }
 
-export function drawCircle(context, origin, radius, rgbaStroke) {
-	context.strokeStyle = rgbaStroke;
+export function pathCircle(context, origin, radius) {
 	context.arc(origin.x, origin.y, radius, 0, 2 * Math.PI);
 }
 
-export function drawFilledCircle(context, origin, radius, rgbaStroke, rgbaFill) {
-	context.fillStyle = rgbaFill;
-	context.strokeStyle = rgbaStroke;
-	context.arc(origin.x, origin.y, radius, 0, 2 * Math.PI);
+export function pathRectangle(context, rectangle) {
+	context.rect(rectangle.x, rectangle.y, rectangle.w, rectangle.h);
 }
 
-export function drawRectangle(context, rect2D, rgbaStroke) {
-	context.strokeStyle = rgbaStroke;
-	context.rect(rect2D.x, rect2D.y, rect2D.w, rect2D.h);
+// Self-contained draws — begin a fresh path, set the style, and stroke/fill immediately.
+// This is what most callers want; use the path* primitives above only when batching.
+export function drawHorizontalLine(context, posY, width, strokeStyle) {
+	context.beginPath();
+	context.strokeStyle = strokeStyle;
+	pathHorizontalLine(context, posY, width);
+	context.stroke();
+}
+
+export function drawVerticalLine(context, posX, height, strokeStyle) {
+	context.beginPath();
+	context.strokeStyle = strokeStyle;
+	pathVerticalLine(context, posX, height);
+	context.stroke();
+}
+
+export function drawCircle(context, origin, radius, strokeStyle) {
+	context.beginPath();
+	context.strokeStyle = strokeStyle;
+	pathCircle(context, origin, radius);
+	context.stroke();
+}
+
+export function drawFilledCircle(context, origin, radius, strokeStyle, fillStyle) {
+	context.beginPath();
+	pathCircle(context, origin, radius);
+	if (fillStyle !== undefined) {
+		context.fillStyle = fillStyle;
+		context.fill();
+	}
+	if (strokeStyle !== undefined) {
+		context.strokeStyle = strokeStyle;
+		context.stroke();
+	}
+}
+
+export function drawRectangle(context, rectangle, strokeStyle) {
+	context.beginPath();
+	context.strokeStyle = strokeStyle;
+	pathRectangle(context, rectangle);
+	context.stroke();
 }
 
 export function range(start, end, step = 1) {
@@ -111,23 +146,16 @@ export function make2DArray(rows, cols) {
 	return arr;
 }
 
-export class Point2D {
-	constructor(x, y) {
-		this.x = x;
-		this.y = y;
-	}
-
-	static create() {
-		return new Point2D(0, 0);
-	}
-}
-
 export class ColorRGBA {
 	constructor(R, G, B, A) {
 		this._R = parseInt(R);
 		this._G = parseInt(G);
 		this._B = parseInt(B);
 		this._A = parseFloat(A);
+		this._rebuildRGBA();
+	}
+
+	_rebuildRGBA() {
 		this._RGBA = "rgba(" + this._R + "," + this._G + "," + this._B + "," + this._A + ")";
 	}
 
@@ -137,7 +165,7 @@ export class ColorRGBA {
 
 	set R(newR) {
 		this._R = parseInt(newR);
-		this._RGBA = "rgba(" + this._R + "," + this._G + "," + this._B + "," + this._A + ")";
+		this._rebuildRGBA();
 	}
 
 	get G() {
@@ -146,7 +174,7 @@ export class ColorRGBA {
 
 	set G(newG) {
 		this._G = parseInt(newG);
-		this._RGBA = "rgba(" + this._R + "," + this._G + "," + this._B + "," + this._A + ")";
+		this._rebuildRGBA();
 	}
 
 	get B() {
@@ -155,7 +183,7 @@ export class ColorRGBA {
 
 	set B(newB) {
 		this._B = parseInt(newB);
-		this._RGBA = "rgba(" + this._R + "," + this._G + "," + this._B + "," + this._A + ")";
+		this._rebuildRGBA();
 	}
 
 	get A() {
@@ -164,7 +192,7 @@ export class ColorRGBA {
 
 	set A(newA) {
 		this._A = parseFloat(newA);
-		this._RGBA = "rgba(" + this._R + "," + this._G + "," + this._B + "," + this._A + ")";
+		this._rebuildRGBA();
 	}
 
 	get RGBA() {
@@ -203,11 +231,11 @@ export class ColorRGBA {
 
 function ComponentToHex(c) {
 	var hex = c.toString(16);
-	return hex.length == 1 ? "0" + hex : hex;
+	return hex.length === 1 ? "0" + hex : hex;
 }
 
 export function RgbaToHex(color) {
-	if (color instanceof ColorRGBA) {
+	if (!(color instanceof ColorRGBA)) {
 		throw new TypeError("RgbaToHex: input parameter has wrong type.");
 	}
 	return "#" + ComponentToHex(color.R) + ComponentToHex(color.G) + ComponentToHex(color.B);
