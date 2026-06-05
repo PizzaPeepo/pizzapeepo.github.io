@@ -212,6 +212,224 @@
         ctx.fill();
       }
     },
+
+    // 10: Flocking — little triangles drifting in a loose flock
+    function (ctx, w, h, t, hover) {
+      var N = 12;
+      var cx = w * 0.5 + Math.cos(t * 0.3) * w * 0.18;
+      var cy = h * 0.5 + Math.sin(t * 0.4) * h * 0.18;
+      for (var i = 0; i < N; i++) {
+        var ph = (i / N) * Math.PI * 2;
+        var bx = cx + Math.cos(ph + t * 0.6) * (10 + (i % 4) * 6);
+        var by = cy + Math.sin(ph * 1.3 + t * 0.6) * (8 + (i % 3) * 6);
+        var dir = ph + t * 0.6 + Math.PI / 2;
+        var dx = Math.cos(dir), dy = Math.sin(dir), sz = 4;
+        ctx.beginPath();
+        ctx.moveTo(bx + dx * sz, by + dy * sz);
+        ctx.lineTo(bx - dy * sz * 0.5 - dx * sz * 0.6, by + dx * sz * 0.5 - dy * sz * 0.6);
+        ctx.lineTo(bx + dy * sz * 0.5 - dx * sz * 0.6, by - dx * sz * 0.5 - dy * sz * 0.6);
+        ctx.closePath();
+        ctx.fillStyle = i % 2 === 0 ? g(0.6) : c(0.5);
+        ctx.fill();
+      }
+    },
+
+    // 11: Double Pendulum — swinging arms with a trailing arc
+    function (ctx, w, h, t, hover) {
+      var ox = w * 0.5, oy = h * 0.38;
+      var L1 = Math.min(w, h) * 0.22, L2 = Math.min(w, h) * 0.2;
+      var a1 = Math.sin(t * 1.1) * 1.4 + Math.sin(t * 0.43) * 0.6;
+      var a2 = Math.sin(t * 1.7 + 1) * 1.8;
+      var x1 = ox + Math.sin(a1) * L1, y1 = oy + Math.cos(a1) * L1;
+      var x2 = x1 + Math.sin(a2) * L2, y2 = y1 + Math.cos(a2) * L2;
+      // trail arc
+      ctx.beginPath();
+      for (var k = 0; k <= 30; k++) {
+        var tt = t - k * 0.05;
+        var b1 = Math.sin(tt * 1.1) * 1.4 + Math.sin(tt * 0.43) * 0.6;
+        var b2 = Math.sin(tt * 1.7 + 1) * 1.8;
+        var px = ox + Math.sin(b1) * L1 + Math.sin(b2) * L2;
+        var py = oy + Math.cos(b1) * L1 + Math.cos(b2) * L2;
+        if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = c(0.4); ctx.lineWidth = 1; ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(ox, oy); ctx.lineTo(x1, y1); ctx.lineTo(x2, y2);
+      ctx.strokeStyle = g(0.5); ctx.lineWidth = 1.4; ctx.stroke();
+      [[x1, y1, 3], [x2, y2, 3.5]].forEach(function (b) {
+        ctx.beginPath(); ctx.arc(b[0], b[1], b[2], 0, Math.PI * 2);
+        ctx.fillStyle = g(0.85); ctx.fill();
+      });
+    },
+    // 12: Flow Field — particles streaming along a noise field
+    function (ctx, w, h, t, hover) {
+      var N = 26;
+      for (var i = 0; i < N; i++) {
+        var sy = (i / N) * h;
+        var x0 = ((t * 30 + i * 53) % (w + 40)) - 20;
+        ctx.beginPath();
+        for (var s = 0; s < 10; s++) {
+          var x = x0 + s * 4;
+          var y = sy + Math.sin(x * 0.04 + t * 0.8 + i) * 8 + Math.cos(x * 0.02 - t) * 5;
+          if (s === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = i % 3 === 0 ? c(0.4) : g(0.35);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    },
+
+    // 13: Game of Life — blinking cell grid
+    function (ctx, w, h, t, hover) {
+      var cell = 9, cols = Math.floor(w / cell), rows = Math.floor(h / cell);
+      var gen = Math.floor(t * 3);
+      for (var y = 0; y < rows; y++) {
+        for (var x = 0; x < cols; x++) {
+          var seed = (x * 73856093) ^ (y * 19349663) ^ (gen * 83492791);
+          if (((seed >>> 4) & 7) < 3) {
+            ctx.fillStyle = ((x + y) & 1) ? g(0.55) : c(0.4);
+            ctx.fillRect(x * cell + 1, y * cell + 1, cell - 2, cell - 2);
+          }
+        }
+      }
+    },
+
+    // 14: Wave Interference — two interfering source rings
+    function (ctx, w, h, t, hover) {
+      var srcs = [[w * 0.35, h * 0.5], [w * 0.65, h * 0.5]];
+      ctx.lineWidth = 1;
+      for (var s = 0; s < srcs.length; s++) {
+        for (var r = 0; r < 5; r++) {
+          var rad = ((t * 18 + r * 16) % 80);
+          ctx.beginPath();
+          ctx.arc(srcs[s][0], srcs[s][1], rad, 0, Math.PI * 2);
+          var a = Math.max(0, 0.4 * (1 - rad / 80));
+          ctx.strokeStyle = s === 0 ? g(a) : c(a);
+          ctx.stroke();
+        }
+      }
+    },
+
+    // 15: Reaction-Diffusion — growing organic blobs
+    function (ctx, w, h, t, hover) {
+      var cx = w * 0.5, cy = h * 0.5;
+      for (var i = 0; i < 5; i++) {
+        var a = i / 5 * Math.PI * 2;
+        var rr = 10 + i * 4 + Math.sin(t * 0.8 + i) * 6;
+        var bx = cx + Math.cos(a + t * 0.2) * (8 + i * 3);
+        var by = cy + Math.sin(a + t * 0.2) * (6 + i * 2);
+        ctx.beginPath();
+        ctx.arc(bx, by, rr, 0, Math.PI * 2);
+        ctx.fillStyle = i % 2 ? c(0.16) : g(0.16);
+        ctx.fill();
+      }
+    },
+
+    // 16: Voronoi — moving sites with cell edges
+    function (ctx, w, h, t, hover) {
+      var pts = [];
+      for (var i = 0; i < 7; i++) {
+        pts.push([
+          w * (0.2 + 0.6 * (0.5 + 0.5 * Math.sin(t * 0.5 + i * 1.7))),
+          h * (0.2 + 0.6 * (0.5 + 0.5 * Math.cos(t * 0.4 + i * 2.3))),
+        ]);
+      }
+      // crude cell tint by sampling a coarse grid
+      var step = 7;
+      for (var y = 0; y < h; y += step) {
+        for (var x = 0; x < w; x += step) {
+          var best = 0, bd = 1e9;
+          for (var k = 0; k < pts.length; k++) {
+            var dx = x - pts[k][0], dy = y - pts[k][1], d = dx * dx + dy * dy;
+            if (d < bd) { bd = d; best = k; }
+          }
+          ctx.fillStyle = best % 2 ? g(0.12) : c(0.1);
+          ctx.fillRect(x, y, step, step);
+        }
+      }
+      for (var p = 0; p < pts.length; p++) {
+        ctx.beginPath();
+        ctx.arc(pts[p][0], pts[p][1], 2, 0, Math.PI * 2);
+        ctx.fillStyle = g(0.8); ctx.fill();
+      }
+    },
+
+    // 17: Slime Mould — branching filament network
+    function (ctx, w, h, t, hover) {
+      var cx = w * 0.5, cy = h * 0.5;
+      ctx.lineWidth = 1;
+      for (var i = 0; i < 12; i++) {
+        var a = (i / 12) * Math.PI * 2 + t * 0.15;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        var x = cx, y = cy, ang = a;
+        for (var s = 0; s < 8; s++) {
+          ang += Math.sin(t + i + s) * 0.4;
+          x += Math.cos(ang) * 5;
+          y += Math.sin(ang) * 5;
+          ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = i % 2 ? g(0.4) : c(0.3);
+        ctx.stroke();
+      }
+    },
+    // 18: Cloth — sagging hanging net
+    function (ctx, w, h, t, hover) {
+      var cols = 8, rows = 6, sx = w / (cols + 1), top = h * 0.18;
+      function sag(c, r) {
+        var x = sx * (c + 1);
+        var droop = Math.sin((c / cols) * Math.PI) * (r / rows) * h * 0.28;
+        var sway = Math.sin(t * 1.2 + r * 0.5) * 3 * (r / rows);
+        var y = top + r * (h * 0.62 / rows) + droop;
+        return [x + sway, y];
+      }
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = g(0.4);
+      for (var r = 0; r <= rows; r++) {
+        for (var c = 0; c <= cols; c++) {
+          var p = sag(c, r);
+          if (c < cols) { var q = sag(c + 1, r); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); }
+          if (r < rows) { var u = sag(c, r + 1); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.strokeStyle = c % 2 ? c(0.3) : g(0.35); ctx.lineTo(u[0], u[1]); ctx.stroke(); ctx.strokeStyle = g(0.4); }
+        }
+      }
+    },
+
+    // 19: Maze — grid with a snaking path
+    function (ctx, w, h, t, hover) {
+      var cell = 10, cols = Math.floor(w / cell), rows = Math.floor(h / cell);
+      ctx.strokeStyle = g(0.22); ctx.lineWidth = 0.5;
+      for (var x = 0; x <= cols; x++) { ctx.beginPath(); ctx.moveTo(x * cell, 0); ctx.lineTo(x * cell, rows * cell); ctx.stroke(); }
+      for (var y = 0; y <= rows; y++) { ctx.beginPath(); ctx.moveTo(0, y * cell); ctx.lineTo(cols * cell, y * cell); ctx.stroke(); }
+      var steps = Math.floor((Math.sin(t * 0.5) * 0.5 + 0.5) * (cols + rows));
+      ctx.strokeStyle = c(0.7); ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(cell / 2, cell / 2);
+      var cx = 0, cy = 0;
+      for (var i = 0; i < steps; i++) {
+        if (i % 2 === 0 && cx < cols - 1) cx++; else if (cy < rows - 1) cy++;
+        ctx.lineTo(cx * cell + cell / 2, cy * cell + cell / 2);
+      }
+      ctx.stroke();
+    },
+
+    // 20: Fourier — nested rotating circles tracing a tip
+    function (ctx, w, h, t, hover) {
+      var cx = w * 0.5, cy = h * 0.5;
+      var circ = [[22, 1, 0], [11, -2, 1.2], [6, 3, 2.4], [3.5, -5, 0.5]];
+      var x = cx, y = cy;
+      ctx.lineWidth = 1;
+      for (var i = 0; i < circ.length; i++) {
+        var r = circ[i][0], f = circ[i][1], ph = circ[i][2];
+        ctx.strokeStyle = g(0.25);
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+        var nx = x + Math.cos(f * t + ph) * r;
+        var ny = y + Math.sin(f * t + ph) * r;
+        ctx.strokeStyle = c(0.5);
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(nx, ny); ctx.stroke();
+        x = nx; y = ny;
+      }
+      ctx.fillStyle = g(0.9);
+      ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
+    },
   ];
 
   /* ── Attach a canvas to each card ── */
@@ -231,6 +449,17 @@
     'RotatingSquares',
     'Bouncink',
     'GravitySimulationGPU',
+    'Boids',
+    'DoublePendulum',
+    'FlowField',
+    'GameOfLife',
+    'Waves',
+    'ReactionDiffusion',
+    'Voronoi',
+    'Physarum',
+    'Cloth',
+    'Maze',
+    'Fourier',
   ];
 
   cards.forEach(function (card, i) {

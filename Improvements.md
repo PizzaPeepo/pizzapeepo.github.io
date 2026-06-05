@@ -101,17 +101,7 @@ incremental.
 - **[Enhancement] Expose the angular-velocity relationship.** It is hardcoded as
   `(circles.length - j) * t`; a multiplier slider would let users explore very different
   rosette / spirograph patterns. Add an option to connect every k-th point (star polygons).
-- **[Enhancement] Color by radius or angle; drag to move the origin; PNG export** (this demo
-  produces especially beautiful stills).
-
-### 08 · Rotating Squares
-
-- **[Big-ish, high ROI] Generalize square → N-gon.** A "sides" slider (triangles, pentagons,
-  hexagons, …) built on an extended `Utils/square.js` yields enormous variety from a small
-  change. The inscribed-rotation construction generalizes directly.
-- **[Quick win] Optional fade trail** (motion blur) like the other demos, plus PNG export.
-- **[Enhancement] Mouse-reactive speed** — spin faster near the cursor, mirroring the
-  hover-acceleration trick `cardan.js` already uses on the landing page.
+- **[Enhancement] Color by radius or angle; drag to move the origin; 
 
 ### 10 · Gravity Simulation · GPU
 

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wave Interference — Canvas Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="../CSS/theme.css">
+  <style>
+    html, body { margin: 0; padding: 0; overflow: hidden; }
+    #backgroundCanvas { position: fixed; top: 0; left: 0; z-index: 0; cursor: crosshair; }
+  </style>
+</head>
+<body>
+
+  <canvas id="backgroundCanvas"></canvas>
+
+  <!-- Top-left navigation pill -->
+  <div class="hud hud-nav">
+    <a class="back-link" href="../index.html">← Home</a>
+    <h1 class="demo-title">Wave Interference</h1>
+    <button class="hud-panel-toggle" id="hudToggle" aria-label="Toggle controls" aria-expanded="false">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="hud-panel-backdrop" id="hudBackdrop"></div>
+
+  <!-- Right-side controls panel -->
+  <aside class="hud hud-panel" id="hudPanel">
+
+    <div class="hud-panel-header">
+      <span class="fps-badge" id="fpsBadge">— fps</span>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <span class="toggle-icon">☀</span>
+        <span class="toggle-label">Light</span>
+      </button>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Click to add a source · right-click removes the nearest</span>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Wavelength: <span id="wavelengthValue"></span>px</span>
+      <input type="range" min="20" max="200" step="2" class="slider" id="wavelengthSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Speed: <span id="speedValue"></span></span>
+      <input type="range" min="0" max="4" step="0.05" class="slider" id="speedSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Falloff: <span id="falloffValue"></span></span>
+      <input type="range" min="0" max="100" step="1" class="slider" id="falloffSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Resolution: <span id="resValue"></span></span>
+      <input type="range" min="120" max="420" step="20" class="slider" id="resSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Palette</span>
+      <label><input type="radio" name="palette" value="ocean" checked> Ocean</label>
+      <label><input type="radio" name="palette" value="thermal"> Thermal</label>
+      <label><input type="radio" name="palette" value="mono"> Greyscale</label>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Options</span>
+      <label><input type="checkbox" id="markerCheckbox" checked> Show source markers</label>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Sources</span>
+      <button id="twoButton">Two sources (classic)</button>
+      <button id="threeButton">Three sources</button>
+      <button id="lineButton">Linear array</button>
+      <button id="clearButton">Clear</button>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Actions</span>
+      <button id="pauseButton">Pause (Space)</button>
+      <button id="exportButton">Save PNG (S)</button>
+    </div>
+
+  </aside>
+
+  <script type="module" src="main.js"></script>
+  <script src="../JS/theme.js"></script>
+  <script src="../JS/hudUtils.js"></script>
+</body>
+</html>

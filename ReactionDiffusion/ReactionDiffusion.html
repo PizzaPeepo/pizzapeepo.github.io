@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reaction-Diffusion — Canvas Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="../CSS/theme.css">
+  <style>
+    html, body { margin: 0; padding: 0; overflow: hidden; }
+    #backgroundCanvas { position: fixed; top: 0; left: 0; z-index: 0; cursor: crosshair; }
+    .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .btn-row button { flex: 1 1 45%; }
+  </style>
+</head>
+<body>
+
+  <canvas id="backgroundCanvas"></canvas>
+
+  <!-- Top-left navigation pill -->
+  <div class="hud hud-nav">
+    <a class="back-link" href="../index.html">← Home</a>
+    <h1 class="demo-title">Reaction-Diffusion</h1>
+    <button class="hud-panel-toggle" id="hudToggle" aria-label="Toggle controls" aria-expanded="false">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="hud-panel-backdrop" id="hudBackdrop"></div>
+
+  <!-- Right-side controls panel -->
+  <aside class="hud hud-panel" id="hudPanel">
+
+    <div class="hud-panel-header">
+      <span class="fps-badge" id="fpsBadge">— fps</span>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <span class="toggle-icon">☀</span>
+        <span class="toggle-label">Light</span>
+      </button>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Drag on the canvas to seed chemical B</span>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Feed: <span id="feedValue"></span></span>
+      <input type="range" min="0.01" max="0.08" step="0.0005" class="slider" id="feedSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Kill: <span id="killValue"></span></span>
+      <input type="range" min="0.04" max="0.07" step="0.0005" class="slider" id="killSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Steps / frame: <span id="stepsValue"></span></span>
+      <input type="range" min="1" max="20" step="1" class="slider" id="stepsSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Resolution: <span id="resValue"></span></span>
+      <input type="range" min="120" max="320" step="20" class="slider" id="resSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Brush size: <span id="brushValue"></span></span>
+      <input type="range" min="2" max="20" step="1" class="slider" id="brushSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Palette</span>
+      <label><input type="radio" name="palette" value="ember" checked> Ember</label>
+      <label><input type="radio" name="palette" value="ice"> Ice</label>
+      <label><input type="radio" name="palette" value="mono"> Greyscale</label>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Presets</span>
+      <div class="btn-row">
+        <button data-f="0.0545" data-k="0.062">Coral</button>
+        <button data-f="0.0367" data-k="0.0649">Mitosis</button>
+        <button data-f="0.030"  data-k="0.062">Spots</button>
+        <button data-f="0.058"  data-k="0.065">Worms</button>
+        <button data-f="0.029"  data-k="0.057">Maze</button>
+        <button data-f="0.018"  data-k="0.051">Holes</button>
+      </div>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Actions</span>
+      <button id="seedButton">Reseed (R)</button>
+      <button id="clearButton">Clear</button>
+      <button id="pauseButton">Pause (Space)</button>
+      <button id="exportButton">Save PNG (S)</button>
+    </div>
+
+  </aside>
+
+  <script type="module" src="main.js"></script>
+  <script src="../JS/theme.js"></script>
+  <script src="../JS/hudUtils.js"></script>
+</body>
+</html>

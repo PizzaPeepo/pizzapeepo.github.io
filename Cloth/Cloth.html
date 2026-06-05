@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloth Simulation — Canvas Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="../CSS/theme.css">
+  <style>
+    html, body { margin: 0; padding: 0; overflow: hidden; }
+    #backgroundCanvas { position: fixed; top: 0; left: 0; z-index: 0; cursor: grab; }
+    #backgroundCanvas.grabbing { cursor: grabbing; }
+  </style>
+</head>
+<body>
+
+  <canvas id="backgroundCanvas"></canvas>
+
+  <!-- Top-left navigation pill -->
+  <div class="hud hud-nav">
+    <a class="back-link" href="../index.html">← Home</a>
+    <h1 class="demo-title">Cloth</h1>
+    <button class="hud-panel-toggle" id="hudToggle" aria-label="Toggle controls" aria-expanded="false">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="hud-panel-backdrop" id="hudBackdrop"></div>
+
+  <!-- Right-side controls panel -->
+  <aside class="hud hud-panel" id="hudPanel">
+
+    <div class="hud-panel-header">
+      <span class="fps-badge" id="fpsBadge">— fps</span>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <span class="toggle-icon">☀</span>
+        <span class="toggle-label">Light</span>
+      </button>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Left-drag grabs · right-drag tears</span>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Mesh density: <span id="densityValue"></span></span>
+      <input type="range" min="10" max="60" step="1" class="slider" id="densitySlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Gravity: <span id="gravityValue"></span></span>
+      <input type="range" min="0" max="1.2" step="0.02" class="slider" id="gravitySlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Stiffness: <span id="stiffnessValue"></span></span>
+      <input type="range" min="1" max="8" step="1" class="slider" id="stiffnessSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Tear threshold: <span id="tearValue"></span></span>
+      <input type="range" min="1.5" max="8" step="0.1" class="slider" id="tearSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Wind: <span id="windValue"></span></span>
+      <input type="range" min="0" max="60" step="1" class="slider" id="windSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Pinning</span>
+      <label><input type="radio" name="pin" value="top" checked> Top edge</label>
+      <label><input type="radio" name="pin" value="corners"> Top corners</label>
+      <label><input type="radio" name="pin" value="sides"> Both top + sides</label>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Draw</span>
+      <label><input type="radio" name="draw" value="mesh" checked> Mesh + strain</label>
+      <label><input type="radio" name="draw" value="solid"> Shaded surface</label>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Actions</span>
+      <button id="pauseButton">Pause (Space)</button>
+      <button id="resetButton">Reset (R)</button>
+      <button id="exportButton">Save PNG (S)</button>
+    </div>
+
+  </aside>
+
+  <script type="module" src="main.js"></script>
+  <script src="../JS/theme.js"></script>
+  <script src="../JS/hudUtils.js"></script>
+</body>
+</html>

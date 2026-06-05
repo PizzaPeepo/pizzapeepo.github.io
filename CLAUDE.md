@@ -80,6 +80,8 @@ HTML links shared CSS from `../CSS/`, includes back-to-mainpage link. Templates:
 - **CircularMotion** — circular motion demo; **4-canvas outlier**: `blackbackgroundCanvas` + `backgroundCanvas` (bgCtx) + `middlegroundCanvas` (mgCtx, trail) + `foregroundCanvas`
 - **Bouncink** — bouncing animation with custom font asset
 - **PhaseshiftDemo1** — phase shift visualization
+- **Boids** — Reynolds flocking; `Boid.js` does separation/alignment/cohesion steering, reuses `GravitySimulation/SpatialHash.js` for neighbour queries. Single-canvas modern-HUD pattern; fillRect trail-fade
+- **DoublePendulum** — two modes (radio-switched): chaotic double pendulum (`DoublePendulum.js`, inline RK4 over the 4-D state, overlaid perturbed copies) and analytic pendulum-wave bank (`PendulumWave.js`). Single-canvas modern-HUD pattern
 - **pr0xmas** — holiday demo. **Outlier**: uses p5.js (loaded locally), not ES6 modules
 
 ### CSS (`CSS/`)

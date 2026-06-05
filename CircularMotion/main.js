@@ -15,6 +15,9 @@ var fadeAwaySpeed = 0.1;
 var resetCanvas = false;
 var pointCount = 49;
 var velocity = 0.0015;
+var multiplier = 1.0;
+var starStep = 1;
+var colorMode = 'angle'; // 'angle' | 'radius'
 var deltaCircleRadius = Math.floor(canvasHeight / 2.1 / pointCount);
 var pointRadius = 5;
 let origin = new Vector2D(Math.floor(canvasWidth / 2), Math.floor(canvasHeight / 2));
@@ -37,15 +40,22 @@ function FillArrayOfCircles() {
 	}
 }
 
+function getColor(j, angle) {
+	if (colorMode === 'radius') {
+		return "hsl(" + Math.floor(j / circles.length * 360) + ", 100%, 70%)";
+	}
+	return "hsl(" + helpers.RadianToDegree(angle) + ", 100%, 70%)";
+}
+
 function drawTrailFrame(ctx, tVal, opacity) {
 	ctx.save();
 	ctx.globalAlpha = opacity;
 	for (let j = 0; j < circles.length; j++) {
-		const angle = (circles.length - j) * tVal;
-		const rainbowColorStyle = "hsl(" + helpers.RadianToDegree(angle) + ", 100%,  70%)";
+		const angle = multiplier * (circles.length - j) * tVal;
+		const colorStyle = getColor(j, angle);
 		ctx.beginPath();
 		ctx.save();
-		circles[j].DrawPointOnCircle(ctx, angle, pointRadius, rainbowColorStyle, rainbowColorStyle);
+		circles[j].DrawPointOnCircle(ctx, angle, pointRadius, colorStyle, colorStyle);
 		ctx.fill();
 		ctx.stroke();
 		ctx.restore();
@@ -55,7 +65,6 @@ function drawTrailFrame(ctx, tVal, opacity) {
 // #endregion
 
 // #region canvas setup
-var blackbackgroundCanvas = document.getElementById("blackbackgroundCanvas");
 var backgroundCanvas = document.getElementById("backgroundCanvas");
 var bgCtx = backgroundCanvas.getContext("2d");
 var middlegroundCanvas = document.getElementById("middlegroundCanvas");
@@ -64,7 +73,7 @@ var foregroundCanvas = document.getElementById("foregroundCanvas");
 var fgCtx = foregroundCanvas.getContext("2d");
 
 function applyCanvasSize() {
-	[blackbackgroundCanvas, backgroundCanvas, middlegroundCanvas, foregroundCanvas].forEach(function(c) {
+	[backgroundCanvas, middlegroundCanvas, foregroundCanvas].forEach(function(c) {
 		c.width = canvasWidth;
 		c.height = canvasHeight;
 		c.style.width = canvasWidth + 'px';
@@ -82,7 +91,7 @@ applyCanvasSize();
 
 // #region theme
 function applyThemeColors(isLight) {
-	blackbackgroundCanvas.style.background = isLight ? '#f5ede0' : '#18140e';
+	document.body.style.background = isLight ? '#f5ede0' : '#18140e';
 }
 applyThemeColors(document.documentElement.classList.contains('light'));
 document.addEventListener('themechange', function(e) {
@@ -101,6 +110,26 @@ window.addEventListener('resize', function() {
 	FillArrayOfCircles();
 	resetCanvas = true;
 });
+// #endregion
+
+// #region drag origin
+let isDragging = false;
+foregroundCanvas.addEventListener('pointerdown', function(e) {
+	isDragging = true;
+	const pos = helpers.GetMousePos(foregroundCanvas, e);
+	origin = new Vector2D(pos.x, pos.y);
+	for (const circle of circles) { circle.origin = origin; }
+	trail.reset();
+});
+foregroundCanvas.addEventListener('pointermove', function(e) {
+	if (!isDragging) return;
+	const pos = helpers.GetMousePos(foregroundCanvas, e);
+	origin = new Vector2D(pos.x, pos.y);
+	for (const circle of circles) { circle.origin = origin; }
+	trail.reset();
+});
+foregroundCanvas.addEventListener('pointerup', function() { isDragging = false; });
+foregroundCanvas.addEventListener('pointerleave', function() { isDragging = false; });
 // #endregion
 
 // #region Inputs
@@ -144,6 +173,29 @@ fadeAwaySpeedSlider.oninput = function() {
 	trail.reset();
 };
 
+var multiplierSlider = document.getElementById("multiplierSlider");
+multiplierSlider.value = multiplier;
+var multiplierValue = document.getElementById("multiplierValue");
+multiplierValue.innerHTML = multiplier.toFixed(2);
+
+multiplierSlider.oninput = function() {
+	multiplier = parseFloat(this.value);
+	multiplierValue.innerHTML = multiplier.toFixed(2);
+	if (liveResetCanvas) {
+		resetCanvas = true;
+	}
+};
+
+var starStepSlider = document.getElementById("starStepSlider");
+starStepSlider.value = starStep;
+var starStepValue = document.getElementById("starStepValue");
+starStepValue.innerHTML = starStep;
+
+starStepSlider.oninput = function() {
+	starStep = parseInt(this.value);
+	starStepValue.innerHTML = starStep;
+};
+
 var fadeAwayCheckbox = document.getElementById("fadeAwayCheckbox");
 fadeAwayCheckbox.checked = fadeAway;
 fadeAwayCheckbox.onclick = function() { fadeAway = this.checked; };
@@ -162,6 +214,10 @@ showBlackBorderAroundPointsCheckbox.onclick = function() { showBlackBorderAround
 
 var resetCanvasButton = document.getElementById("resetCanvasButton");
 resetCanvasButton.onclick = function() { resetCanvas = true; };
+
+document.querySelectorAll('input[name="colorMode"]').forEach(function(radio) {
+	radio.addEventListener('change', function() { colorMode = this.value; });
+});
 // #endregion
 
 let i = 0;
@@ -188,31 +244,45 @@ function draw() {
 		drawTrailFrame(mgCtx, t[i], 1.0);
 	}
 
-	bgCtx.beginPath();
-
 	for (let j = 0; j < circles.length; j++) {
-		const angle = (circles.length - j) * t[i];
-		const rainbowColorStyle = "hsl(" + helpers.RadianToDegree(angle) + ", 100%,  70%)";
+		const angle = multiplier * (circles.length - j) * t[i];
+		const colorStyle = getColor(j, angle);
 
 		fgCtx.beginPath();
 		fgCtx.save();
-		let borderStrokeStyle = rainbowColorStyle;
+		let borderStrokeStyle = colorStyle;
 		if (showBlackBorderAroundPoints) {
 			borderStrokeStyle = "rgba(0, 0, 0, 1.0)";
 		}
-		circles[j].DrawPointOnCircle(fgCtx, angle, pointRadius, borderStrokeStyle, rainbowColorStyle);
+		circles[j].DrawPointOnCircle(fgCtx, angle, pointRadius, borderStrokeStyle, colorStyle);
 		fgCtx.fill();
 		fgCtx.stroke();
 		fgCtx.restore();
-
-		if (showWhiteLines && j < circles.length) {
-			const tempPoint1 = circles[j].GetPointOnCircle(angle);
-			bgCtx.lineTo(tempPoint1.x, tempPoint1.y);
-		}
 	}
 
-	bgCtx.stroke();
-	bgCtx.restore();
+	if (showWhiteLines) {
+		if (starStep === 1) {
+			bgCtx.beginPath();
+			for (let j = 0; j < circles.length; j++) {
+				const angle = multiplier * (circles.length - j) * t[i];
+				const p = circles[j].GetPointOnCircle(angle);
+				bgCtx.lineTo(p.x, p.y);
+			}
+			bgCtx.stroke();
+		} else {
+			for (let j = 0; j < circles.length; j++) {
+				const jNext = (j + starStep) % circles.length;
+				const angle1 = multiplier * (circles.length - j) * t[i];
+				const angle2 = multiplier * (circles.length - jNext) * t[i];
+				const p1 = circles[j].GetPointOnCircle(angle1);
+				const p2 = circles[jNext].GetPointOnCircle(angle2);
+				bgCtx.beginPath();
+				bgCtx.moveTo(p1.x, p1.y);
+				bgCtx.lineTo(p2.x, p2.y);
+				bgCtx.stroke();
+			}
+		}
+	}
 
 	i++;
 	if (document.hidden) return;

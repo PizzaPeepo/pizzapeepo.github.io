@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Slime Mould (Physarum) — Canvas Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="../CSS/theme.css">
+  <style>
+    html, body { margin: 0; padding: 0; overflow: hidden; }
+    #backgroundCanvas { position: fixed; top: 0; left: 0; z-index: 0; cursor: crosshair; }
+  </style>
+</head>
+<body>
+
+  <canvas id="backgroundCanvas"></canvas>
+
+  <!-- Top-left navigation pill -->
+  <div class="hud hud-nav">
+    <a class="back-link" href="../index.html">← Home</a>
+    <h1 class="demo-title">Slime Mould</h1>
+    <button class="hud-panel-toggle" id="hudToggle" aria-label="Toggle controls" aria-expanded="false">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="hud-panel-backdrop" id="hudBackdrop"></div>
+
+  <!-- Right-side controls panel -->
+  <aside class="hud hud-panel" id="hudPanel">
+
+    <div class="hud-panel-header">
+      <span class="fps-badge" id="fpsBadge">— fps</span>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <span class="toggle-icon">☀</span>
+        <span class="toggle-label">Light</span>
+      </button>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Drag on the canvas to attract the colony</span>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Agents: <span id="countValue"></span></span>
+      <input type="range" min="1000" max="40000" step="1000" class="slider" id="countSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Sensor angle: <span id="sensorAngleValue"></span>°</span>
+      <input type="range" min="5" max="80" step="1" class="slider" id="sensorAngleSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Sensor distance: <span id="sensorDistValue"></span></span>
+      <input type="range" min="2" max="30" step="1" class="slider" id="sensorDistSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Turn speed: <span id="turnValue"></span>°</span>
+      <input type="range" min="5" max="80" step="1" class="slider" id="turnSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Step size: <span id="stepValue"></span></span>
+      <input type="range" min="0.3" max="3" step="0.1" class="slider" id="stepSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Evaporation: <span id="decayValue"></span></span>
+      <input type="range" min="1" max="30" step="1" class="slider" id="decaySlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Palette</span>
+      <label><input type="radio" name="palette" value="gold" checked> Gold</label>
+      <label><input type="radio" name="palette" value="plasma"> Plasma</label>
+      <label><input type="radio" name="palette" value="mono"> Mono</label>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Actions</span>
+      <button id="resetButton">Reset (R)</button>
+      <button id="pauseButton">Pause (Space)</button>
+      <button id="exportButton">Save PNG (S)</button>
+    </div>
+
+  </aside>
+
+  <script type="module" src="main.js"></script>
+  <script src="../JS/theme.js"></script>
+  <script src="../JS/hudUtils.js"></script>
+</body>
+</html>

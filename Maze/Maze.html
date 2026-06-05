@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Maze & Pathfinding — Canvas Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="../CSS/theme.css">
+  <style>
+    html, body { margin: 0; padding: 0; overflow: hidden; }
+    #backgroundCanvas { position: fixed; top: 0; left: 0; z-index: 0; }
+  </style>
+</head>
+<body>
+
+  <canvas id="backgroundCanvas"></canvas>
+
+  <!-- Top-left navigation pill -->
+  <div class="hud hud-nav">
+    <a class="back-link" href="../index.html">← Home</a>
+    <h1 class="demo-title">Maze &amp; Pathfinding</h1>
+    <button class="hud-panel-toggle" id="hudToggle" aria-label="Toggle controls" aria-expanded="false">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="hud-panel-backdrop" id="hudBackdrop"></div>
+
+  <!-- Right-side controls panel -->
+  <aside class="hud hud-panel" id="hudPanel">
+
+    <div class="hud-panel-header">
+      <span class="fps-badge" id="fpsBadge">— </span>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <span class="toggle-icon">☀</span>
+        <span class="toggle-label">Light</span>
+      </button>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Algorithm</span>
+      <label><input type="radio" name="algo" value="astar" checked> A* (Manhattan)</label>
+      <label><input type="radio" name="algo" value="dijkstra"> Dijkstra</label>
+      <label><input type="radio" name="algo" value="bfs"> Breadth-first</label>
+      <label><input type="radio" name="algo" value="dfs"> Depth-first</label>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Cell size: <span id="cellValue"></span>px</span>
+      <input type="range" min="10" max="40" step="2" class="slider" id="cellSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Search speed: <span id="speedValue"></span> /frame</span>
+      <input type="range" min="1" max="120" step="1" class="slider" id="speedSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Options</span>
+      <label><input type="checkbox" id="genAnimCheckbox" checked> Animate generation</label>
+      <label><input type="checkbox" id="autoCheckbox" checked> Auto-solve after build</label>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Actions</span>
+      <button id="newButton">New maze (N)</button>
+      <button id="solveButton">Solve (Enter)</button>
+      <button id="exportButton">Save PNG (S)</button>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label" id="statusLabel">—</span>
+    </div>
+
+  </aside>
+
+  <script type="module" src="main.js"></script>
+  <script src="../JS/theme.js"></script>
+  <script src="../JS/hudUtils.js"></script>
+</body>
+</html>
