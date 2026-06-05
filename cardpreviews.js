@@ -430,6 +430,23 @@
       ctx.fillStyle = g(0.9);
       ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
     },
+    // 21: Pong Wars — two territories with balls bouncing along a wobbling frontier
+    function (ctx, w, h, t, hover) {
+      var cols = 11, rows = 8, cw = w / cols, ch = h / rows;
+      for (var y = 0; y < rows; y++) {
+        var front = cols * (0.5 + 0.16 * Math.sin(t * 1.1 + y * 0.7));
+        for (var x = 0; x < cols; x++) {
+          ctx.fillStyle = x < front ? g(0.32) : c(0.26);
+          ctx.fillRect(x * cw + 0.5, y * ch + 0.5, cw - 1, ch - 1);
+        }
+      }
+      var bx1 = w * (0.5 + 0.34 * Math.sin(t * 1.7));
+      var by1 = h * (0.5 + 0.40 * Math.sin(t * 2.3 + 1));
+      var bx2 = w * (0.5 + 0.34 * Math.sin(t * 1.9 + 2));
+      var by2 = h * (0.5 + 0.40 * Math.cos(t * 2.1));
+      ctx.beginPath(); ctx.arc(bx1, by1, 3.2, 0, Math.PI * 2); ctx.fillStyle = c(0.85); ctx.fill();
+      ctx.beginPath(); ctx.arc(bx2, by2, 3.2, 0, Math.PI * 2); ctx.fillStyle = g(0.85); ctx.fill();
+    },
   ];
 
   /* ── Attach a canvas to each card ── */
@@ -460,6 +477,7 @@
     'Cloth',
     'Maze',
     'Fourier',
+    'PongWars',
   ];
 
   cards.forEach(function (card, i) {

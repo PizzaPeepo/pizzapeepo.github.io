@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pong Wars — Canvas Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="../CSS/theme.css">
+  <style>
+    html, body { margin: 0; padding: 0; overflow: hidden; }
+    #backgroundCanvas { position: fixed; top: 0; left: 0; z-index: 0; }
+
+    /* text + colour inputs inside the HUD panel */
+    .hud-panel input[type="text"] {
+      width: 100%;
+      box-sizing: border-box;
+      background: var(--bg-lift, #2c2116);
+      border: 1px solid var(--tx-4, #3a2210);
+      border-radius: 8px;
+      color: var(--tx, #f5e8d4);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 6px 9px;
+      margin-top: 4px;
+    }
+    .hud-panel input[type="text"]:focus { outline: none; border-color: var(--gold, #f5a623); }
+    .pw-btn-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .pw-btn-row button { flex: 1 1 calc(50% - 6px); }
+
+    /* per-team name + colour controls (built by main.js) */
+    .pw-team-row { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+    .pw-team-row input[type="color"] {
+      width: 34px; height: 30px; border: none; border-radius: 6px;
+      background: none; cursor: pointer; padding: 0; flex: 0 0 auto;
+    }
+    .pw-team-row input[type="text"] { margin-top: 0; }
+    .pw-count-row { display: flex; gap: 6px; }
+    .pw-count-row label {
+      flex: 1; text-align: center; font-size: 13px; cursor: pointer;
+      padding: 5px 0; border-radius: 7px;
+      background: var(--bg-lift, #2c2116); border: 1px solid var(--tx-4, #3a2210);
+    }
+    .pw-count-row input { position: absolute; opacity: 0; pointer-events: none; }
+    .pw-count-row label:has(input:checked) { border-color: var(--gold, #f5a623); color: var(--gold, #f5a623); }
+
+    /* ── Scoreboard (top-centre, stream-readable) ── */
+    .pw-scoreboard {
+      position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
+      z-index: 30; pointer-events: none;
+      display: flex; flex-direction: column; align-items: stretch; gap: 9px;
+      width: min(620px, 86vw);
+      font-family: 'Fraunces', Georgia, serif;
+      padding: 12px 18px;
+      background: rgba(0,0,0,0.32);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 22px;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      box-shadow: 0 8px 28px rgba(0,0,0,0.35);
+      transition: opacity 0.3s ease;
+    }
+    html.light .pw-scoreboard { background: rgba(255,255,255,0.45); border-color: rgba(0,0,0,0.10); }
+    .pw-scoreboard.pw-hidden { opacity: 0; }
+    .pw-bar {
+      width: 100%; height: 14px; border-radius: 8px; overflow: hidden;
+      display: flex; box-shadow: inset 0 1px 3px rgba(0,0,0,0.4);
+    }
+    .pw-bar > div { height: 100%; transition: width 0.25s linear; }
+    .pw-legend {
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 5px 16px;
+    }
+    .pw-chip {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 15px; font-weight: 700; color: #fff; white-space: nowrap;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+    }
+    html.light .pw-chip { color: #1a1008; text-shadow: none; }
+    .pw-chip .pw-pct { font-variant-numeric: tabular-nums; opacity: 0.92; }
+    .pw-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 8px rgba(0,0,0,0.4); }
+
+    /* ── "Starting soon" overlay ── */
+    .pw-overlay {
+      position: fixed; inset: 0; z-index: 20; pointer-events: none;
+      display: flex; align-items: center; justify-content: center;
+      text-align: center;
+      opacity: 0; transition: opacity 0.5s ease;
+    }
+    .pw-overlay.pw-show { opacity: 1; }
+    .pw-overlay-card {
+      padding: 44px 64px;
+      background: rgba(0,0,0,0.38);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 22px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+    }
+    .pw-overlay-title {
+      font-family: 'Fraunces', Georgia, serif;
+      font-weight: 800; font-size: clamp(40px, 7vw, 92px);
+      line-height: 1; color: #fff; letter-spacing: -0.02em;
+      text-shadow: 0 4px 24px rgba(0,0,0,0.55);
+    }
+    .pw-overlay-sub {
+      font-family: 'DM Sans', system-ui, sans-serif;
+      font-size: clamp(15px, 2vw, 22px); color: rgba(255,255,255,0.82);
+      margin-top: 18px; letter-spacing: 0.02em;
+    }
+
+    /* ── Event banner (transient toast for chat events) ── */
+    .pw-banner {
+      position: fixed; top: 110px; left: 50%; transform: translateX(-50%) translateY(-14px);
+      z-index: 60; pointer-events: none;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      font-weight: 600; font-size: 19px; color: #fff;
+      padding: 12px 26px; border-radius: 40px;
+      background: linear-gradient(90deg, var(--gold, #f5a623), var(--coral, #ff6b47));
+      box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+      opacity: 0; transition: opacity 0.25s ease, transform 0.25s ease;
+      white-space: nowrap;
+    }
+    .pw-banner.pw-show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* screen shake for hype moments */
+    @keyframes pw-shake {
+      0%,100% { transform: translate(0,0); }
+      20% { transform: translate(-6px, 3px); }
+      40% { transform: translate(5px, -4px); }
+      60% { transform: translate(-4px, -3px); }
+      80% { transform: translate(4px, 3px); }
+    }
+    #backgroundCanvas.pw-shaking { animation: pw-shake 0.5s ease; }
+  </style>
+</head>
+<body>
+
+  <canvas id="backgroundCanvas"></canvas>
+
+  <!-- Stream scoreboard (segments + legend built by main.js) -->
+  <div class="pw-scoreboard" id="pwScore"></div>
+
+  <!-- Waiting-screen overlay -->
+  <div class="pw-overlay" id="pwOverlay">
+    <div class="pw-overlay-card">
+      <div class="pw-overlay-title" id="pwTitle">Starting Soon</div>
+      <div class="pw-overlay-sub" id="pwSub">Stream begins shortly — drop a follow while you wait!</div>
+    </div>
+  </div>
+
+  <!-- Event banner -->
+  <div class="pw-banner" id="pwBanner"></div>
+
+  <!-- Top-left navigation pill -->
+  <div class="hud hud-nav">
+    <a class="back-link" href="../index.html">← Home</a>
+    <h1 class="demo-title">Pong Wars</h1>
+    <button class="hud-panel-toggle" id="hudToggle" aria-label="Toggle controls" aria-expanded="false">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="hud-panel-backdrop" id="hudBackdrop"></div>
+
+  <!-- Right-side controls panel -->
+  <aside class="hud hud-panel" id="hudPanel">
+
+    <div class="hud-panel-header">
+      <span class="fps-badge" id="fpsBadge">— fps</span>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <span class="toggle-icon">☀</span>
+        <span class="toggle-label">Light</span>
+      </button>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Teams</span>
+      <div class="pw-count-row">
+        <label><input type="radio" name="teamcount" value="2" checked> 2</label>
+        <label><input type="radio" name="teamcount" value="4"> 4</label>
+        <label><input type="radio" name="teamcount" value="6"> 6</label>
+        <label><input type="radio" name="teamcount" value="8"> 8</label>
+      </div>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Colour theme</span>
+      <label><input type="radio" name="preset" value="classic" checked> Classic</label>
+      <label><input type="radio" name="preset" value="twitch"> Twitch purple</label>
+      <label><input type="radio" name="preset" value="fireice"> Fire &amp; Ice</label>
+      <label><input type="radio" name="preset" value="mono"> Monochrome</label>
+      <label><input type="radio" name="preset" value="custom"> Custom</label>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Team names &amp; colours</span>
+      <div id="pwTeamControls"></div>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Cell size: <span id="cellValue"></span>px</span>
+      <input type="range" min="8" max="48" step="1" class="slider" id="cellSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Ball speed: <span id="speedValue"></span></span>
+      <input type="range" min="2" max="16" step="0.5" class="slider" id="speedSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Balls per team: <span id="ballsValue"></span></span>
+      <input type="range" min="1" max="8" step="1" class="slider" id="ballsSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Options</span>
+      <label><input type="checkbox" id="glowCheckbox" checked> Ball glow</label>
+      <label><input type="checkbox" id="scoreCheckbox" checked> Show scoreboard</label>
+      <label><input type="checkbox" id="autoCheckbox" checked> Auto-restart rounds</label>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Waiting-screen overlay</span>
+      <label><input type="checkbox" id="overlayCheckbox"> Show overlay (O)</label>
+      <input type="text" id="titleInput" value="Starting Soon" maxlength="28">
+      <input type="text" id="subInput" value="Stream begins shortly — drop a follow while you wait!" maxlength="80">
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Actions</span>
+      <button id="pauseButton">Pause (Space)</button>
+      <button id="newButton">Re-launch balls (N)</button>
+      <button id="resetButton">Reset (R)</button>
+      <button id="exportButton">Save PNG (S)</button>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Chat-event preview</span>
+      <div class="pw-btn-row">
+        <button id="testBoostA">Boost A</button>
+        <button id="testBoostB">Boost B</button>
+        <button id="testDropA">Drop A</button>
+        <button id="testDropB">Drop B</button>
+        <button id="testBanner">Banner</button>
+        <button id="testShake">Shake</button>
+      </div>
+    </div>
+
+  </aside>
+
+  <script type="module" src="main.js"></script>
+  <script src="../JS/theme.js"></script>
+  <script src="../JS/hudUtils.js"></script>
+</body>
+</html>
