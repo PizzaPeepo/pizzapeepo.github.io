@@ -270,10 +270,34 @@
                   z-index 0s,
                   opacity 0.25s ease;
       z-index: 1;
+      contain: layout paint;
 
       opacity: 0;
       animation: riseIn 0.5s ease forwards;
     }
+    /* Hover shadow lives on a pseudo-element: opacity transition is GPU-composited
+       (no per-frame repaint of the 80px blur, unlike animating box-shadow directly). */
+    .card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 16px;
+      pointer-events: none;
+      z-index: -1;
+      opacity: 0;
+      transition: opacity 0.30s ease;
+      box-shadow: 0 40px 80px rgba(0,0,0,0.65),
+                  0 16px 32px rgba(0,0,0,0.35),
+                  0 0 60px rgba(245,166,35,0.14);
+    }
+    .card:hover::after,
+    .card.card-pill-hover::after { opacity: 1; }
+    html.light .card::after {
+      box-shadow: 0 28px 64px rgba(0,0,0,0.13),
+                  0 10px 22px rgba(0,0,0,0.08);
+    }
+    /* filtered mode collapses the lift — suppress the big shadow too */
+    .grid.filtered .card:hover::after { opacity: 0; }
     .card:nth-child(1)  { animation-delay: 0.10s; }
     .card:nth-child(2)  { animation-delay: 0.17s; }
     .card:nth-child(3)  { animation-delay: 0.24s; }
@@ -292,9 +316,6 @@
 
     .card:hover {
       transform: scale(1.08);
-      box-shadow: 0 40px 80px rgba(0,0,0,0.65),
-                  0 16px 32px rgba(0,0,0,0.35),
-                  0 0 60px rgba(245,166,35,0.14);
       background: rgba(44, 33, 22, 0.55);
       z-index: 2;
     }
@@ -470,9 +491,6 @@
     .card.preview-dim { opacity: 0.18; }
     .card.card-pill-hover {
       transform: scale(1.04);
-      box-shadow: 0 40px 80px rgba(0,0,0,0.65),
-                  0 16px 32px rgba(0,0,0,0.35),
-                  0 0 60px rgba(245,166,35,0.14);
       background: rgba(44, 33, 22, 0.55);
       z-index: 2;
     }
@@ -482,8 +500,6 @@
     .card.card-pill-hover .card-num   { color: var(--tx-3); }
     html.light .card.card-pill-hover {
       background: rgba(255, 252, 248, 0.6);
-      box-shadow: 0 28px 64px rgba(0,0,0,0.13),
-                  0 10px 22px rgba(0,0,0,0.08);
     }
 
     /* ─── LIGHT MODE GLASS ─── */
@@ -493,8 +509,6 @@
     }
     html.light .card:hover {
       background: rgba(255, 252, 248, 0.6);
-      box-shadow: 0 28px 64px rgba(0,0,0,0.13),
-                  0 10px 22px rgba(0,0,0,0.08);
     }
 
     /* ─── CARD BORDER SVG ─── */
@@ -1344,7 +1358,7 @@
       cards.forEach(function (card) {
         var isWide = card.classList.contains('card-wide');
         var scale  = isWide ? 1.037 : 1.08;
-        var raf = 0, nx = 0, ny = 0;
+        var raf = 0, nx = 0, ny = 0, rect = null;
 
         function apply() {
           raf = 0;
@@ -1354,15 +1368,29 @@
             ( nx * MAX_TILT).toFixed(2) + 'deg)';
         }
 
-        card.addEventListener('mousemove', function (e) {
+        // Cache geometry on enter so mousemove never forces a sync layout read.
+        // The :hover scale is about center, so the rect center is scale-invariant;
+        // pair it with offsetWidth/Height (untransformed) for exact normalized coords.
+        card.addEventListener('mouseenter', function () {
           var r = card.getBoundingClientRect();
-          nx = (e.clientX - r.left) / r.width  - 0.5;
-          ny = (e.clientY - r.top)  / r.height - 0.5;
+          rect = {
+            cx: r.left + r.width  / 2,
+            cy: r.top  + r.height / 2,
+            w:  card.offsetWidth  || r.width,
+            h:  card.offsetHeight || r.height,
+          };
+        });
+
+        card.addEventListener('mousemove', function (e) {
+          if (!rect) return;
+          nx = (e.clientX - rect.cx) / rect.w;
+          ny = (e.clientY - rect.cy) / rect.h;
           if (!raf) raf = requestAnimationFrame(apply);   // coalesce to one write/frame
         });
 
         card.addEventListener('mouseleave', function () {
           if (raf) { cancelAnimationFrame(raf); raf = 0; }
+          rect = null;
           card.style.transform = '';
         });
       });
