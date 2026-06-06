@@ -1,7 +1,6 @@
 import * as helpers from "../Utils/helpers.js";
 import Vector2D from "../Utils/Vector2D.js";
 import Circle from "./circle.js";
-import FadeTrail from "../Utils/FadeTrail.js";
 import { onThemeChange } from "../Utils/ThemeManager.js";
 import { onWindowResize } from "../Utils/ResizeManager.js";
 
@@ -29,7 +28,24 @@ FillArrayOfCircles();
 
 let t = helpers.range(0, 2 * Math.PI, velocity);
 
-const trail = new FadeTrail(500);
+// Double-buffer fade: ping-pong two offscreen canvases, decay prev by (1-fade) via
+// drawImage+globalAlpha (truncates cleanly to 0 in Chrome). O(points) per tick, constant
+// over time — replaces FadeTrail's O(trail_len x points) replay. See Utils/FadeTrail.js.
+const _trailA = document.createElement('canvas');
+const _trailB = document.createElement('canvas');
+let _trailCtxA, _trailCtxB, _trailFront = 'A';
+function initTrailCanvases() {
+	_trailA.width = canvasWidth; _trailA.height = canvasHeight;
+	_trailB.width = canvasWidth; _trailB.height = canvasHeight;
+	_trailCtxA = _trailA.getContext('2d');
+	_trailCtxB = _trailB.getContext('2d');
+}
+initTrailCanvases();
+function resetTrail() {
+	_trailCtxA.clearRect(0, 0, _trailA.width, _trailA.height);
+	_trailCtxB.clearRect(0, 0, _trailB.width, _trailB.height);
+	_trailFront = 'A';
+}
 // #endregion
 
 // #region functions
@@ -87,8 +103,12 @@ applyCanvasSize();
 // #endregion
 
 // #region theme
+let bgColor = '#18140e';
+let lineColor = 'rgba(255,255,255,0.85)';
 function applyThemeColors(isLight) {
-	document.body.style.background = isLight ? '#f5ede0' : '#18140e';
+	bgColor = isLight ? '#f5ede0' : '#18140e';
+	document.body.style.background = bgColor;
+	lineColor = isLight ? 'rgba(40,25,10,0.7)' : 'rgba(255,255,255,0.85)';
 }
 onThemeChange(applyThemeColors);
 // #endregion
@@ -99,6 +119,7 @@ onWindowResize(function() {
 	canvasHeight = window.innerHeight;
 	if (window._hudToggling) return;
 	applyCanvasSize();
+	initTrailCanvases();
 	origin = new Vector2D(Math.floor(canvasWidth / 2), Math.floor(canvasHeight / 2));
 	deltaCircleRadius = Math.floor(canvasHeight / 2.1 / pointCount);
 	FillArrayOfCircles();
@@ -113,14 +134,14 @@ foregroundCanvas.addEventListener('pointerdown', function(e) {
 	const pos = helpers.GetMousePos(foregroundCanvas, e);
 	origin = new Vector2D(pos.x, pos.y);
 	for (const circle of circles) { circle.origin = origin; }
-	trail.reset();
+	resetTrail();
 });
 foregroundCanvas.addEventListener('pointermove', function(e) {
 	if (!isDragging) return;
 	const pos = helpers.GetMousePos(foregroundCanvas, e);
 	origin = new Vector2D(pos.x, pos.y);
 	for (const circle of circles) { circle.origin = origin; }
-	trail.reset();
+	resetTrail();
 });
 foregroundCanvas.addEventListener('pointerup', function() { isDragging = false; });
 foregroundCanvas.addEventListener('pointerleave', function() { isDragging = false; });
@@ -164,7 +185,7 @@ fadeAwaySpeedValue.innerHTML = fadeAwaySpeedSlider.value * 1000;
 fadeAwaySpeedSlider.oninput = function() {
 	fadeAwaySpeedValue.innerHTML = this.value * 1000;
 	fadeAwaySpeed = this.value;
-	trail.reset();
+	resetTrail();
 };
 
 var multiplierSlider = document.getElementById("multiplierSlider");
@@ -207,22 +228,69 @@ showBlackBorderAroundPointsCheckbox.checked = showBlackBorderAroundPoints;
 showBlackBorderAroundPointsCheckbox.onclick = function() { showBlackBorderAroundPoints = this.checked; };
 
 var resetCanvasButton = document.getElementById("resetCanvasButton");
-resetCanvasButton.onclick = function() { resetCanvas = true; };
+resetCanvasButton.onclick = function() { resetCanvas = true; if (paused) setPaused(false); };
 
 document.querySelectorAll('input[name="colorMode"]').forEach(function(radio) {
 	radio.addEventListener('change', function() { colorMode = this.value; });
 });
+
+// pause / save / fps
+var paused = false;
+var pauseButton = document.getElementById("pauseButton");
+function setPaused(p) {
+	if (p === paused) return;
+	paused = p;
+	if (pauseButton) pauseButton.textContent = paused ? 'Resume (Space)' : 'Pause (Space)';
+	if (!paused) { _fpsLast = 0; window.requestAnimationFrame(draw); }
+}
+if (pauseButton) pauseButton.onclick = () => setPaused(!paused);
+
+function savePNG() {
+	const out = document.createElement('canvas');
+	out.width = canvasWidth; out.height = canvasHeight;
+	const octx = out.getContext('2d');
+	octx.fillStyle = bgColor;
+	octx.fillRect(0, 0, canvasWidth, canvasHeight);
+	octx.drawImage(backgroundCanvas, 0, 0);
+	octx.drawImage(middlegroundCanvas, 0, 0);
+	octx.drawImage(foregroundCanvas, 0, 0);
+	const a = document.createElement('a');
+	a.download = 'circular-motion-' + Date.now() + '.png';
+	a.href = out.toDataURL('image/png');
+	a.click();
+}
+var exportButton = document.getElementById("exportButton");
+if (exportButton) exportButton.onclick = savePNG;
+
+document.addEventListener('keydown', (e) => {
+	if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+	if (e.code === 'Space') { e.preventDefault(); setPaused(!paused); }
+	if (e.key === 'r' || e.key === 'R') { resetCanvas = true; if (paused) setPaused(false); }
+	if (e.key === 's' || e.key === 'S') savePNG();
+});
+
+var fpsBadge = document.getElementById("fpsBadge");
+var _fpsLast = 0, _fpsAccum = 0, _fpsFrames = 0;
+function updateFps(ts) {
+	if (_fpsLast) { _fpsAccum += ts - _fpsLast; _fpsFrames++; }
+	_fpsLast = ts;
+	if (_fpsAccum >= 500 && fpsBadge) {
+		fpsBadge.textContent = Math.round(1000 / (_fpsAccum / _fpsFrames)) + ' fps';
+		_fpsAccum = 0; _fpsFrames = 0;
+	}
+}
 // #endregion
 
 let i = 0;
 
-function draw() {
+function draw(ts) {
+	updateFps(ts || performance.now());
 	bgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 	fgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 
 	if (i >= t.length || resetCanvas == true) {
 		i = 0;
-		trail.reset();
+		resetTrail();
 		resetCanvas = false;
 		bgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 		mgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
@@ -230,9 +298,17 @@ function draw() {
 	}
 
 	if (fadeAway) {
+		// double-buffer fade (see initTrailCanvases): O(points) per tick, constant over time
+		const [frontCanvas, backCtx] = _trailFront === 'A' ? [_trailA, _trailCtxB] : [_trailB, _trailCtxA];
+		backCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+		backCtx.globalAlpha = 1 - Number(fadeAwaySpeed);
+		backCtx.drawImage(frontCanvas, 0, 0);
+		backCtx.globalAlpha = 1.0;
+		drawTrailFrame(backCtx, t[i], 1.0);
+		_trailFront = _trailFront === 'A' ? 'B' : 'A';
+		const newFront = _trailFront === 'A' ? _trailA : _trailB;
 		mgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
-		trail.push(t[i]);
-		trail.render(fadeAwaySpeed, (tVal, opacity) => drawTrailFrame(mgCtx, tVal, opacity));
+		mgCtx.drawImage(newFront, 0, 0);
 	} else {
 		mgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 		drawTrailFrame(mgCtx, t[i], 1.0);
@@ -250,6 +326,7 @@ function draw() {
 	}
 
 	if (showWhiteLines) {
+		bgCtx.strokeStyle = lineColor;
 		if (starStep === 1) {
 			bgCtx.beginPath();
 			for (let j = 0; j < circles.length; j++) {
@@ -274,7 +351,7 @@ function draw() {
 	}
 
 	i++;
-	if (document.hidden) return;
+	if (document.hidden || paused) return;
 	window.requestAnimationFrame(draw);
 }
 

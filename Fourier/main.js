@@ -208,6 +208,8 @@ function render() {
 	trace.unshift({ x: tip.x, y: tip.y });
 	if (trace.length > 1400) trace.pop();
 
+	ctx.save();
+	if (!isLight) { ctx.shadowBlur = 12; ctx.shadowColor = "#ffb84d"; }
 	ctx.strokeStyle = isLight ? "#b8860b" : "#ffd27a";
 	ctx.lineWidth = 2;
 	ctx.beginPath();
@@ -217,10 +219,11 @@ function render() {
 	ctx.stroke();
 
 	// tip dot
-	ctx.fillStyle = isLight ? "#b8860b" : "#ffd27a";
+	ctx.fillStyle = isLight ? "#b8860b" : "#fff2cc";
 	ctx.beginPath();
 	ctx.arc(tip.x, tip.y, 3, 0, Math.PI * 2);
 	ctx.fill();
+	ctx.restore();
 }
 // #endregion
 

@@ -44,6 +44,7 @@
   <aside class="hud hud-panel" id="hudPanel">
 
     <div class="hud-panel-header">
+      <span class="fps-badge" id="fpsBadge">— fps</span>
       <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
         <span class="toggle-icon">☀</span>
         <span class="toggle-label">Light</span>
@@ -78,6 +79,15 @@
     <div class="hud-section">
       <button id="drawWallToggle" class="active">Draw Wall: On</button>
       <p class="ctrl-hint">Drag on canvas to add a wall.<br>Right-click a wall to remove it.</p>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Actions</span>
+      <button id="pauseButton">Pause (Space)</button>
+      <button id="exportButton">Save PNG (S)</button>
+      <p class="ctrl-hint">Space pause · R new walls · S save</p>
     </div>
 
   </aside>

@@ -260,6 +260,8 @@ function render() {
 	// path (animated reveal)
 	if (pathCells.length) {
 		const upto = Math.min(pathAnim, pathCells.length);
+		ctx.save();
+		if (!isLight) { ctx.shadowBlur = 14; ctx.shadowColor = "#ffb84d"; }
 		ctx.strokeStyle = isLight ? "#c25a00" : "#ffd27a";
 		ctx.lineWidth = Math.max(2, cellSize * 0.28);
 		ctx.lineJoin = "round";
@@ -272,6 +274,7 @@ function render() {
 			if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
 		}
 		ctx.stroke();
+		ctx.restore();
 	}
 
 	// walls

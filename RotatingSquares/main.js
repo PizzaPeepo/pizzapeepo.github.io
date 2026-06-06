@@ -1,7 +1,6 @@
 import * as helpers from "../Utils/helpers.js";
 import Polygon from "../Utils/polygon.js";
 import Vector2D from "../Utils/Vector2D.js";
-import FadeTrail from "../Utils/FadeTrail.js";
 import { onThemeChange } from "../Utils/ThemeManager.js";
 import { onWindowResize } from "../Utils/ResizeManager.js";
 import { setupCanvases } from "../Utils/CanvasManager.js";
@@ -26,7 +25,24 @@ let iFloat = 0;
 let mousePos = { x: canvasWidth / 2, y: canvasHeight / 2 };
 // #endregion
 
-const trail = new FadeTrail(400);
+// Double-buffer fade: ping-pong two offscreen canvases, decay prev by (1-fade) via
+// drawImage+globalAlpha (truncates cleanly to 0 in Chrome). O(polygons) per tick, constant
+// over time — replaces FadeTrail's O(trail_len x polygons) replay. See Utils/FadeTrail.js.
+const _trailA = document.createElement('canvas');
+const _trailB = document.createElement('canvas');
+let _trailCtxA, _trailCtxB, _trailFront = 'A';
+function initTrailCanvases() {
+	_trailA.width = canvasWidth; _trailA.height = canvasHeight;
+	_trailB.width = canvasWidth; _trailB.height = canvasHeight;
+	_trailCtxA = _trailA.getContext('2d');
+	_trailCtxB = _trailB.getContext('2d');
+}
+initTrailCanvases();
+function resetTrail() {
+	_trailCtxA.clearRect(0, 0, _trailA.width, _trailA.height);
+	_trailCtxB.clearRect(0, 0, _trailB.width, _trailB.height);
+	_trailFront = 'A';
+}
 
 function ClearAndAddPolygonsToArray() {
 	polygons = [];
@@ -36,7 +52,7 @@ function ClearAndAddPolygonsToArray() {
 	for (let i = 0; i < polygonCount; i++) {
 		polygons.push(new Polygon(squareOrigin, scaledEdgeLength, 0, sidesCount));
 	}
-	trail.reset();
+	resetTrail();
 	iFloat = 0;
 }
 
@@ -55,8 +71,10 @@ applyCanvasSize();
 // #endregion
 
 // #region theme
+let bgColor = '#18140e';
 function applyThemeColors(isLight) {
-	backgroundCanvas.style.background = isLight ? '#f5ede0' : '#18140e';
+	bgColor = isLight ? '#f5ede0' : '#18140e';
+	backgroundCanvas.style.background = bgColor;
 	strokeColor = isLight ? 'rgba(20, 10, 0, 1.0)' : 'rgba(255, 255, 255, 1.0)';
 	bgCtx.strokeStyle = strokeColor;
 }
@@ -69,6 +87,7 @@ onWindowResize(function() {
 	canvasHeight = window.innerHeight;
 	if (window._hudToggling) return;
 	applyCanvasSize();
+	initTrailCanvases();
 	squareOrigin = new Vector2D(Math.floor(canvasWidth / 2), Math.floor(canvasHeight / 2));
 	enclosingSize = Math.min(canvasWidth, canvasHeight) * 0.5;
 	ClearAndAddPolygonsToArray();
@@ -86,7 +105,7 @@ rotationSpeedSlider.oninput = function() {
 	rotationSpeedValue.innerHTML = Math.floor(this.value * 10000);
 	delta_angle = parseFloat(this.value);
 	angles = helpers.range(0, (2 * Math.PI) / sidesCount, delta_angle);
-	trail.reset();
+	resetTrail();
 	iFloat = 0;
 };
 
@@ -134,7 +153,7 @@ var trailCheckbox = document.getElementById("trailCheckbox");
 trailCheckbox.checked = trailEnabled;
 trailCheckbox.onclick = function() {
 	trailEnabled = this.checked;
-	trail.reset();
+	resetTrail();
 };
 
 var fadeSpeedSlider = document.getElementById("fadeSpeedSlider");
@@ -145,13 +164,35 @@ fadeSpeedValue.innerHTML = Math.floor(fadeSpeed * 100);
 fadeSpeedSlider.oninput = function() {
 	fadeSpeed = parseFloat(this.value);
 	fadeSpeedValue.innerHTML = Math.floor(fadeSpeed * 100);
-	trail.reset();
+	resetTrail();
 };
 
 var resetCanvasButton = document.getElementById("resetCanvasButton");
-resetCanvasButton.onclick = function() { resetCanvas = true; };
+resetCanvasButton.onclick = function() { resetCanvas = true; if (paused) setPaused(false); };
 
 document.getElementById("exportButton").onclick = exportPNG;
+
+// pause / fps
+var paused = false;
+var pauseButton = document.getElementById("pauseButton");
+function setPaused(p) {
+	if (p === paused) return;
+	paused = p;
+	if (pauseButton) pauseButton.textContent = paused ? 'Resume (Space)' : 'Pause (Space)';
+	if (!paused) { _fpsLast = 0; window.requestAnimationFrame(draw); }
+}
+if (pauseButton) pauseButton.onclick = () => setPaused(!paused);
+
+var fpsBadge = document.getElementById("fpsBadge");
+var _fpsLast = 0, _fpsAccum = 0, _fpsFrames = 0;
+function updateFps(ts) {
+	if (_fpsLast) { _fpsAccum += ts - _fpsLast; _fpsFrames++; }
+	_fpsLast = ts;
+	if (_fpsAccum >= 500 && fpsBadge) {
+		fpsBadge.textContent = Math.round(1000 / (_fpsAccum / _fpsFrames)) + ' fps';
+		_fpsAccum = 0; _fpsFrames = 0;
+	}
+}
 // #endregion
 
 // #region mouse
@@ -161,18 +202,27 @@ window.addEventListener('mousemove', function(e) {
 // #endregion
 
 function exportPNG() {
+	const out = document.createElement('canvas');
+	out.width = canvasWidth; out.height = canvasHeight;
+	const octx = out.getContext('2d');
+	octx.fillStyle = bgColor;
+	octx.fillRect(0, 0, canvasWidth, canvasHeight);
+	octx.drawImage(backgroundCanvas, 0, 0);
 	const link = document.createElement('a');
-	link.download = 'rotating-polygons.png';
-	link.href = backgroundCanvas.toDataURL('image/png');
+	link.download = 'rotating-polygons-' + Date.now() + '.png';
+	link.href = out.toDataURL('image/png');
 	link.click();
 }
 
 window.addEventListener('keydown', function(e) {
+	if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+	if (e.code === 'Space') { e.preventDefault(); setPaused(!paused); }
 	if (e.key === 's' || e.key === 'S') exportPNG();
-	if (e.key === 'r' || e.key === 'R') resetCanvas = true;
+	if (e.key === 'r' || e.key === 'R') { resetCanvas = true; if (paused) setPaused(false); }
 });
 
-function drawPolygonsAtAngle(angle, opacity) {
+function drawPolygonsAtAngle(ctx, angle, opacity) {
+	const bgCtx = ctx; // draw onto supplied target (back buffer when trailing, visible canvas otherwise)
 	bgCtx.save();
 	bgCtx.globalAlpha = opacity;
 	for (let j = 1; j < polygons.length; j++) {
@@ -205,11 +255,12 @@ function drawPolygonsAtAngle(angle, opacity) {
 	bgCtx.restore();
 }
 
-function draw() {
+function draw(ts) {
+	updateFps(ts || performance.now());
 	if (resetCanvas) {
 		iFloat = 0;
 		resetCanvas = false;
-		trail.reset();
+		resetTrail();
 	}
 
 	if (iFloat >= angles.length) iFloat = 0;
@@ -226,15 +277,21 @@ function draw() {
 	bgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 
 	if (trailEnabled) {
-		trail.push(currentAngle);
-		trail.render(fadeSpeed, (angle, opacity) => {
-			drawPolygonsAtAngle(angle, opacity);
-		});
+		// double-buffer fade (see initTrailCanvases): O(polygons) per tick, constant over time
+		const [frontCanvas, backCtx] = _trailFront === 'A' ? [_trailA, _trailCtxB] : [_trailB, _trailCtxA];
+		backCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+		backCtx.globalAlpha = 1 - Number(fadeSpeed);
+		backCtx.drawImage(frontCanvas, 0, 0);
+		backCtx.globalAlpha = 1.0;
+		drawPolygonsAtAngle(backCtx, currentAngle, 1.0);
+		_trailFront = _trailFront === 'A' ? 'B' : 'A';
+		const newFront = _trailFront === 'A' ? _trailA : _trailB;
+		bgCtx.drawImage(newFront, 0, 0);
 	} else {
-		drawPolygonsAtAngle(currentAngle, 1.0);
+		drawPolygonsAtAngle(bgCtx, currentAngle, 1.0);
 	}
 
-	if (document.hidden) return;
+	if (document.hidden || paused) return;
 	window.requestAnimationFrame(draw);
 }
 

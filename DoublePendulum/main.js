@@ -205,12 +205,15 @@ function renderDouble() {
 			tr.push(pos.x2, pos.y2);
 			while (tr.length > maxLen * 2) { tr.shift(); tr.shift(); }
 			if (tr.length >= 4) {
+				// dark theme: additive blend so overlapping chaotic trails bloom into hot light
+				if (!isLight) ctx.globalCompositeOperation = "lighter";
 				ctx.beginPath();
 				ctx.moveTo(tr[0], tr[1]);
 				for (let k = 2; k < tr.length; k += 2) ctx.lineTo(tr[k], tr[k + 1]);
 				ctx.strokeStyle = `hsla(${p.hue}, 85%, ${isLight ? 45 : 62}%, ${copies > 6 ? 0.5 : 0.8})`;
 				ctx.lineWidth = 1.5;
 				ctx.stroke();
+				ctx.globalCompositeOperation = "source-over";
 			}
 		}
 

@@ -245,15 +245,23 @@ function drawLines(lines) {
 
 function drawRays(raycaster) {
 	ctx.save();
-	ctx.strokeStyle = rayColor;
-	ctx.lineWidth = 1;
+	// dark theme: additive blend → overlapping rays bloom into a bright core near the source.
+	// light theme: plain dark strokes (additive is invisible on a light bg).
+	if (!isLight) {
+		ctx.globalCompositeOperation = 'lighter';
+		ctx.strokeStyle = 'rgba(255, 205, 95, 0.14)';
+		ctx.lineWidth = 1.2;
+	} else {
+		ctx.strokeStyle = rayColor;
+		ctx.lineWidth = 1;
+	}
 	ctx.beginPath();
 	raycaster.Draw(ctx);
 	ctx.stroke();
 	ctx.restore();
 }
 
-function drawVisibilityPolygon(intersectionPoints) {
+function drawVisibilityPolygon(intersectionPoints, pos) {
 	ctx.save();
 	ctx.beginPath();
 	let first = true;
@@ -263,7 +271,19 @@ function drawVisibilityPolygon(intersectionPoints) {
 		else ctx.lineTo(pt.x, pt.y);
 	}
 	ctx.closePath();
-	ctx.fillStyle = isLight ? 'rgba(200, 140, 0, 0.13)' : 'rgba(255, 210, 80, 0.10)';
+	// radial falloff from the source → lit area reads like a real torch beam
+	const litR = Math.max(canvas_width, canvas_height) * 0.6;
+	const grad = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, litR);
+	if (isLight) {
+		grad.addColorStop(0,   'rgba(200, 140, 0, 0.22)');
+		grad.addColorStop(0.5, 'rgba(200, 140, 0, 0.10)');
+		grad.addColorStop(1,   'rgba(200, 140, 0, 0.02)');
+	} else {
+		grad.addColorStop(0,   'rgba(255, 220, 110, 0.20)');
+		grad.addColorStop(0.5, 'rgba(255, 200, 80, 0.08)');
+		grad.addColorStop(1,   'rgba(255, 180, 60, 0.01)');
+	}
+	ctx.fillStyle = grad;
 	ctx.fill();
 	ctx.restore();
 }
@@ -387,7 +407,51 @@ canvas.addEventListener("contextmenu", function (event) {
 // #endregion
 
 // #region animation
-function draw() {
+var paused = false;
+var fpsBadge = document.getElementById("fpsBadge");
+var _fpsLast = 0, _fpsAccum = 0, _fpsFrames = 0;
+
+function updateFps(ts) {
+	if (_fpsLast) { _fpsAccum += ts - _fpsLast; _fpsFrames++; }
+	_fpsLast = ts;
+	if (_fpsAccum >= 500) {
+		fpsBadge.textContent = Math.round(1000 / (_fpsAccum / _fpsFrames)) + ' fps';
+		_fpsAccum = 0; _fpsFrames = 0;
+	}
+}
+
+function savePNG() {
+	const out = document.createElement('canvas');
+	out.width = canvas_width; out.height = canvas_height;
+	const octx = out.getContext('2d');
+	octx.fillStyle = isLight ? '#f5ede0' : '#18140e';
+	octx.fillRect(0, 0, canvas_width, canvas_height);
+	octx.drawImage(canvas, 0, 0);
+	const a = document.createElement('a');
+	a.download = 'raycaster-' + Date.now() + '.png';
+	a.href = out.toDataURL('image/png');
+	a.click();
+}
+
+var pauseButton = document.getElementById("pauseButton");
+function setPaused(p) {
+	if (p === paused) return;
+	paused = p;
+	pauseButton.textContent = paused ? 'Resume (Space)' : 'Pause (Space)';
+	if (!paused) { _fpsLast = 0; window.requestAnimationFrame(draw); }
+}
+pauseButton.onclick = () => setPaused(!paused);
+document.getElementById("exportButton").onclick = savePNG;
+
+document.addEventListener('keydown', (e) => {
+	if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+	if (e.code === 'Space') { e.preventDefault(); setPaused(!paused); }
+	if (e.key === 'r' || e.key === 'R') GetNewRandomLines();
+	if (e.key === 's' || e.key === 'S') savePNG();
+});
+
+function draw(ts) {
+	updateFps(ts || performance.now());
 	if (pointerOnCanvas === false) {
 		rayCaster.position.x = Math.floor(canvas_width / 2);
 		rayCaster.position.y = Math.floor(canvas_height / 2);
@@ -412,7 +476,7 @@ function draw() {
 	const intersectionPoints = rayCaster.FindAllClosestIntersectionPoints(walls);
 	rayCaster.CutRaysAtClosestIntersectionPoint(intersectionPoints);
 
-	drawVisibilityPolygon(intersectionPoints);
+	drawVisibilityPolygon(intersectionPoints, rayCaster.position);
 	drawSourceGlow(rayCaster.position);
 	drawLines([...randomWalls, ...userWalls]);
 	drawHighlightedWall(hoveredWall);
@@ -421,7 +485,7 @@ function draw() {
 	drawPoints(intersectionPoints);
 	drawWallPreview();
 
-	if (document.hidden) return;
+	if (document.hidden || paused) return;
 	window.requestAnimationFrame(draw);
 }
 // #endregion

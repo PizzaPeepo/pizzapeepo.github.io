@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Phaseshift Demo — Canvas Lab</title>
+  <title>Phaseshift — Canvas Lab</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../CSS/theme.css">
@@ -17,17 +17,84 @@
   <canvas id="backgroundCanvas"></canvas>
   <canvas id="foregroundCanvas"></canvas>
 
-  <!-- Top-left navigation pill (theme toggle inline since no controls panel) -->
+  <!-- Top-left navigation pill -->
   <div class="hud hud-nav">
     <a class="back-link" href="../index.html">← Home</a>
-    <h1 class="demo-title">Phaseshift Demo</h1>
-    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
-      <span class="toggle-icon">☀</span>
-      <span class="toggle-label">Light</span>
+    <h1 class="demo-title">Phaseshift</h1>
+    <button class="hud-panel-toggle" id="hudToggle" aria-label="Toggle controls" aria-expanded="false">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/>
+      </svg>
     </button>
   </div>
 
+  <div class="hud-panel-backdrop" id="hudBackdrop"></div>
+
+  <!-- Right-side controls panel -->
+  <aside class="hud hud-panel" id="hudPanel">
+
+    <div class="hud-panel-header">
+      <span class="fps-badge" id="fpsBadge">— fps</span>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <span class="toggle-icon">☀</span>
+        <span class="toggle-label">Light</span>
+      </button>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Dots: <span id="dotsValue"></span></span>
+      <input type="range" min="3" max="160" step="1" class="slider" id="dotsSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Speed: <span id="speedValue"></span></span>
+      <input type="range" min="0.002" max="0.08" step="0.002" class="slider" id="speedSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Phase spread: <span id="spreadValue"></span></span>
+      <input type="range" min="0.2" max="6" step="0.1" class="slider" id="spreadSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Dot size: <span id="sizeValue"></span></span>
+      <input type="range" min="1" max="12" step="0.5" class="slider" id="sizeSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Trail: <span id="trailValue"></span></span>
+      <input type="range" min="1" max="60" step="1" class="slider" id="trailSlider">
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Colour</span>
+      <label><input type="radio" name="colorMode" value="spectrum" checked> Spectrum</label>
+      <label><input type="radio" name="colorMode" value="warm"> Gold → coral</label>
+      <label><input type="radio" name="colorMode" value="mono"> Monochrome</label>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Options</span>
+      <label><input type="checkbox" id="glowCheckbox" checked> Glow</label>
+      <label><input type="checkbox" id="spokesCheckbox" checked> Show spokes</label>
+      <label><input type="checkbox" id="connectCheckbox"> Connect dots</label>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Actions</span>
+      <button id="pauseButton">Pause (Space)</button>
+      <button id="resetButton">Reset (R)</button>
+      <button id="exportButton">Save PNG (S)</button>
+    </div>
+
+  </aside>
+
   <script type="module" src="main.js"></script>
   <script src="../JS/theme.js"></script>
+  <script src="../JS/hudUtils.js"></script>
 </body>
 </html>

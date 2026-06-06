@@ -49,10 +49,9 @@ export default class LissajousTable{
                 else if(col === 0 && row > 0){
                     this.figures[row][col] = new Lissajous(center, this._cellSize, row, row, 0, Math.PI/2, true, false);
                 }
-                // rest of table actual lissajous figures
+                // interior: X follows top-row col frequency, Y follows left-col row frequency
                 else{
-                    const temp = new Vector2D(center.y, center.x);
-                    this.figures[row][col] = new Lissajous(temp, this._cellSize, row, col, 0, Math.PI/2);
+                    this.figures[row][col] = new Lissajous(center, this._cellSize, col, row, 0, Math.PI/2);
                 }
             }
         }

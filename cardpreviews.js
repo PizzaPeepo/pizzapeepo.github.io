@@ -447,6 +447,28 @@
       ctx.beginPath(); ctx.arc(bx1, by1, 3.2, 0, Math.PI * 2); ctx.fillStyle = c(0.85); ctx.fill();
       ctx.beginPath(); ctx.arc(bx2, by2, 3.2, 0, Math.PI * 2); ctx.fillStyle = g(0.85); ctx.fill();
     },
+    // 22: Fluid Simulation — dye streaming past a cylinder, shedding vortices
+    function (ctx, w, h, t, hover) {
+      var cx = w * 0.6, cy = h * 0.5, R = Math.min(w, h) * 0.13;
+      for (var i = 0; i < 7; i++) {
+        var y0 = h * (i + 0.5) / 7;
+        ctx.beginPath();
+        for (var x = 0; x <= w; x += 4) {
+          var dx = (x - cx) / w;
+          var wob = Math.sin(t * 1.6 + i * 0.9 + x * 0.05) * 5;
+          var shed = x > cx ? Math.sin(t * 3 + i - x * 0.04) * 9 * Math.exp(-dx * dx * 5) : 0;
+          var dy = y0 - cy;
+          var around = (dy / (Math.abs(dy) + 1)) * R * 0.7 * Math.exp(-Math.pow((x - cx) / R, 2));
+          ctx.lineTo(x, y0 + wob + shed + around);
+        }
+        ctx.strokeStyle = i % 2 ? c(0.5) : g(0.5);
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.fillStyle = g(0.18); ctx.fill();
+      ctx.strokeStyle = g(0.55); ctx.lineWidth = 1.5; ctx.stroke();
+    },
   ];
 
   /* ── Attach a canvas to each card ── */
@@ -478,6 +500,7 @@
     'Maze',
     'Fourier',
     'PongWars',
+    'FluidSimulation',
   ];
 
   cards.forEach(function (card, i) {

@@ -34,6 +34,7 @@
   <aside class="hud hud-panel" id="hudPanel">
 
     <div class="hud-panel-header">
+      <span class="fps-badge" id="fpsBadge">— fps</span>
       <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
         <span class="toggle-icon">☀</span>
         <span class="toggle-label">Light</span>
@@ -41,8 +42,33 @@
     </div>
 
     <div class="hud-section">
+      <span class="ctrl-label">Points: <span id="pointCountValue"></span></span>
+      <input type="range" min="10" max="2000" step="10" class="slider" id="pointCountSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Cell capacity: <span id="capacityValue"></span></span>
+      <input type="range" min="1" max="16" step="1" class="slider" id="capacitySlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Query size: <span id="querySizeValue"></span></span>
+      <input type="range" min="40" max="600" step="10" class="slider" id="querySizeSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Options</span>
+      <label><input type="checkbox" id="movingCheckbox"> Animate points</label>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
       <span class="ctrl-label">Actions</span>
-      <button id="resetCanvasButton">Reset canvas</button>
+      <button id="pauseButton">Pause (Space)</button>
+      <button id="resetCanvasButton">Reset (R)</button>
+      <button id="exportButton">Save PNG (S)</button>
+      <p class="ctrl-hint" style="font-size:11px;color:var(--tx-3);line-height:1.5;margin:0;">Move cursor to aim the query box.<br>Click / drag to spray points.</p>
     </div>
 
   </aside>

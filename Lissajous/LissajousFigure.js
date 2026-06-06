@@ -116,7 +116,7 @@ export default class Lissajous {
 		return new Lissajous(this.center, this.amplitude, this.omega1, this.omega2, this.phaseshift1, this.phaseshift2);
 	}
 
-	Draw(bgContext, fgContext, tOld, t) {
+	Draw(bgContext, fgContext, tOld, t, showLines = true) {
 		const oldPos = this.center.Add(this.CalcXY(tOld));
 		const newPos = this.center.Add(this.CalcXY(t));
 		bgContext.beginPath();
@@ -132,10 +132,12 @@ export default class Lissajous {
 		fgContext.arc(newPos.x, newPos.y, Math.ceil(this.cellSize * 0.03), 0, 2 * Math.PI);
 		fgContext.fill();
 
-		if (this.showHorizontalLine) {
-			helpers.drawHorizontalLine(fgContext, newPos.y, fgContext.canvas.clientWidth, whiteLinestrokeStyle);
-		} else if (this.showVerticalLine) {
-			helpers.drawVerticalLine(fgContext, newPos.x, fgContext.canvas.clientHeight, whiteLinestrokeStyle);
+		if (showLines) {
+			if (this.showHorizontalLine) {
+				helpers.drawHorizontalLine(fgContext, newPos.y, fgContext.canvas.clientWidth, whiteLinestrokeStyle);
+			} else if (this.showVerticalLine) {
+				helpers.drawVerticalLine(fgContext, newPos.x, fgContext.canvas.clientHeight, whiteLinestrokeStyle);
+			}
 		}
 	}
 }

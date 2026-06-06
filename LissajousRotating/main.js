@@ -1,7 +1,6 @@
 import RotatingLissajousFigure from "./RotatingLissajousFigure.js";
 import * as helpers from "../Utils/helpers.js";
 import Vector2D from "../Utils/Vector2D.js";
-import FadeTrail from "../Utils/FadeTrail.js";
 import { onThemeChange } from "../Utils/ThemeManager.js";
 import { onWindowResize } from "../Utils/ResizeManager.js";
 import { setupCanvases } from "../Utils/CanvasManager.js";
@@ -19,7 +18,25 @@ var delta_phaseshift = 0.015;
 var omega1 = 1;
 var omega2 = 4;
 
-const trail = new FadeTrail(500);
+// Double-buffer fade: ping-pong two offscreen canvases, decay prev by (1-fade) via
+// drawImage+globalAlpha (truncates cleanly to 0 in Chrome). O(1 figure) per tick, constant
+// over time — replaces FadeTrail's O(trail_len x figure) replay. See Utils/FadeTrail.js.
+const _dummyCtx = document.createElement('canvas').getContext('2d');
+const _trailA = document.createElement('canvas');
+const _trailB = document.createElement('canvas');
+let _trailCtxA, _trailCtxB, _trailFront = 'A';
+function initTrailCanvases() {
+	_trailA.width = canvasWidth; _trailA.height = canvasHeight;
+	_trailB.width = canvasWidth; _trailB.height = canvasHeight;
+	_trailCtxA = _trailA.getContext('2d');
+	_trailCtxB = _trailB.getContext('2d');
+}
+initTrailCanvases();
+function resetTrail() {
+	_trailCtxA.clearRect(0, 0, _trailA.width, _trailA.height);
+	_trailCtxB.clearRect(0, 0, _trailB.width, _trailB.height);
+	_trailFront = 'A';
+}
 
 let t = helpers.range(0, 6.28, delta_phaseshift);
 let i = 0;
@@ -56,6 +73,7 @@ onWindowResize(function() {
 	canvasHeight = window.innerHeight;
 	if (window._hudToggling) return;
 	applyCanvasSize();
+	initTrailCanvases();
 	center = new Vector2D(Math.floor(canvasWidth / 2), Math.floor(canvasHeight / 2));
 	lissFigureSize = Math.min(canvasWidth, canvasHeight) * 0.45;
 	lissajous = new RotatingLissajousFigure(center, lissFigureSize, omega1, omega2, 0, Math.PI / 2);
@@ -112,7 +130,7 @@ fadeAwaySpeedValue.innerHTML = fadeAwaySpeedSlider.value;
 fadeAwaySpeedSlider.oninput = function() {
 	fadeAwaySpeedValue.innerHTML = this.value;
 	fadeAwaySpeed = this.value;
-	trail.reset();
+	resetTrail();
 	if (liveResetCanvas) {
 		resetCanvas = true;
 	}
@@ -127,24 +145,76 @@ liveResetCheckbox.checked = liveResetCanvas;
 liveResetCheckbox.onclick = function() { liveResetCanvas = this.checked; };
 
 var resetCanvasButton = document.getElementById("resetCanvasButton");
-resetCanvasButton.onclick = function() { resetCanvas = true; };
+resetCanvasButton.onclick = function() { resetCanvas = true; if (paused) setPaused(false); };
+
+// pause / save / fps
+var paused = false;
+var pauseButton = document.getElementById("pauseButton");
+function setPaused(p) {
+	if (p === paused) return;
+	paused = p;
+	if (pauseButton) pauseButton.textContent = paused ? 'Resume (Space)' : 'Pause (Space)';
+	if (!paused) { _fpsLast = 0; window.requestAnimationFrame(draw); }
+}
+if (pauseButton) pauseButton.onclick = () => setPaused(!paused);
+
+function savePNG() {
+	const out = document.createElement('canvas');
+	out.width = canvasWidth; out.height = canvasHeight;
+	const octx = out.getContext('2d');
+	octx.fillStyle = document.documentElement.classList.contains('light') ? '#f5ede0' : '#18140e';
+	octx.fillRect(0, 0, canvasWidth, canvasHeight);
+	octx.drawImage(backgroundCanvas, 0, 0);
+	octx.drawImage(foregroundCanvas, 0, 0);
+	const a = document.createElement('a');
+	a.download = 'lissajous-rotating-' + Date.now() + '.png';
+	a.href = out.toDataURL('image/png');
+	a.click();
+}
+var exportButton = document.getElementById("exportButton");
+if (exportButton) exportButton.onclick = savePNG;
+
+document.addEventListener('keydown', (e) => {
+	if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+	if (e.code === 'Space') { e.preventDefault(); setPaused(!paused); }
+	if (e.key === 'r' || e.key === 'R') { resetCanvas = true; if (paused) setPaused(false); }
+	if (e.key === 's' || e.key === 'S') savePNG();
+});
+
+var fpsBadge = document.getElementById("fpsBadge");
+var _fpsLast = 0, _fpsAccum = 0, _fpsFrames = 0;
+function updateFps(ts) {
+	if (_fpsLast) { _fpsAccum += ts - _fpsLast; _fpsFrames++; }
+	_fpsLast = ts;
+	if (_fpsAccum >= 500 && fpsBadge) {
+		fpsBadge.textContent = Math.round(1000 / (_fpsAccum / _fpsFrames)) + ' fps';
+		_fpsAccum = 0; _fpsFrames = 0;
+	}
+}
 // #endregion
 
-function draw() {
+function draw(ts) {
+	updateFps(ts || performance.now());
 	if (i * delta_phaseshift > 6.28 || resetCanvas) {
 		i = 0;
-		trail.reset();
+		resetTrail();
 		resetCanvas = false;
 		bgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 	}
 
 	if (fadeAway) {
+		// double-buffer fade (see initTrailCanvases): O(1 figure) per tick, constant over time
+		const [frontCanvas, backCtx] = _trailFront === 'A' ? [_trailA, _trailCtxB] : [_trailB, _trailCtxA];
+		backCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+		backCtx.globalAlpha = 1 - Number(fadeAwaySpeed);
+		backCtx.drawImage(frontCanvas, 0, 0);
+		backCtx.globalAlpha = 1.0;
+		lissajous.Update(lissFigureSize, omega1, omega2, 0, t[i]);
+		lissajous.DrawWholeFigure(backCtx, _dummyCtx, 1.0);
+		_trailFront = _trailFront === 'A' ? 'B' : 'A';
+		const newFront = _trailFront === 'A' ? _trailA : _trailB;
 		bgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
-		trail.push(t[i]);
-		trail.render(fadeAwaySpeed, (ps2, opacity) => {
-			lissajous.Update(lissFigureSize, omega1, omega2, 0, ps2);
-			lissajous.DrawWholeFigure(bgCtx, fgCtx, opacity);
-		});
+		bgCtx.drawImage(newFront, 0, 0);
 	} else {
 		lissajous.Update(lissFigureSize, omega1, omega2, 0, t[i]);
 		lissajous.DrawWholeFigure(bgCtx, fgCtx, 1.0);
@@ -153,7 +223,7 @@ function draw() {
 	document.getElementById('ratioReadout').textContent = parseFloat(omega1) + ' : ' + parseFloat(omega2);
 	document.getElementById('phaseReadout').textContent = (t[i] / 6.28 * 360).toFixed(1) + '°';
 	i++;
-	if (document.hidden) return;
+	if (document.hidden || paused) return;
 	window.requestAnimationFrame(draw);
 }
 

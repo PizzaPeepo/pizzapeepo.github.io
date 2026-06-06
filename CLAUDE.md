@@ -129,9 +129,14 @@ Easy to miss any one; a new demo only shows fully when all three are done:
 - `horizontalDiv.css` — flex layout for control panels
 - `radioButton.css` — custom radio button styling
 
-### Canvas Fade Ghosting
-`fillRect` with `rgba(bg, alpha)` overlay never fully clears — `round(1 × 0.7) = 1` repeats forever (8-bit integer storage). Use `FadeTrail` instead: clear canvas each frame, replay history with `globalAlpha = (1-speed)^age` computed from full-brightness colors, so pixels cleanly reach 0.
-`_dummyCtx` pattern: `document.createElement('canvas').getContext('2d')` as no-op sink when a draw fn writes to both bgCtx and fgCtx but only one should receive history replay.
+### Canvas Fade (trail) — two patterns
+`fillRect` with `rgba(bg, alpha)` overlay never fully clears — `round(1 × 0.7) = 1` repeats forever (8-bit integer storage). Two clean fixes instead:
+
+- **Double-buffer accumulation** (preferred when many items and/or long trails) — ping-pong two offscreen canvases: clear back, `drawImage(front)` at `globalAlpha = 1 - fadeSpeed`, draw the new frame on top, swap, blit to the visible canvas. O(items) per tick, constant over time. Used by Lissajous, CircularMotion, RotatingSquares, LissajousRotating.
+- **`FadeTrail` replay** (`Utils/FadeTrail.js`) — store per-frame data, replay all stored frames at `globalAlpha = (1-speed)^age` from full-brightness colors. Cost O(n_eff × items), n_eff ≈ 5.5/fadeSpeed (self-trims, capped at maxHistory). Use only for short trails OR additive `lighter` glow (where the baked double-buffer bitmap looks wrong). Used by PhaseshiftDemo1.
+
+Rounding gotcha (Chrome, measured): `drawImage`+`globalAlpha` onto a cleared buffer **truncates** → reaches true 0 (clean); `destination-out fillRect(alpha=s)` in place **rounds half-up** → sticks at a ghost floor ≈ 0.5/fadeSpeed (~16% at fade 0.01). The ping-pong `drawImage` path is the cheapest *clean* canvas-2D fade; see `Utils/FadeTrail.js` header for the full write-up.
+`_dummyCtx` pattern: `document.createElement('canvas').getContext('2d')` as no-op sink when a draw fn writes to both bgCtx and fgCtx but only one should receive the trail.
 
 ## Editing JS Files
 

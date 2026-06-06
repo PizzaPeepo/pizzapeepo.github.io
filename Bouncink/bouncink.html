@@ -71,6 +71,9 @@
 
     function draw() {
       background(0);
+      // neon glow that follows the logo's current colour
+      drawingContext.shadowBlur = 34;
+      drawingContext.shadowColor = 'hsl(' + h + ', 100%, 60%)';
       tint(h, 100, 70);
       fill(h, 100, 70);
       image(dvd, x, y);
@@ -78,10 +81,12 @@
         text(countDown, x + 58, y + 168);
       } else {
         text(countDown, x + 38, y + 168);
+        drawingContext.shadowBlur = 0;
         noTint();
         image(pepe, x + 23, y + 50);
         tint(h, 100, 70);
       }
+      drawingContext.shadowBlur = 0;
       x += xspeed;
       y += yspeed;
       let hitX = false, hitY = false;

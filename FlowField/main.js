@@ -25,6 +25,10 @@ var maxLife = 220;
 var darkCanvasBg = "#0d0b14";
 var lightCanvasBg = "#f3eee6";
 var isLight = document.documentElement.classList.contains("light");
+
+// cursor vortex — particles swirl around the pointer
+var mouse = { x: 0, y: 0, inside: false };
+const MOUSE_RADIUS = 160;
 // #endregion
 
 // #region canvas
@@ -165,6 +169,14 @@ window.addEventListener("keydown", function (e) {
 	if (e.key === "n" || e.key === "N") newField();
 	if (e.key === "s" || e.key === "S") exportPNG();
 });
+
+window.addEventListener("mousemove", function (e) {
+	const r = backgroundCanvas.getBoundingClientRect();
+	mouse.x = e.clientX - r.left;
+	mouse.y = e.clientY - r.top;
+	mouse.inside = mouse.x >= 0 && mouse.x < canvasWidth && mouse.y >= 0 && mouse.y < canvasHeight;
+});
+window.addEventListener("mouseout", function () { mouse.inside = false; });
 // #endregion
 
 // #region rendering helpers
@@ -202,11 +214,25 @@ function drawFieldArrows() {
 function step() {
 	fieldTime += cfg.evolve * 0.002;
 	ctx.lineWidth = 1.1;
+	// dark theme: additive blend so dense streamlines bloom
+	if (!isLight) ctx.globalCompositeOperation = "lighter";
+	const R2 = MOUSE_RADIUS * MOUSE_RADIUS;
 	for (let i = 0; i < particles.length; i++) {
 		const p = particles[i];
 		const a = fieldAngle(p.x, p.y);
-		const vx = Math.cos(a) * cfg.speed;
-		const vy = Math.sin(a) * cfg.speed;
+		let vx = Math.cos(a) * cfg.speed;
+		let vy = Math.sin(a) * cfg.speed;
+		// cursor vortex: add a tangential push that falls off with distance
+		if (mouse.inside) {
+			const dx = p.x - mouse.x, dy = p.y - mouse.y;
+			const d2 = dx * dx + dy * dy;
+			if (d2 < R2 && d2 > 1) {
+				const d = Math.sqrt(d2);
+				const fall = (1 - d / MOUSE_RADIUS) * cfg.speed * 2.2;
+				vx += (-dy / d) * fall;
+				vy += ( dx / d) * fall;
+			}
+		}
 		p.px = p.x; p.py = p.y;
 		p.x += vx; p.y += vy;
 		p.life++;
@@ -222,6 +248,7 @@ function step() {
 		ctx.lineTo(p.x, p.y);
 		ctx.stroke();
 	}
+	ctx.globalCompositeOperation = "source-over";
 }
 
 // #region FPS
