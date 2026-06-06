@@ -253,9 +253,7 @@
     /* ─── CARD ─── */
     .card {
       position: relative;
-      background: rgba(35, 26, 17, 0.08);
-      backdrop-filter: blur(3px) saturate(150%);
-      -webkit-backdrop-filter: blur(3px) saturate(150%);
+      background: rgba(35, 26, 17, 0.5);
       border: 1px solid rgba(255, 255, 255, 0.13);
       border-radius: 16px;
       padding: 28px 26px 24px;
@@ -297,7 +295,7 @@
       box-shadow: 0 40px 80px rgba(0,0,0,0.65),
                   0 16px 32px rgba(0,0,0,0.35),
                   0 0 60px rgba(245,166,35,0.14);
-      background: rgba(44, 33, 22, 0.26);
+      background: rgba(44, 33, 22, 0.55);
       z-index: 2;
     }
     .grid:has(.card:hover) .card:not(:hover) {
@@ -307,7 +305,7 @@
     .card:hover .card-title   { color: var(--gold); }
 
     .grid.filtered .card:hover,
-    .grid.filtered .card-wide:hover { transform: none; box-shadow: var(--shadow-sm); background: rgba(35,26,17,0.08); z-index: 1; }
+    .grid.filtered .card-wide:hover { transform: none; box-shadow: var(--shadow-sm); z-index: 1; }
     .grid.filtered:has(.card:hover) .card:not(:hover) { transform: none; }
     .grid.filtered .card:hover .card-arrow { transform: none; opacity: 0.45; }
     .grid.filtered .card:hover .card-title { color: var(--tx); }
@@ -475,7 +473,7 @@
       box-shadow: 0 40px 80px rgba(0,0,0,0.65),
                   0 16px 32px rgba(0,0,0,0.35),
                   0 0 60px rgba(245,166,35,0.14);
-      background: rgba(44, 33, 22, 0.26);
+      background: rgba(44, 33, 22, 0.55);
       z-index: 2;
     }
     .card-wide.card-pill-hover { transform: scale(1.037); }
@@ -483,18 +481,18 @@
     .card.card-pill-hover .card-title { color: var(--gold); }
     .card.card-pill-hover .card-num   { color: var(--tx-3); }
     html.light .card.card-pill-hover {
-      background: rgba(255, 252, 248, 0.22);
+      background: rgba(255, 252, 248, 0.6);
       box-shadow: 0 28px 64px rgba(0,0,0,0.13),
                   0 10px 22px rgba(0,0,0,0.08);
     }
 
     /* ─── LIGHT MODE GLASS ─── */
     html.light .card {
-      background: rgba(255, 249, 242, 0.10);
+      background: rgba(255, 249, 242, 0.55);
       border-color: rgba(0, 0, 0, 0.12);
     }
     html.light .card:hover {
-      background: rgba(255, 252, 248, 0.22);
+      background: rgba(255, 252, 248, 0.6);
       box-shadow: 0 28px 64px rgba(0,0,0,0.13),
                   0 10px 22px rgba(0,0,0,0.08);
     }
@@ -1030,26 +1028,48 @@
       var letters = Array.from(title.querySelectorAll('.kl'));
       var REPEL_R = 120, MAX_PUSH = 38;
 
-      document.addEventListener('mousemove', function (e) {
-        letters.forEach(function (l) {
-          var r  = l.getBoundingClientRect();
-          var cx = r.left + r.width  * 0.5;
-          var cy = r.top  + r.height * 0.5;
-          var dx = cx - e.clientX;
-          var dy = cy - e.clientY;
+      // Cache base letter centers — measured only on resize/scroll, not per mousemove
+      var centers = [];
+      function measure() {
+        letters.forEach(function (l) { l.style.transform = ''; });
+        centers = letters.map(function (l) {
+          var r = l.getBoundingClientRect();
+          return { x: r.left + r.width * 0.5, y: r.top + r.height * 0.5 };
+        });
+      }
+      measure();
+      var measureRaf = 0;
+      function scheduleMeasure() {
+        if (!measureRaf) measureRaf = requestAnimationFrame(function () { measureRaf = 0; measure(); });
+      }
+      window.addEventListener('resize', scheduleMeasure);
+      window.addEventListener('scroll', scheduleMeasure, { passive: true });
+
+      var raf = 0, mx = 0, my = 0;
+      function apply() {
+        raf = 0;
+        for (var i = 0; i < letters.length; i++) {
+          var c = centers[i];
+          var dx = c.x - mx, dy = c.y - my;
           var dist = Math.sqrt(dx * dx + dy * dy);
           if (dist < REPEL_R && dist > 0.1) {
             var force = (1 - dist / REPEL_R);
             var px = (dx / dist) * force * MAX_PUSH;
             var py = (dy / dist) * force * MAX_PUSH;
-            l.style.transform = 'translate(' + px.toFixed(1) + 'px,' + py.toFixed(1) + 'px)';
+            letters[i].style.transform = 'translate(' + px.toFixed(1) + 'px,' + py.toFixed(1) + 'px)';
           } else {
-            l.style.transform = '';
+            letters[i].style.transform = '';
           }
-        });
+        }
+      }
+
+      document.addEventListener('mousemove', function (e) {
+        mx = e.clientX; my = e.clientY;
+        if (!raf) raf = requestAnimationFrame(apply);   // coalesce + no per-move layout reads
       });
 
       document.addEventListener('mouseleave', function () {
+        if (raf) { cancelAnimationFrame(raf); raf = 0; }
         letters.forEach(function (l) { l.style.transform = ''; });
       });
     })();
@@ -1324,18 +1344,25 @@
       cards.forEach(function (card) {
         var isWide = card.classList.contains('card-wide');
         var scale  = isWide ? 1.037 : 1.08;
+        var raf = 0, nx = 0, ny = 0;
 
-        card.addEventListener('mousemove', function (e) {
-          var r  = card.getBoundingClientRect();
-          var nx = (e.clientX - r.left) / r.width  - 0.5;
-          var ny = (e.clientY - r.top)  / r.height - 0.5;
+        function apply() {
+          raf = 0;
           card.style.transform =
             'perspective(900px) scale(' + scale + ') rotateX(' +
             (-ny * MAX_TILT).toFixed(2) + 'deg) rotateY(' +
             ( nx * MAX_TILT).toFixed(2) + 'deg)';
+        }
+
+        card.addEventListener('mousemove', function (e) {
+          var r = card.getBoundingClientRect();
+          nx = (e.clientX - r.left) / r.width  - 0.5;
+          ny = (e.clientY - r.top)  / r.height - 0.5;
+          if (!raf) raf = requestAnimationFrame(apply);   // coalesce to one write/frame
         });
 
         card.addEventListener('mouseleave', function () {
+          if (raf) { cancelAnimationFrame(raf); raf = 0; }
           card.style.transform = '';
         });
       });

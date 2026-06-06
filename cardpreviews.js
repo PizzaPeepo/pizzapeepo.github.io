@@ -523,7 +523,7 @@
     card.style.position = 'relative';
     card.insertBefore(cvs, card.firstChild);
 
-    contexts.push({ cvs: cvs, ctx: cvs.getContext('2d'), demoIdx: demoIdx, hov: false });
+    contexts.push({ cvs: cvs, ctx: cvs.getContext('2d'), demoIdx: demoIdx, hov: false, wasHov: false });
     hovState.push(false);
 
     card.addEventListener('mouseenter', function () { contexts[i].hov = true; });
@@ -547,6 +547,9 @@
     var dpr  = window.devicePixelRatio || 1;
 
     contexts.forEach(function (c) {
+      // Idle canvases cost nothing — only touch ones hovered now or just-left
+      if (!c.hov && !c.wasHov) return;
+
       var cvs = c.cvs;
       var ctx = c.ctx;
       var w   = cvs.width  / dpr;
@@ -563,7 +566,8 @@
       }
 
       ctx.restore();
-      cvs.style.opacity = c.hov ? '1' : '0';
+      if (c.hov !== c.wasHov) cvs.style.opacity = c.hov ? '1' : '0';
+      c.wasHov = c.hov;
     });
 
     if (document.hidden) return;
