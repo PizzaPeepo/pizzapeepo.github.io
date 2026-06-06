@@ -68,7 +68,7 @@ function flattenNode(node) {
 function flattenTree() { nNodes = 0; flattenNode(tree.root); }
 
 // ── render uniforms ──
-const sizeU = uniform(3.0);        // particle sphere radius, sim (pixel-scale) units
+const sizeU = uniform(1.0);        // particle sphere radius, sim (pixel-scale) units
 const speedScale = uniform(0.0125); // maps speed → color ramp
 const gSignU = uniform(1.0);        // 1 = attractive (blue-orange), 0 = repulsive (cyan-magenta)
 
@@ -300,7 +300,7 @@ function createBackdrop() {
 		pos[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
 		pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
 		pos[i * 3 + 2] = r * Math.cos(phi);
-		const b = 0.35 + Math.random() * 0.65;       // per-star brightness
+		const b = 0.5 + Math.random() * 0.5;         // per-star brightness
 		const t = Math.random();                     // tint: cool blue ↔ warm amber
 		col[i * 3]     = b * (0.85 + 0.15 * t);
 		col[i * 3 + 1] = b * 0.92;
@@ -310,8 +310,8 @@ function createBackdrop() {
 	geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
 	geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
 	const mat = new THREE.PointsMaterial({
-		size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0.9,
-		vertexColors: true, map: makeDotTexture(), alphaTest: 0.5, depthWrite: false
+		size: 2.4, sizeAttenuation: false, transparent: true, opacity: 1.0,
+		vertexColors: true, map: makeDotTexture(), depthWrite: false, blending: THREE.AdditiveBlending
 	});
 	scene.add(new THREE.Points(geo, mat));
 }
@@ -358,11 +358,11 @@ async function init() {
 	material.positionNode = positionLocal.mul(sizeU).add(attribute('instPos', 'vec3'));
 	material.colorNode = Fn(() => {
 		const s = attribute('instSpeed', 'float').mul(speedScale).saturate();
-		// 3-stop ramp: amber (slow) → warm white-hot (mid) → coral (fast) — site gold/coral palette
+		// 3-stop ramp: royal blue (slow) → teal (mid) → warm gold (fast)
 		const t1 = s.mul(2.0).saturate();
 		const t2 = s.sub(0.5).mul(2.0).saturate();
-		const attract = color(0x8a4f00).mix(color(0xffe8c6), t1).mix(color(0xff5824), t2);
-		const repulse = color(0x00ddff).mix(color(0xee00ff), s);
+		const attract = color(0x2a4cc0).mix(color(0x3fe0d0), t1).mix(color(0xffe7a0), t2);
+		const repulse = color(0x6a2cff).mix(color(0xff3ce0), s);
 		return repulse.mix(attract, gSignU);
 	})();
 	material.transparent = true;
