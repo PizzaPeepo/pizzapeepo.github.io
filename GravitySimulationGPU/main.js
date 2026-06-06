@@ -11,7 +11,8 @@
 // pixel-scale and frame the camera to it.
 
 import * as THREE from 'three/webgpu';
-import { Fn, attribute, positionLocal, uniform, color } from 'three/tsl';
+import { Fn, attribute, positionLocal, uniform, color, pass } from 'three/tsl';
+import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Octree } from './Octree.js';
 import { onWindowResize } from "../Utils/ResizeManager.js";
@@ -67,12 +68,13 @@ function flattenNode(node) {
 function flattenTree() { nNodes = 0; flattenNode(tree.root); }
 
 // ── render uniforms ──
-const sizeU = uniform(1.0);        // sphere radius, render (= sim) units
+const sizeU = uniform(3.0);        // particle sphere radius, sim (pixel-scale) units
 const speedScale = uniform(0.0125); // maps speed → color ramp
 const gSignU = uniform(1.0);        // 1 = attractive (blue-orange), 0 = repulsive (cyan-magenta)
 
 // ── runtime ──
 let renderer, scene, camera, controls, mesh;
+let postProcessing, scenePass, bloomNode, bloomOn = true;
 let instPos, instSpeed; // InstancedBufferAttributes streamed each frame
 
 // standard normal (Box-Muller)
@@ -253,12 +255,90 @@ function setCount(n) {
 	document.getElementById('countValue').textContent = n.toLocaleString();
 }
 
+function makeDotTexture() {
+	const s = 64;
+	const cv = document.createElement('canvas');
+	cv.width = cv.height = s;
+	const ctx = cv.getContext('2d');
+	const g = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+	g.addColorStop(0.0, 'rgba(255,255,255,1)');
+	g.addColorStop(0.45, 'rgba(255,255,255,1)');
+	g.addColorStop(1.0, 'rgba(255,255,255,0)');
+	ctx.fillStyle = g;
+	ctx.fillRect(0, 0, s, s);
+	return new THREE.CanvasTexture(cv);
+}
+
+function createStarField() {
+	const N = 2000;
+	const pos = new Float32Array(N * 3);
+	for (let i = 0; i < N; i++) {
+		const phi   = Math.acos(2 * Math.random() - 1);
+		const theta = Math.random() * Math.PI * 2;
+		const r     = 2200 + Math.random() * 800;
+		pos[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+		pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+		pos[i * 3 + 2] = r * Math.cos(phi);
+	}
+	const geo = new THREE.BufferGeometry();
+	geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+	const mat = new THREE.PointsMaterial({
+		color: 0xb0a088, size: 2.0, sizeAttenuation: false, transparent: true, opacity: 0.6,
+		map: makeDotTexture(), alphaTest: 0.5, depthWrite: false
+	});
+	scene.add(new THREE.Points(geo, mat));
+}
+
+function createBackdrop() {
+	const N = 6000;
+	const pos = new Float32Array(N * 3);
+	const col = new Float32Array(N * 3);
+	for (let i = 0; i < N; i++) {
+		const phi   = Math.acos(2 * Math.random() - 1);
+		const theta = Math.random() * Math.PI * 2;
+		const r     = 8000 + Math.random() * 3000;  // far shell, inside the 12000 frustum
+		pos[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+		pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+		pos[i * 3 + 2] = r * Math.cos(phi);
+		const b = 0.35 + Math.random() * 0.65;       // per-star brightness
+		const t = Math.random();                     // tint: cool blue ↔ warm amber
+		col[i * 3]     = b * (0.85 + 0.15 * t);
+		col[i * 3 + 1] = b * 0.92;
+		col[i * 3 + 2] = b * (1.0 - 0.18 * t);
+	}
+	const geo = new THREE.BufferGeometry();
+	geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+	geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+	const mat = new THREE.PointsMaterial({
+		size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0.9,
+		vertexColors: true, map: makeDotTexture(), alphaTest: 0.5, depthWrite: false
+	});
+	scene.add(new THREE.Points(geo, mat));
+}
+
+function createCore() {
+	scene.add(new THREE.Mesh(
+		new THREE.SphereGeometry(10, 16, 16),
+		new THREE.MeshBasicMaterial({
+			color: 0xfff4e2, transparent: true, opacity: 0.95,
+			blending: THREE.AdditiveBlending, depthWrite: false
+		})
+	));
+	scene.add(new THREE.Mesh(
+		new THREE.SphereGeometry(30, 16, 16),
+		new THREE.MeshBasicMaterial({
+			color: 0xffae5a, transparent: true, opacity: 0.12,
+			blending: THREE.AdditiveBlending, depthWrite: false
+		})
+	));
+}
+
 async function init() {
 	scene = new THREE.Scene();
-	scene.background = new THREE.Color(0x06060d);
+	scene.background = new THREE.Color(0x0c0908);
 
-	camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 6000);
-	camera.position.set(0, 380, 640);
+	camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 12000);
+	camera.position.set(80, 350, 600);
 
 	renderer = new THREE.WebGPURenderer({ antialias: true });
 	renderer.setSize(window.innerWidth, window.innerHeight);
@@ -268,9 +348,9 @@ async function init() {
 	await renderer.init();
 
 	// instanced sphere; per-instance position + speed streamed from the CPU each frame
-	const geometry = new THREE.IcosahedronGeometry(1, 0); // 20 tris; radius scaled in-shader
-	instPos = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3).setUsage(THREE.DynamicDrawUsage);
-	instSpeed = new THREE.InstancedBufferAttribute(new Float32Array(MAX), 1).setUsage(THREE.DynamicDrawUsage);
+	const geometry = new THREE.IcosahedronGeometry(1, 1); // round ball; radius scaled in-shader
+	instPos   = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3).setUsage(THREE.DynamicDrawUsage);
+	instSpeed = new THREE.InstancedBufferAttribute(new Float32Array(MAX),     1).setUsage(THREE.DynamicDrawUsage);
 	geometry.setAttribute('instPos', instPos);
 	geometry.setAttribute('instSpeed', instSpeed);
 
@@ -278,10 +358,12 @@ async function init() {
 	material.positionNode = positionLocal.mul(sizeU).add(attribute('instPos', 'vec3'));
 	material.colorNode = Fn(() => {
 		const s = attribute('instSpeed', 'float').mul(speedScale).saturate();
-		const attract = color(0x1b4fff).mix(color(0xff7a1a), s); // blue → orange (gravity)
-		const repulse = color(0x00ddff).mix(color(0xee00ff), s); // cyan → magenta (antigravity)
-		const base = repulse.mix(attract, gSignU);
-		return base.mix(color(0xffffff), s.mul(s).mul(0.7));
+		// 3-stop ramp: amber (slow) → warm white-hot (mid) → coral (fast) — site gold/coral palette
+		const t1 = s.mul(2.0).saturate();
+		const t2 = s.sub(0.5).mul(2.0).saturate();
+		const attract = color(0x8a4f00).mix(color(0xffe8c6), t1).mix(color(0xff5824), t2);
+		const repulse = color(0x00ddff).mix(color(0xee00ff), s);
+		return repulse.mix(attract, gSignU);
 	})();
 	material.transparent = true;
 	material.depthWrite = false;
@@ -289,8 +371,8 @@ async function init() {
 
 	mesh = new THREE.InstancedMesh(geometry, material, MAX);
 	mesh.frustumCulled = false;
-	// default instanceMatrix is zero-filled (collapses to origin); set identity —
-	// placement is done in positionNode via the instPos attribute.
+	// instanceMatrix is zero-filled by default (collapses to origin); set identity —
+	// real placement happens in positionNode via the instPos attribute.
 	const idMat = new THREE.Matrix4();
 	for (let i = 0; i < MAX; i++) mesh.setMatrixAt(i, idMat);
 	mesh.instanceMatrix.needsUpdate = true;
@@ -298,6 +380,15 @@ async function init() {
 
 	controls = new OrbitControls(camera, renderer.domElement);
 	controls.enableDamping = true;
+
+	createBackdrop();
+	createStarField();
+	createCore();
+	postProcessing = new THREE.PostProcessing(renderer);
+	scenePass = pass(scene, camera);
+	const sceneColor = scenePass.getTextureNode('output');
+	bloomNode = sceneColor.add(bloom(sceneColor, 0.15, 0.0, 0.5));
+	applyBloom();
 
 	initDisk();
 	onWindowResize(onResize);
@@ -308,11 +399,11 @@ async function init() {
 // ── FPS badge ──
 let frames = 0, fpsLast = Date.now();
 
-function animate() {
+async function animate() {
 	if (!paused) step();
 	uploadInstances();
 	controls.update();
-	renderer.render(scene, camera);
+	await postProcessing.renderAsync();
 
 	frames++;
 	const now = Date.now();
@@ -336,6 +427,11 @@ function burst() {
 		const inv = 1 / (Math.sqrt(x * x + y * y) + 0.001);
 		vx[i] += x * inv * k; vy[i] += y * inv * k;
 	}
+}
+
+function applyBloom() {
+	postProcessing.outputNode = bloomOn ? bloomNode : scenePass;
+	postProcessing.needsUpdate = true;
 }
 
 function wireUI() {
@@ -368,6 +464,12 @@ function wireUI() {
 	document.getElementById('presetGalaxy').addEventListener('click', () => applyPreset('galaxy'));
 	updateGColors(G);
 	document.getElementById('burstButton').addEventListener('click', burst);
+	const bloomBtn = document.getElementById('bloomButton');
+	bloomBtn.addEventListener('click', () => {
+		bloomOn = !bloomOn;
+		bloomBtn.textContent = bloomOn ? 'Bloom: On' : 'Bloom: Off';
+		applyBloom();
+	});
 	const pauseBtn = document.getElementById('pauseButton');
 	pauseBtn.addEventListener('click', () => {
 		paused = !paused;
