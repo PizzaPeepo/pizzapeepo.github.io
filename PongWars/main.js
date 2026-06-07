@@ -1,4 +1,4 @@
-// Pong Wars — territory battle. N teams (2/4/6/8); each ball paints enemy tiles to
+// Pong Wars — territory battle. N teams (2/3/4); each ball paints enemy tiles to
 // its own colour and bounces off them, so the frontiers slosh around forever.
 // Faithful port of the mechanic from vnglst/pong-wars (MIT), rebuilt on this repo's
 // modern-HUD single-canvas pattern and extended into a stream "waiting screen":
@@ -15,7 +15,7 @@ var cfg = {
 	ballsPerTeam: 1,   // balls launched per team
 };
 
-var TEAM_COUNTS = [2, 4, 6, 8];
+var TEAM_COUNTS = [2, 3, 4];
 var teamCount = 2;
 
 var paused = false;
@@ -54,7 +54,7 @@ document.addEventListener("themechange", function (e) { applyThemeColors(e.detai
 
 // #region state
 // Block layouts per team count: [cols, rows] over the canvas. Each team owns one block.
-var LAYOUTS = { 2: [2, 1], 4: [2, 2], 6: [3, 2], 8: [4, 2] };
+var LAYOUTS = { 2: [2, 1], 3: [3, 1], 4: [2, 2] };
 
 // Colour palettes (up to 8). The first two entries of each match the original 2-team
 // presets; extra entries only come into play at higher team counts. A ball reads in the
@@ -130,8 +130,19 @@ function applyColors() {
 function buildGrid() {
 	nx = Math.max(2, Math.ceil(canvasWidth / cfg.cell));
 	ny = Math.max(2, Math.ceil(canvasHeight / cfg.cell));
-	var L = LAYOUTS[teamCount], cols = L[0], rows = L[1];
 	squares = [];
+	if (teamCount === 3) {
+		var cx = nx / 2, cy = ny / 2;
+		for (var i = 0; i < nx; i++) {
+			squares[i] = [];
+			for (var j = 0; j < ny; j++) {
+				var a = (Math.atan2(j - cy, i - cx) + Math.PI * 2) % (Math.PI * 2);
+				squares[i][j] = Math.floor(a / (Math.PI * 2 / 3)) % 3;
+			}
+		}
+		return;
+	}
+	var L = LAYOUTS[teamCount], cols = L[0], rows = L[1];
 	for (var i = 0; i < nx; i++) {
 		squares[i] = [];
 		var col = Math.min(cols - 1, Math.floor(i / nx * cols));
@@ -143,11 +154,22 @@ function buildGrid() {
 }
 
 function makeBall(team, k) {
+	if (teamCount === 3) {
+		var sectorStart = team * (Math.PI * 2 / 3);
+		var spawnAngle = sectorStart + Math.random() * (Math.PI * 2 / 3);
+		var maxDist = Math.min(canvasWidth, canvasHeight) * 0.38;
+		var dist = maxDist * (0.15 + Math.random() * 0.85);
+		var hx = canvasWidth / 2 + Math.cos(spawnAngle) * dist;
+		var hy = canvasHeight / 2 + Math.sin(spawnAngle) * dist;
+		var ang = Math.random() * Math.PI * 2;
+		return { team: team, x: hx, y: hy, dx: Math.cos(ang) * cfg.speed, dy: Math.sin(ang) * cfg.speed };
+	}
 	var L = LAYOUTS[teamCount], cols = L[0], rows = L[1];
 	var col = team % cols, row = Math.floor(team / cols);
-	var hx = (col + 0.5) / cols * canvasWidth;
-	var hy = (row + 0.5) / rows * canvasHeight;
-	var ang = (k / Math.max(1, cfg.ballsPerTeam)) * Math.PI * 2 + team * 1.3 + Math.random() * 0.6;
+	var margin = 0.12;
+	var hx = ((col + margin + Math.random() * (1 - 2 * margin)) / cols) * canvasWidth;
+	var hy = ((row + margin + Math.random() * (1 - 2 * margin)) / rows) * canvasHeight;
+	var ang = Math.random() * Math.PI * 2;
 	return { team: team, x: hx, y: hy, dx: Math.cos(ang) * cfg.speed, dy: Math.sin(ang) * cfg.speed };
 }
 
@@ -329,7 +351,6 @@ function shake() {
 
 function setOverlay(on) {
 	overlayEl.classList.toggle("pw-show", !!on);
-	overlayCheckbox.checked = !!on;
 }
 // #endregion
 
@@ -438,12 +459,9 @@ bindSlider("ballsSlider", "ballsValue", parseInt, Object.assign(function (v) {
 	buildBalls();
 }, { initial: cfg.ballsPerTeam }));
 
-var titleInput = document.getElementById("titleInput");
-var subInput = document.getElementById("subInput");
 var glowCheckbox = document.getElementById("glowCheckbox");
 var scoreCheckbox = document.getElementById("scoreCheckbox");
 var autoCheckbox = document.getElementById("autoCheckbox");
-var overlayCheckbox = document.getElementById("overlayCheckbox");
 
 function applyPreset(name) {
 	preset = name;
@@ -467,13 +485,10 @@ function setPresetRadio(name) {
 	if (el) el.checked = true;
 }
 
-titleInput.oninput = function () { titleEl.textContent = this.value; };
-subInput.oninput = function () { subEl.textContent = this.value; };
 
 glowCheckbox.onclick = function () { glow = this.checked; };
 scoreCheckbox.onclick = function () { showScore = this.checked; scoreEl.classList.toggle("pw-hidden", !showScore); };
 autoCheckbox.onclick = function () { autoRestart = this.checked; };
-overlayCheckbox.onclick = function () { setOverlay(this.checked); };
 
 var pauseButton = document.getElementById("pauseButton");
 pauseButton.onclick = togglePause;
@@ -498,7 +513,7 @@ window.addEventListener("keydown", function (e) {
 	if (e.code === "Space") { e.preventDefault(); togglePause(); }
 	if (e.key === "r" || e.key === "R") reset();
 	if (e.key === "n" || e.key === "N") relaunch();
-	if (e.key === "o" || e.key === "O") setOverlay(!overlayCheckbox.checked);
+	if (e.key === "o" || e.key === "O") setOverlay(!overlayEl.classList.contains("pw-show"));
 });
 
 // #endregion
