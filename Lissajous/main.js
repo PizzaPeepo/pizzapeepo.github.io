@@ -212,7 +212,7 @@ function draw(ts) {
 	updateFps(ts || performance.now());
 	fgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-	if (i >= Math.ceil(2 * Math.PI / delta_t) || resetCanvas == true) {
+	if (i >= Math.ceil(4 * Math.PI / delta_t) || resetCanvas == true) {
 		i = 0;
 		resetTrail();
 		resetCanvas = false;
