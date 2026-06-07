@@ -264,13 +264,14 @@
       gap: 12px;
       min-height: 200px;
       box-shadow: var(--shadow-sm);
-      transition: transform 0.30s cubic-bezier(0.34,1.4,0.64,1),
+      transition: top 0.30s cubic-bezier(0.34,1.4,0.64,1),
                   box-shadow 0.30s ease,
                   background 0.25s ease,
                   z-index 0s,
                   opacity 0.25s ease;
       z-index: 1;
-      contain: layout paint;
+      top: 0;
+      contain: layout;
 
       opacity: 0;
       animation: riseIn 0.5s ease forwards;
@@ -315,7 +316,7 @@
     .grid.filters-ready .card { animation: none; opacity: 1; }
 
     .card:hover {
-      transform: scale(1.08);
+      top: -6px;
       background: rgba(44, 33, 22, 0.55);
       z-index: 2;
     }
@@ -334,7 +335,7 @@
     /* Wide card */
     .card-wide             { grid-column: span 2; }
     .card-wide .card-title { font-size: 40px; }
-    .card-wide:hover       { transform: scale(1.037); }
+    .card-wide:hover       { top: -6px; }
 
     /* Card parts */
     .card-head {
@@ -490,11 +491,11 @@
     .card.f-hidden { display: none; }
     .card.preview-dim { opacity: 0.18; }
     .card.card-pill-hover {
-      transform: scale(1.04);
+      top: -6px;
       background: rgba(44, 33, 22, 0.55);
       z-index: 2;
     }
-    .card-wide.card-pill-hover { transform: scale(1.037); }
+    .card-wide.card-pill-hover { top: -6px; }
     .card.card-pill-hover .card-arrow { transform: translate(4px, -4px); opacity: 1; }
     .card.card-pill-hover .card-title { color: var(--gold); }
     .card.card-pill-hover .card-num   { color: var(--tx-3); }
@@ -1357,15 +1358,12 @@
 
       cards.forEach(function (card) {
         var isWide = card.classList.contains('card-wide');
-        var scale  = isWide ? 1.037 : 1.08;
+        var scale  = 1;   // no zoom — scale>1 upscales the layer bitmap => blurry text
         var raf = 0, nx = 0, ny = 0, rect = null;
 
         function apply() {
-          raf = 0;
-          card.style.transform =
-            'perspective(900px) scale(' + scale + ') rotateX(' +
-            (-ny * MAX_TILT).toFixed(2) + 'deg) rotateY(' +
-            ( nx * MAX_TILT).toFixed(2) + 'deg)';
+          raf = 0;   // 3D tilt disabled: perspective/rotate renders the card on a
+                     // 3D plane => GPU resamples => blurry text. Lift is CSS top:-6px.
         }
 
         // Cache geometry on enter so mousemove never forces a sync layout read.
