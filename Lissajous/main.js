@@ -10,7 +10,7 @@ import { setupCanvases } from "../Utils/CanvasManager.js";
 var canvasHeight = window.innerHeight;
 var canvasWidth = window.getCanvasWidth();
 const whiteLineStrokeStyle = "rgba(255, 255, 255, 1.0)";
-var delta_t = 0.015;
+var delta_t = 0.002;
 var t = helpers.range(0, 500, delta_t);
 var lissFigureSize = 100;
 var fadeAway = false;
