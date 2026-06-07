@@ -40,6 +40,10 @@ var isLight = document.documentElement.classList.contains("light");
 // #region canvas
 var backgroundCanvas = document.getElementById("backgroundCanvas");
 var ctx = backgroundCanvas.getContext("2d");
+var bloomCanvas = document.createElement("canvas");   // low-res bloom buffer
+var bloomCtx = bloomCanvas.getContext("2d");
+var fxCanvas = document.createElement("canvas");       // full-res snapshot for glitch
+var fxCtx = fxCanvas.getContext("2d");
 
 function applyCanvasSize() {
 	canvasWidth = gameW;
@@ -49,6 +53,10 @@ function applyCanvasSize() {
 	backgroundCanvas.style.transform = "translate(-50%, -50%)";
 	backgroundCanvas.width = canvasWidth;
 	backgroundCanvas.height = canvasHeight;
+	bloomCanvas.width = Math.max(1, Math.round(canvasWidth / 3));
+	bloomCanvas.height = Math.max(1, Math.round(canvasHeight / 3));
+	fxCanvas.width = canvasWidth;
+	fxCanvas.height = canvasHeight;
 	backgroundCanvas.style.width = canvasWidth + "px";
 	backgroundCanvas.style.height = canvasHeight + "px";
 
@@ -120,6 +128,13 @@ var smashArmed = [];         // per-team: next collision detonates an AoE smash 
 var particles = [];          // capture-spark particles
 var PARTICLE_CAP = 600;      // hard cap on live particles
 var shakeMag = 0;            // current screen-shake magnitude (px); decays each frame
+var heat = null;             // Float32Array(nx*ny) fresh-capture glow, decays each frame
+var impacts = [];            // expanding impact rings { x, y, r, maxR, life, maxLife, rgb }
+var glitch = 0;              // glitch / RGB-split burst intensity (0..1), decays
+var pulseT = 0;              // phase accumulator for breathing pulses
+var transition = 1;          // round-start wipe progress (0..1; 1 = fully revealed)
+var bloomOn = true;          // bloom post-process
+var barW = [], pctShown = []; // animated scoreboard bar widths + rolling percents
 // #endregion
 
 // #region dom refs
@@ -202,6 +217,7 @@ function applyColors() {
 function buildGrid() {
 	nx = Math.max(2, Math.ceil(canvasWidth / cfg.cell));
 	ny = Math.max(2, Math.ceil(canvasHeight / cfg.cell));
+	heat = new Float32Array(nx * ny);
 	squares = [];
 	if (teamCount === 3) {
 		var cx = nx / 2, cy = ny / 2;
@@ -262,6 +278,7 @@ function reset() {
 	buildGrid();
 	buildBalls();
 	lastLeader = -1;
+	transition = 0; impacts = []; glitch = 0;
 	emit("reset", getState());
 }
 // #endregion
@@ -275,7 +292,7 @@ function paintBlobPx(t, x, y, r) {
 	for (var i = i0; i <= i1; i++) {
 		for (var j = j0; j <= j1; j++) {
 			var dx = (i + 0.5) * cell - x, dy = (j + 0.5) * cell - y;
-			if (dx * dx + dy * dy <= r * r) squares[i][j] = t;
+			if (dx * dx + dy * dy <= r * r) { squares[i][j] = t; if (heat) heat[i * ny + j] = 1; }
 		}
 	}
 }
@@ -292,7 +309,7 @@ function checkSquareCollision(ball) {
 		var j = Math.floor(checkY / cell);
 		if (i >= 0 && i < nx && j >= 0 && j < ny) {
 			if (squares[i][j] !== ball.team) {
-				squares[i][j] = ball.team; hit = true;
+				squares[i][j] = ball.team; hit = true; if (heat) heat[i * ny + j] = 1;
 				// OR the flips (never cancel) and only bounce off cells the ball moves toward —
 				// toggling here let an even number of same-axis hits cancel, so the ball tunnelled
 				// straight through a wall while still painting it.
@@ -308,12 +325,13 @@ function checkSquareCollision(ball) {
 	if (flipY) ball.dy = -vy;
 	if (hit) {
 		spawnSparks(ball.x, ball.y, accentRGB[ball.team], 4, 1);
+		impacts.push({ x: ball.x, y: ball.y, r: cfg.cell * 0.4, maxR: cfg.cell * 2.2, life: 16, maxLife: 16, rgb: accentRGB[ball.team] });
 		if (smashArmed[ball.team]) {
 			var sr = smashArmed[ball.team];
 			smashArmed[ball.team] = 0;
 			paintBlobPx(ball.team, ball.x, ball.y, sr);
 			spawnSparks(ball.x, ball.y, accentRGB[ball.team], 64, 3);
-			shake(24);
+			shake(24); glitch = Math.max(glitch, 0.9); impacts.push({ x: ball.x, y: ball.y, r: cfg.cell, maxR: sr, life: 28, maxLife: 28, rgb: accentRGB[ball.team] });
 		}
 	}
 }
@@ -378,14 +396,32 @@ function drawSquares() {
 			ctx.fillRect(i * cell, j * cell, cell, cell);
 		}
 	}
+	if (useNeon && heat) {
+		ctx.save();
+		ctx.globalCompositeOperation = "lighter";
+		for (var hi = 0; hi < nx; hi++) {
+			for (var hj = 0; hj < ny; hj++) {
+				var hv = heat[hi * ny + hj];
+				if (hv > 0.02) {
+					var hc = accentRGB[squares[hi][hj]];
+					ctx.globalAlpha = hv * 0.7;
+					ctx.fillStyle = rgba([(hc[0] + 255) / 2, (hc[1] + 255) / 2, (hc[2] + 255) / 2], 1);
+					ctx.fillRect(hi * cell, hj * cell, cell, cell);
+				}
+			}
+		}
+		ctx.restore();
+	}
 	if (useNeon) { if (gridLines) drawGridLines(); drawFrontier(); }
+	drawFieldVignette();
 }
 
 // faint constant tron-grid so the field reads as a lattice even on solid territory
 function drawGridLines() {
 	var cell = cfg.cell;
 	ctx.save();
-	ctx.strokeStyle = "rgba(120,200,255,0.045)";
+	var gpulse = (0.03 + 0.022 * (0.5 + 0.5 * Math.sin(pulseT * 0.6))).toFixed(3);
+	ctx.strokeStyle = "rgba(120,200,255," + gpulse + ")";
 	ctx.lineWidth = 1;
 	ctx.beginPath();
 	for (var x = cell; x < canvasWidth; x += cell) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, canvasHeight); }
@@ -461,15 +497,16 @@ function drawBalls() {
 
 		if (useNeon) {
 			var rgb = accentRGB[ball.team];
+			var _ang = Math.atan2(ball.dy, ball.dx), _sp = Math.hypot(ball.dx, ball.dy) || 1, _st = Math.min(1.9, 1 + _sp / (cfg.speed * 2.2)), _ha = 1.5 + 0.2 * Math.sin(pulseT * 1.6 + n);
 			ctx.save();
 			ctx.globalCompositeOperation = "lighter";
 			if (glow) { ctx.shadowBlur = cfg.cell * 1.4; ctx.shadowColor = teamCol; }
 			ctx.globalAlpha = 0.45;
-			ctx.beginPath(); ctx.arc(ball.x, ball.y, r * 1.7, 0, Math.PI * 2);
+			ctx.beginPath(); ctx.ellipse(ball.x, ball.y, r * _ha * _st, r * _ha, _ang, 0, Math.PI * 2);
 			ctx.fillStyle = rgba(rgb, 1); ctx.fill();
 			ctx.shadowBlur = 0;
 			ctx.globalAlpha = 1;
-			ctx.beginPath(); ctx.arc(ball.x, ball.y, r, 0, Math.PI * 2);
+			ctx.beginPath(); ctx.ellipse(ball.x, ball.y, r * _st, r, _ang, 0, Math.PI * 2);
 			ctx.fillStyle = rgba(rgb, 1); ctx.fill();
 			ctx.beginPath(); ctx.arc(ball.x, ball.y, r * 0.42, 0, Math.PI * 2);
 			ctx.fillStyle = "#ffffff"; ctx.fill();
@@ -501,19 +538,33 @@ function updateScoreboard() {
 	var leader = 0, maxv = -1, tie = false;
 	for (var k = 0; k < teamCount; k++) {
 		var p = scores[k] / total;
-		if (segEls[k]) segEls[k].style.width = (p * 100) + "%";
-		if (pctEls[k]) pctEls[k].textContent = Math.round(p * 100) + "%";
+		barW[k] = (barW[k] == null ? p : barW[k] + (p - barW[k]) * 0.12);
+		if (segEls[k]) segEls[k].style.width = (barW[k] * 100) + "%";
+		pctShown[k] = (pctShown[k] == null ? p * 100 : pctShown[k] + (p * 100 - pctShown[k]) * 0.16);
+		if (pctEls[k]) pctEls[k].textContent = Math.round(pctShown[k]) + "%";
 		if (scores[k] > maxv) { maxv = scores[k]; leader = k; tie = false; }
 		else if (scores[k] === maxv) tie = true;
 	}
 
 	var L = tie ? -1 : leader;
-	if (L !== -1 && L !== lastLeader && lastLeader !== -1) emit("lead", { team: L, name: names[L] });
+	if (L !== -1 && L !== lastLeader && lastLeader !== -1) { emit("lead", { team: L, name: names[L] }); var lcChip = dotEls[L] ? dotEls[L].parentNode : null; if (lcChip) { lcChip.classList.remove("pw-leadflash"); void lcChip.offsetWidth; lcChip.classList.add("pw-leadflash"); } }
 	if (L !== -1) lastLeader = L;
 	for (var c = 0; c < teamCount; c++) {
 		var chip = dotEls[c] ? dotEls[c].parentNode : null;
 		if (chip) chip.classList.toggle("pw-lead", c === L);
 	}
+}
+
+function endRound() {
+	if (roundOver) return;
+	if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
+	var w = 0, mx = -1;
+	for (var t = 0; t < teamCount; t++) { if ((scores[t] || 0) > mx) { mx = scores[t]; w = t; } }
+	roundOver = true;
+	emit("win", { team: w, name: names[w] });
+	showBanner(names[w] + " wins! 🏆", autoRestart ? 3000 : 4000);
+	shake(22); spawnSparks(canvasWidth / 2, canvasHeight / 2, accentRGB[w], 120, 4); glitch = Math.max(glitch, 1);
+	if (autoRestart) resetTimer = setTimeout(reset, 3200);
 }
 
 function checkWin() {
@@ -528,7 +579,7 @@ function checkWin() {
 			roundOver = true;
 			emit("win", { team: w, name: names[w] });
 			showBanner(names[w] + " wins! 🏆", autoRestart ? 3000 : 4000);
-			shake(22); spawnSparks(canvasWidth / 2, canvasHeight / 2, accentRGB[w], 120, 4);
+			shake(22); spawnSparks(canvasWidth / 2, canvasHeight / 2, accentRGB[w], 120, 4); glitch = Math.max(glitch, 1);
 			if (autoRestart) resetTimer = setTimeout(reset, 3200);
 			return;
 		}
@@ -578,6 +629,98 @@ function spawnSparks(x, y, rgb, count, power) {
 	}
 }
 
+function stepHeat() {
+	if (!heat) return;
+	for (var i = 0; i < heat.length; i++) { if (heat[i] > 0.004) heat[i] *= 0.86; else heat[i] = 0; }
+}
+
+function stepImpacts() {
+	for (var i = impacts.length - 1; i >= 0; i--) {
+		var im = impacts[i];
+		im.r += (im.maxR - im.r) * 0.28;
+		if (--im.life <= 0) impacts.splice(i, 1);
+	}
+}
+
+function drawImpacts() {
+	if (!impacts.length) return;
+	ctx.save();
+	ctx.globalCompositeOperation = "lighter";
+	for (var i = 0; i < impacts.length; i++) {
+		var im = impacts[i];
+		var a = im.life / im.maxLife;
+		ctx.globalAlpha = a * 0.8;
+		ctx.lineWidth = Math.max(1, 3 * a);
+		ctx.strokeStyle = rgba(im.rgb, 1);
+		ctx.beginPath();
+		ctx.arc(im.x, im.y, im.r, 0, Math.PI * 2);
+		ctx.stroke();
+	}
+	ctx.restore();
+}
+
+function applyTransition() {
+	if (transition >= 1) return;
+	var rx = transition * canvasWidth;
+	ctx.fillStyle = isLight ? lightCanvasBg : darkCanvasBg;
+	ctx.fillRect(rx, 0, canvasWidth - rx + 1, canvasHeight);
+	if (neon && !isLight) {
+		ctx.save();
+		ctx.globalCompositeOperation = "lighter";
+		ctx.fillStyle = "rgba(150,230,255,0.55)";
+		ctx.fillRect(rx - 3, 0, 6, canvasHeight);
+		ctx.restore();
+	}
+}
+
+function applyBloom() {
+	if (!bloomOn || !(neon && !isLight)) return;
+	var bw = bloomCanvas.width, bh = bloomCanvas.height;
+	bloomCtx.clearRect(0, 0, bw, bh);
+	bloomCtx.drawImage(backgroundCanvas, 0, 0, bw, bh);
+	ctx.save();
+	ctx.globalCompositeOperation = "lighter";
+	ctx.globalAlpha = 0.5;
+	ctx.imageSmoothingEnabled = true;
+	ctx.drawImage(bloomCanvas, 0, 0, bw, bh, 0, 0, canvasWidth, canvasHeight);
+	ctx.restore();
+}
+
+function applyGlitch() {
+	if (glitch <= 0.02) return;
+	var amp = glitch * 18;
+	fxCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+	fxCtx.drawImage(backgroundCanvas, 0, 0);
+	ctx.save();
+	ctx.globalCompositeOperation = "lighter";
+	ctx.globalAlpha = 0.3;
+	ctx.drawImage(fxCanvas, amp, 0);
+	ctx.drawImage(fxCanvas, -amp, 0);
+	ctx.restore();
+	for (var b = 0; b < 5; b++) {
+		var by = Math.random() * canvasHeight;
+		var bhh = 6 + Math.random() * 46;
+		var ox = (Math.random() * 2 - 1) * amp * 2.2;
+		ctx.drawImage(fxCanvas, 0, by, canvasWidth, bhh, ox, by, canvasWidth, bhh);
+	}
+}
+
+var _vigKey = "", _vigGrad = null;
+function drawFieldVignette() {
+	if (!(neon && !isLight)) return;
+	var key = canvasWidth + "x" + canvasHeight;
+	if (key !== _vigKey) {
+		_vigKey = key;
+		_vigGrad = ctx.createRadialGradient(canvasWidth / 2, canvasHeight * 0.46, canvasWidth * 0.2, canvasWidth / 2, canvasHeight / 2, canvasWidth * 0.72);
+		_vigGrad.addColorStop(0, "rgba(0,0,0,0)");
+		_vigGrad.addColorStop(1, "rgba(0,0,0,0.34)");
+	}
+	ctx.save();
+	ctx.fillStyle = _vigGrad;
+	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+	ctx.restore();
+}
+
 function stepParticles() {
 	for (var i = particles.length - 1; i >= 0; i--) {
 		var p = particles[i];
@@ -620,7 +763,7 @@ function buildScoreboard() {
 	scoreEl.innerHTML = bar;
 
 	segEls = [].slice.call(scoreEl.querySelectorAll("#pwBar > div"));
-	dotEls = []; nameSBEls = []; pctEls = [];
+	dotEls = []; nameSBEls = []; pctEls = []; barW = []; pctShown = [];
 	scoreEl.querySelectorAll("#pwLegend .pw-chip").forEach(function (chip, t) {
 		dotEls[t] = chip.querySelector(".pw-dot");
 		nameSBEls[t] = chip.querySelector(".pw-cname");
@@ -765,6 +908,7 @@ var neonCheckbox = document.getElementById("neonCheckbox");
 var trailCheckbox = document.getElementById("trailCheckbox");
 var crtCheckbox = document.getElementById("crtCheckbox");
 var gridCheckbox = document.getElementById("gridCheckbox");
+var bloomCheckbox = document.getElementById("bloomCheckbox");
 
 function applyPreset(name) {
 	preset = name;
@@ -806,6 +950,7 @@ neonCheckbox.onclick = function () { neon = this.checked; document.body.classLis
 trailCheckbox.onclick = function () { trails = this.checked; };
 crtCheckbox.onclick = function () { crt = this.checked; document.body.classList.toggle("crt-off", !crt); };
 gridCheckbox.onclick = function () { gridLines = this.checked; };
+bloomCheckbox.onclick = function () { bloomOn = this.checked; };
 scoreCheckbox.onclick = function () { showScore = this.checked; scoreEl.classList.toggle("pw-hidden", !showScore); };
 autoCheckbox.onclick = function () { autoRestart = this.checked; };
 
@@ -818,6 +963,7 @@ function togglePause() {
 
 document.getElementById("newButton").onclick = relaunch;
 document.getElementById("resetButton").onclick = reset;
+document.getElementById("endButton").onclick = endRound;
 
 // power-up buttons — delegated so it survives buildPowerups() rebuilds
 if (powerupsEl) powerupsEl.onclick = function (e) {
@@ -921,7 +1067,7 @@ var PongWars = {
 		for (var i = i0; i <= i1; i++) {
 			for (var j = j0; j <= j1; j++) {
 				var dx = (i + 0.5) * cell - x, dy = (j + 0.5) * cell - y;
-				if (dx * dx + dy * dy <= r * r) squares[i][j] = t;
+				if (dx * dx + dy * dy <= r * r) { squares[i][j] = t; if (heat) heat[i * ny + j] = 1; }
 			}
 		}
 	},
@@ -960,6 +1106,7 @@ var PongWars = {
 	setPreset: function (name) { if (PALETTES[name]) { setPresetRadio(name); applyPreset(name); } },
 	banner: function (text, ms) { showBanner(String(text), ms); },
 	shake: function () { shake(); },
+	endRound: function () { endRound(); },
 	setNeon: function (on) { neon = !!on; neonCheckbox.checked = neon; document.body.classList.toggle("neon", neon && !isLight); recomputeStyle(); },
 	setTrails: function (on) { trails = !!on; trailCheckbox.checked = trails; },
 	overlay: function (on, title, sub) {
@@ -991,7 +1138,7 @@ window.PongWars = PongWars;
 var COMMANDS = {
 	boost: 1, spawnBall: 1, removeBall: 1, paintBlob: 1, paintRandom: 1, smash: 1, freeze: 1,
 	setTeamName: 1, setTeamColor: 1, setTeamCount: 1, setPreset: 1, banner: 1, shake: 1, overlay: 1, setNeon: 1, setTrails: 1,
-	setSpeed: 1, setCellSize: 1, setBallsPerTeam: 1,
+	setSpeed: 1, setCellSize: 1, setBallsPerTeam: 1, endRound: 1,
 	reset: 1, relaunch: 1, pause: 1, resume: 1, togglePause: 1,
 };
 
@@ -1082,12 +1229,17 @@ function draw(now) {
 	window.requestAnimationFrame(draw);
 	if (document.hidden) return;
 
-	if (!paused) stepParticles();
+	if (!paused) { stepParticles(); stepImpacts(); stepHeat(); pulseT += 0.05; if (transition < 1) transition = Math.min(1, transition + 0.045); }
+	if (glitch > 0) glitch *= 0.84;
 	if (!paused && !roundOver) step();
 
 	drawSquares();
+	drawImpacts();
 	drawBalls();
 	drawParticles();
+	applyTransition();
+	applyBloom();
+	applyGlitch();
 	updateScoreboard();
 	checkWin();
 	applyShake();

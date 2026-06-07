@@ -38,6 +38,8 @@
     .pw-pu-btns { display: flex; gap: 5px; flex: 1; }
     .pw-pu-btn { flex: 1; min-width: 30px; padding: 5px 0; font-size: 13px; font-weight: 700; cursor: pointer; background: transparent; border: 1.5px solid currentColor; border-radius: 6px; opacity: 0.82; transition: opacity 0.15s, background 0.15s; }
     .pw-pu-btn:hover { opacity: 1; background: rgba(127,127,127,0.12); }
+    @keyframes pw-leadflash { 0% { transform: scale(1.2); filter: brightness(1.7); } 100% { transform: scale(1); filter: brightness(1); } }
+    .pw-chip.pw-leadflash { animation: pw-leadflash 0.5s ease; }
 
     /* per-team name + colour controls (built by main.js) */
     .pw-team-row { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
@@ -298,6 +300,7 @@
       <label><input type="checkbox" id="trailCheckbox" checked> Comet trails</label>
       <label><input type="checkbox" id="crtCheckbox" checked> CRT overlay</label>
       <label><input type="checkbox" id="gridCheckbox" checked> Grid lines</label>
+      <label><input type="checkbox" id="bloomCheckbox" checked> Bloom glow</label>
       <label><input type="checkbox" id="scoreCheckbox" checked> Show scoreboard</label>
       <label><input type="checkbox" id="autoCheckbox" checked> Auto-restart rounds</label>
     </div>
@@ -321,6 +324,7 @@
       <button id="pauseButton">Pause (Space)</button>
       <button id="newButton">Re-launch balls (N)</button>
       <button id="resetButton">Reset (R)</button>
+      <button id="endButton">End round</button>
     </div>
 
     <div class="hud-divider"></div>
