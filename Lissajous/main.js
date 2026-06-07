@@ -15,11 +15,12 @@ var t = helpers.range(0, 500, delta_t);
 var lissFigureSize = 100;
 var fadeAway = false;
 var showLines = true;
-var fadeAwaySpeed = 0.01;
+var fadeAwaySpeed = 0.003;
 var lissajousTable = new LissajousTable(canvasWidth, canvasHeight, lissFigureSize);
 var liveResetCanvas = false;
 var resetCanvas = false;
 var i = 0;
+var stepsPerFrame = 5;
 
 const _dummyCtx = document.createElement('canvas').getContext('2d');
 const _trailA = document.createElement('canvas');
@@ -212,7 +213,7 @@ function draw(ts) {
 	updateFps(ts || performance.now());
 	fgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-	if (i >= Math.ceil(4 * Math.PI / delta_t) || resetCanvas == true) {
+	if (resetCanvas) {
 		i = 0;
 		resetTrail();
 		resetCanvas = false;
@@ -220,8 +221,7 @@ function draw(ts) {
 	}
 
 	if (fadeAway) {
-		// Double-buffer fade: decay previous trail by (1-speed), draw current frame on top.
-		// O(figures) per tick — replaces O(trail_length x figures) FadeTrail replay.
+		const fadeMaxI = Math.ceil(2 * Math.PI / delta_t);
 		const [frontCanvas, backCtx] = _trailFront === 'A'
 			? [_trailA, _trailCtxB]
 			: [_trailB, _trailCtxA];
@@ -229,11 +229,15 @@ function draw(ts) {
 		backCtx.globalAlpha = 1 - Number(fadeAwaySpeed);
 		backCtx.drawImage(frontCanvas, 0, 0);
 		backCtx.globalAlpha = 1.0;
-		for (let row = 0; row < lissajousTable.rows; row++) {
-			for (let col = 0; col < lissajousTable.cols; col++) {
-				if ((row === 0) && (col === 0)) continue;
-				lissajousTable.figures[row][col].Draw(backCtx, _dummyCtx, t[i], t[i + 1], showLines);
+		for (let s = 0; s < stepsPerFrame; s++) {
+			if (i >= fadeMaxI) i = 0;
+			for (let row = 0; row < lissajousTable.rows; row++) {
+				for (let col = 0; col < lissajousTable.cols; col++) {
+					if ((row === 0) && (col === 0)) continue;
+					lissajousTable.figures[row][col].Draw(backCtx, _dummyCtx, t[i], t[i + 1], showLines);
+				}
 			}
+			i++;
 		}
 		_trailFront = _trailFront === 'A' ? 'B' : 'A';
 		const newFront = _trailFront === 'A' ? _trailA : _trailB;
@@ -246,16 +250,21 @@ function draw(ts) {
 			}
 		}
 	} else {
-		for (let row = 0; row < lissajousTable.rows; row++) {
-			for (let col = 0; col < lissajousTable.cols; col++) {
-				if ((row === 0) && (col === 0)) {
-					continue;
-				}
-				lissajousTable.figures[row][col].Draw(bgCtx, fgCtx, t[i], t[i + 1], showLines);
+		const noFadeMaxI = Math.ceil(4 * Math.PI / delta_t);
+		for (let s = 0; s < stepsPerFrame; s++) {
+			if (i >= noFadeMaxI) {
+				i = 0;
+				bgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 			}
+			for (let row = 0; row < lissajousTable.rows; row++) {
+				for (let col = 0; col < lissajousTable.cols; col++) {
+					if ((row === 0) && (col === 0)) continue;
+					lissajousTable.figures[row][col].Draw(bgCtx, fgCtx, t[i], t[i + 1], showLines);
+				}
+			}
+			i++;
 		}
 	}
-	i++;
 	if (document.hidden || paused) return;
 	window.requestAnimationFrame(draw);
 }
