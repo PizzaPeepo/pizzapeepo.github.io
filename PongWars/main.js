@@ -24,6 +24,9 @@ var glow = true;
 var neon = true;          // neo-tokyo render style (dark fields + neon bloom)
 var trails = true;        // comet trails behind balls
 var TRAIL_LEN = 24;
+var fieldSat = 0.7;       // field colour vibrance (0.2..1), saturation slider
+var crt = true;           // CRT scanline + vignette overlay
+var gridLines = true;     // faint tron grid overlay
 var showScore = true;
 var autoRestart = true;
 var roundOver = false;       // frozen during a win celebration
@@ -75,6 +78,7 @@ function applyThemeColors(light) {
 	backgroundCanvas.style.background = light ? lightCanvasBg : darkCanvasBg;
 	document.body.classList.toggle("neon", neon && !light);
 	recomputeStyle();
+	tintPowerups();
 }
 applyThemeColors(isLight);
 document.addEventListener("themechange", function (e) { applyThemeColors(e.detail.isLight); });
@@ -90,16 +94,11 @@ var LAYOUTS = { 2: [2, 1], 3: [3, 1], 4: [2, 2] };
 // contrast ring beyond that (so it stays visible on its own field).
 var PALETTES = {
 	neon:    ["#00eaff", "#ff2bd1", "#9b5cff", "#4dff7c", "#ffb300", "#ff3b3b", "#2b8bff", "#ff7ab8"],
-	classic: ["#d9e8e3", "#114c5a", "#f5a623", "#c0392b", "#27ae60", "#8e44ad", "#2980b9", "#e67e22"],
 	twitch:  ["#efeff1", "#9146ff", "#00c8af", "#ff5a36", "#1f8b4c", "#f5d423", "#e83e8c", "#3498db"],
 	fireice: ["#dff1ff", "#ff5a36", "#3aa6ff", "#ffb000", "#00d1c1", "#ff3860", "#7ee787", "#b388ff"],
 	mono:    ["#e6e6e6", "#222222", "#9e9e9e", "#4d4d4d", "#c4c4c4", "#3a3a3a", "#7a7a7a", "#5e5e5e"],
 	geoblue:    ["#08F7FE", "#09FBD3", "#FE53BB", "#F5D300"],
-	psychedelic:["#75D5FD", "#B76CFF", "#FF2281", "#011FFD"],
-	prism:      ["#FFFF66", "#FC6E22", "#FF1493", "#C24CF6"],
 	lights:     ["#FFACFC", "#F148FB", "#7122FA", "#560A86"],
-	lumi:       ["#01FFC3", "#01FFFF", "#FFB3FD", "#9D72FF"],
-	synthwave:  ["#16C47F", "#FFD65A", "#FF9D23", "#F93827"],
 	hyperpop:   ["#7C00FE", "#F9E400", "#FFAF00", "#F5004F"],
 	orchid:     ["#6420AA", "#FF3EA5", "#FF7ED4", "#FFB5DA"],
 	rave:       ["#45FFCA", "#FDFF7D", "#FF98CA", "#D67BFF"],
@@ -116,6 +115,11 @@ var balls = [];
 var scores = [];             // tiles owned per team
 var lastLeader = -1;
 var boost = [];              // per-team temporary speed multiplier { factor, until }
+var frozen = [];             // per-team freeze { until } — opponents frozen by a Freeze power-up
+var smashArmed = [];         // per-team: next collision detonates an AoE smash of this radius (px), else 0
+var particles = [];          // capture-spark particles
+var PARTICLE_CAP = 600;      // hard cap on live particles
+var shakeMag = 0;            // current screen-shake magnitude (px); decays each frame
 // #endregion
 
 // #region dom refs
@@ -126,6 +130,8 @@ var titleEl = document.getElementById("pwTitle");
 var subEl = document.getElementById("pwSub");
 var bannerEl = document.getElementById("pwBanner");
 var teamControlsEl = document.getElementById("pwTeamControls");
+var pwFrame = document.getElementById("pwFrame");
+var powerupsEl = document.getElementById("pwPowerups");
 
 // dynamically-built element caches (one entry per team)
 var segEls = [], pctEls = [], nameSBEls = [], dotEls = [];
@@ -156,13 +162,12 @@ function rgba(c, a) { return "rgba(" + (c[0] | 0) + "," + (c[1] | 0) + "," + (c[
 // recompute cached tile/accent colours whenever palette, theme or style changes
 function recomputeStyle() {
 	if (!colors || !colors.length) return;
-	var bgRgb = hexToRgb(isLight ? lightCanvasBg : darkCanvasBg);
 	fields = []; accentRGB = [];
 	var sbGlow = neon && !isLight;
 	for (var t = 0; t < teamCount; t++) {
 		var acc = hexToRgb(colors[t]);
 		accentRGB[t] = acc;
-		fields[t] = rgba(mixRgb(acc, bgRgb, 0.82), 1);   // mostly background, faint accent tint
+		fields[t] = rgba(mixRgb(acc, [6, 6, 14], 1 - fieldSat), 1);   // vibrant: saturation-slider controlled
 		if (dotEls[t]) dotEls[t].style.boxShadow = sbGlow ? "0 0 6px " + rgba(acc, 0.95) + ", 0 0 13px " + rgba(acc, 0.6) : "";
 		if (segEls[t]) segEls[t].style.boxShadow = sbGlow ? "inset 0 0 10px " + rgba(acc, 0.5) + ", inset 0 0 2px rgba(255,255,255,0.45)" : "";
 	}
@@ -262,10 +267,23 @@ function reset() {
 // #endregion
 
 // #region simulation
+// convert every tile whose centre lies within radius r (px) of (x,y) to team t
+function paintBlobPx(t, x, y, r) {
+	var cell = cfg.cell;
+	var i0 = Math.max(0, Math.floor((x - r) / cell)), i1 = Math.min(nx - 1, Math.floor((x + r) / cell));
+	var j0 = Math.max(0, Math.floor((y - r) / cell)), j1 = Math.min(ny - 1, Math.floor((y + r) / cell));
+	for (var i = i0; i <= i1; i++) {
+		for (var j = j0; j <= j1; j++) {
+			var dx = (i + 0.5) * cell - x, dy = (j + 0.5) * cell - y;
+			if (dx * dx + dy * dy <= r * r) squares[i][j] = t;
+		}
+	}
+}
+
 function checkSquareCollision(ball) {
 	var cell = cfg.cell;
 	var vx = ball.dx, vy = ball.dy;   // sample against the original velocity, flip once at the end
-	var flipX = false, flipY = false;
+	var flipX = false, flipY = false, hit = false;
 	for (var a = 0; a < Math.PI * 2; a += Math.PI / 4) {
 		var dirX = Math.cos(a), dirY = Math.sin(a);
 		var checkX = ball.x + dirX * (cell / 2);
@@ -274,7 +292,7 @@ function checkSquareCollision(ball) {
 		var j = Math.floor(checkY / cell);
 		if (i >= 0 && i < nx && j >= 0 && j < ny) {
 			if (squares[i][j] !== ball.team) {
-				squares[i][j] = ball.team;
+				squares[i][j] = ball.team; hit = true;
 				// OR the flips (never cancel) and only bounce off cells the ball moves toward —
 				// toggling here let an even number of same-axis hits cancel, so the ball tunnelled
 				// straight through a wall while still painting it.
@@ -288,6 +306,16 @@ function checkSquareCollision(ball) {
 	}
 	if (flipX) ball.dx = -vx;
 	if (flipY) ball.dy = -vy;
+	if (hit) {
+		spawnSparks(ball.x, ball.y, accentRGB[ball.team], 4, 1);
+		if (smashArmed[ball.team]) {
+			var sr = smashArmed[ball.team];
+			smashArmed[ball.team] = 0;
+			paintBlobPx(ball.team, ball.x, ball.y, sr);
+			spawnSparks(ball.x, ball.y, accentRGB[ball.team], 64, 3);
+			shake(24);
+		}
+	}
 }
 
 function checkBoundaryCollision(ball) {
@@ -314,6 +342,7 @@ function boostFactor(team) {
 function step() {
 	for (var n = 0; n < balls.length; n++) {
 		var ball = balls[n];
+		if (frozen[ball.team] && Date.now() < frozen[ball.team].until) continue;
 		checkSquareCollision(ball);
 		checkBoundaryCollision(ball);
 		var f = boostFactor(ball.team);
@@ -349,7 +378,7 @@ function drawSquares() {
 			ctx.fillRect(i * cell, j * cell, cell, cell);
 		}
 	}
-	if (useNeon) { drawGridLines(); drawFrontier(); }
+	if (useNeon) { if (gridLines) drawGridLines(); drawFrontier(); }
 }
 
 // faint constant tron-grid so the field reads as a lattice even on solid territory
@@ -481,6 +510,10 @@ function updateScoreboard() {
 	var L = tie ? -1 : leader;
 	if (L !== -1 && L !== lastLeader && lastLeader !== -1) emit("lead", { team: L, name: names[L] });
 	if (L !== -1) lastLeader = L;
+	for (var c = 0; c < teamCount; c++) {
+		var chip = dotEls[c] ? dotEls[c].parentNode : null;
+		if (chip) chip.classList.toggle("pw-lead", c === L);
+	}
 }
 
 function checkWin() {
@@ -495,7 +528,7 @@ function checkWin() {
 			roundOver = true;
 			emit("win", { team: w, name: names[w] });
 			showBanner(names[w] + " wins! 🏆", autoRestart ? 3000 : 4000);
-			shake();
+			shake(22); spawnSparks(canvasWidth / 2, canvasHeight / 2, accentRGB[w], 120, 4);
 			if (autoRestart) resetTimer = setTimeout(reset, 3200);
 			return;
 		}
@@ -512,10 +545,63 @@ function showBanner(text, ms) {
 	bannerTimer = setTimeout(function () { bannerEl.classList.remove("pw-show"); }, ms || 3000);
 }
 
-function shake() {
-	backgroundCanvas.classList.remove("pw-shaking");
-	void backgroundCanvas.offsetWidth;   // reflow so the animation can re-trigger
-	backgroundCanvas.classList.add("pw-shaking");
+// magnitude-based screen shake; applyShake() (called each frame) consumes + decays it
+function shake(mag) {
+	shakeMag = Math.min(48, Math.max(shakeMag, mag || 12));
+}
+
+// jitter the play area (canvas + frame) by the current magnitude, then decay
+function applyShake() {
+	if (shakeMag > 0.5) {
+		var ox = (Math.random() * 2 - 1) * shakeMag;
+		var oy = (Math.random() * 2 - 1) * shakeMag;
+		var tf = "translate(calc(-50% + " + ox.toFixed(1) + "px), calc(-50% + " + oy.toFixed(1) + "px))";
+		backgroundCanvas.style.transform = tf;
+		if (pwFrame) pwFrame.style.transform = tf;
+		shakeMag *= 0.86;
+	} else if (shakeMag !== 0) {
+		shakeMag = 0;
+		backgroundCanvas.style.transform = "translate(-50%, -50%)";
+		if (pwFrame) pwFrame.style.transform = "translate(-50%, -50%)";
+	}
+}
+
+// ── capture sparks ──
+function spawnSparks(x, y, rgb, count, power) {
+	power = power || 1;
+	for (var k = 0; k < count; k++) {
+		if (particles.length >= PARTICLE_CAP) break;
+		var a = Math.random() * Math.PI * 2;
+		var sp = (0.6 + Math.random() * 2.6) * power;
+		var life = 12 + Math.random() * 16 * power;
+		particles.push({ x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: life, maxLife: life, rgb: rgb || [255, 255, 255], size: (0.8 + Math.random() * 1.5) * Math.sqrt(power) });
+	}
+}
+
+function stepParticles() {
+	for (var i = particles.length - 1; i >= 0; i--) {
+		var p = particles[i];
+		p.x += p.vx; p.y += p.vy;
+		p.vx *= 0.9; p.vy *= 0.9;
+		if (--p.life <= 0) particles.splice(i, 1);
+	}
+}
+
+function drawParticles() {
+	if (!particles.length) return;
+	var useNeon = neon && !isLight;
+	ctx.save();
+	ctx.globalCompositeOperation = useNeon ? "lighter" : "source-over";
+	for (var i = 0; i < particles.length; i++) {
+		var p = particles[i];
+		var al = p.life / p.maxLife;
+		ctx.globalAlpha = al;
+		ctx.beginPath();
+		ctx.arc(p.x, p.y, p.size * (0.4 + al * 0.7), 0, Math.PI * 2);
+		ctx.fillStyle = rgba(p.rgb, 1);
+		ctx.fill();
+	}
+	ctx.restore();
 }
 
 function setOverlay(on) {
@@ -569,6 +655,43 @@ function buildTeamControls() {
 	});
 }
 
+var POWERUPS = [
+	{ key: "smash", label: "Smash 💥" },
+	{ key: "boost", label: "Boost ⚡" },
+	{ key: "multi", label: "Multiball ✦" },
+	{ key: "freeze", label: "Freeze ❄" },
+];
+
+function buildPowerups() {
+	if (!powerupsEl) return;
+	var html = "";
+	for (var p = 0; p < POWERUPS.length; p++) {
+		html += '<div class="pw-pu-row"><span class="pw-pu-label">' + POWERUPS[p].label + '</span><span class="pw-pu-btns">';
+		for (var t = 0; t < teamCount; t++)
+			html += '<button class="pw-pu-btn" data-pu="' + POWERUPS[p].key + '" data-team="' + t + '">' + (t + 1) + '</button>';
+		html += '</span></div>';
+	}
+	powerupsEl.innerHTML = html;
+	tintPowerups();
+}
+
+function tintPowerups() {
+	if (!powerupsEl) return;
+	powerupsEl.querySelectorAll(".pw-pu-btn").forEach(function (b) {
+		var t = +b.dataset.team;
+		b.style.borderColor = colors[t];
+		b.style.color = colors[t];
+		b.title = names[t];
+	});
+}
+
+function firePowerup(pu, t) {
+	if (pu === "smash") { PongWars.smash(t); showBanner(names[t] + " armed a SMASH! 💥", 2200); }
+	else if (pu === "boost") { PongWars.boost(t, 2.2, 6000); showBanner(names[t] + " boosted! ⚡", 2200); }
+	else if (pu === "multi") { PongWars.spawnBall(t, 1); showBanner(names[t] + " +1 ball ✦", 2000); }
+	else if (pu === "freeze") { PongWars.freeze(t, 4000); showBanner(names[t] + " froze the field! ❄", 2200); }
+}
+
 function setName(team, value) {
 	names[team] = value;
 	if (nameSBEls[team]) nameSBEls[team].textContent = value;
@@ -583,18 +706,20 @@ function setTeamCount(n) {
 		colors = PALETTES[preset].slice(0, n);
 	} else {
 		colors = colors.slice(0, n);
-		while (colors.length < n) colors.push(PALETTES.classic[colors.length]);
+		while (colors.length < n) colors.push(PALETTES.neon[colors.length]);
 	}
 	names = names.slice(0, n);
 	while (names.length < n) names.push(DEFAULT_NAMES[names.length]);
 	boost = [];
 	for (var t = 0; t < n; t++) boost.push({ factor: 1, until: 0 });
+	frozen = []; smashArmed = [];
 
 	var radio = document.querySelector('input[name="teamcount"][value="' + n + '"]');
 	if (radio) radio.checked = true;
 
 	buildScoreboard();
 	buildTeamControls();
+	buildPowerups();
 	lastLeader = -1;
 	reset();
 }
@@ -628,11 +753,18 @@ bindSlider("ballsSlider", "ballsValue", parseInt, Object.assign(function (v) {
 	buildBalls();
 }, { initial: cfg.ballsPerTeam }));
 
+bindSlider("satSlider", "satValue", parseInt, Object.assign(function (v) {
+	fieldSat = v / 100;
+	recomputeStyle();
+}, { initial: Math.round(fieldSat * 100) }), function (v) { return v + "%"; });
+
 var glowCheckbox = document.getElementById("glowCheckbox");
 var scoreCheckbox = document.getElementById("scoreCheckbox");
 var autoCheckbox = document.getElementById("autoCheckbox");
 var neonCheckbox = document.getElementById("neonCheckbox");
 var trailCheckbox = document.getElementById("trailCheckbox");
+var crtCheckbox = document.getElementById("crtCheckbox");
+var gridCheckbox = document.getElementById("gridCheckbox");
 
 function applyPreset(name) {
 	preset = name;
@@ -672,6 +804,8 @@ document.getElementById("applySizeBtn").onclick = function () {
 glowCheckbox.onclick = function () { glow = this.checked; };
 neonCheckbox.onclick = function () { neon = this.checked; document.body.classList.toggle("neon", neon && !isLight); recomputeStyle(); };
 trailCheckbox.onclick = function () { trails = this.checked; };
+crtCheckbox.onclick = function () { crt = this.checked; document.body.classList.toggle("crt-off", !crt); };
+gridCheckbox.onclick = function () { gridLines = this.checked; };
 scoreCheckbox.onclick = function () { showScore = this.checked; scoreEl.classList.toggle("pw-hidden", !showScore); };
 autoCheckbox.onclick = function () { autoRestart = this.checked; };
 
@@ -685,11 +819,14 @@ function togglePause() {
 document.getElementById("newButton").onclick = relaunch;
 document.getElementById("resetButton").onclick = reset;
 
+// power-up buttons — delegated so it survives buildPowerups() rebuilds
+if (powerupsEl) powerupsEl.onclick = function (e) {
+	var b = e.target.closest(".pw-pu-btn");
+	if (!b) return;
+	firePowerup(b.dataset.pu, +b.dataset.team);
+};
+
 // chat-event preview buttons — fire the same API a bot/redemption would
-document.getElementById("testBoostA").onclick = function () { PongWars.boost("a", 2.2, 6000); showBanner(names[0] + " boosted! ⚡", 2500); };
-document.getElementById("testBoostB").onclick = function () { PongWars.boost("b", 2.2, 6000); showBanner(names[1] + " boosted! ⚡", 2500); };
-document.getElementById("testDropA").onclick = function () { PongWars.paintBlob("a", Math.random(), Math.random(), cfg.cell * 5); showBanner(names[0] + " dropped a bomb! 💥", 2500); };
-document.getElementById("testDropB").onclick = function () { PongWars.paintBlob("b", Math.random(), Math.random(), cfg.cell * 5); showBanner(names[1] + " dropped a bomb! 💥", 2500); };
 document.getElementById("testBanner").onclick = function () { showBanner("@chatter just followed! 💜", 3000); };
 document.getElementById("testShake").onclick = function () { shake(); };
 
@@ -797,6 +934,19 @@ var PongWars = {
 		}
 	},
 
+	// ── power-ups (chat-triggerable) ──
+	smash: function (team, radius) {
+		var t = resolveTeam(team);
+		smashArmed[t] = radius || cfg.cell * 6;
+		emit("smash", { team: t, name: names[t] });
+	},
+	freeze: function (team, ms) {
+		var t = resolveTeam(team);
+		var until = Date.now() + (ms || 4000);
+		for (var k = 0; k < teamCount; k++) if (k !== t) frozen[k] = { until: until };
+		emit("freeze", { team: t, name: names[t] });
+	},
+
 	// ── presentation ──
 	setTeamName: function (team, name) { setName(resolveTeam(team), String(name).slice(0, 18)); },
 	setTeamColor: function (team, color) {
@@ -839,7 +989,7 @@ window.PongWars = PongWars;
 
 // methods a remote transport is allowed to invoke (read-only/observer methods excluded)
 var COMMANDS = {
-	boost: 1, spawnBall: 1, removeBall: 1, paintBlob: 1, paintRandom: 1,
+	boost: 1, spawnBall: 1, removeBall: 1, paintBlob: 1, paintRandom: 1, smash: 1, freeze: 1,
 	setTeamName: 1, setTeamColor: 1, setTeamCount: 1, setPreset: 1, banner: 1, shake: 1, overlay: 1, setNeon: 1, setTrails: 1,
 	setSpeed: 1, setCellSize: 1, setBallsPerTeam: 1,
 	reset: 1, relaunch: 1, pause: 1, resume: 1, togglePause: 1,
@@ -910,6 +1060,8 @@ if (wsParam) connectWS(wsParam);
 	if (q.has("glow")) { glow = q.get("glow") !== "0"; glowCheckbox.checked = glow; }
 	if (q.has("neon")) { neon = q.get("neon") !== "0"; neonCheckbox.checked = neon; document.body.classList.toggle("neon", neon && !isLight); recomputeStyle(); }
 	if (q.has("trails")) { trails = q.get("trails") !== "0"; trailCheckbox.checked = trails; }
+	if (q.has("crt")) { crt = q.get("crt") !== "0"; crtCheckbox.checked = crt; document.body.classList.toggle("crt-off", !crt); }
+	if (q.has("grid")) { gridLines = q.get("grid") !== "0"; gridCheckbox.checked = gridLines; }
 	if (q.has("score")) { showScore = q.get("score") !== "0"; scoreCheckbox.checked = showScore; scoreEl.classList.toggle("pw-hidden", !showScore); }
 	if (q.has("title")) { titleEl.textContent = q.get("title"); titleInput.value = q.get("title"); }
 	if (q.has("sub")) { subEl.textContent = q.get("sub"); subInput.value = q.get("sub"); }
@@ -930,12 +1082,15 @@ function draw(now) {
 	window.requestAnimationFrame(draw);
 	if (document.hidden) return;
 
+	if (!paused) stepParticles();
 	if (!paused && !roundOver) step();
 
 	drawSquares();
 	drawBalls();
+	drawParticles();
 	updateScoreboard();
 	checkWin();
+	applyShake();
 
 	frameCount++;
 	if (now - lastFpsUpdate >= 500) {

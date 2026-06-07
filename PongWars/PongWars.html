@@ -33,6 +33,11 @@
     .pw-size-row span { color: var(--tx-2, #8a6a50); font-size: 13px; flex: 0 0 auto; }
     .pw-btn-row { display: flex; flex-wrap: wrap; gap: 6px; }
     .pw-btn-row button { flex: 1 1 calc(50% - 6px); }
+    .pw-pu-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .pw-pu-label { flex: 0 0 92px; font-size: 13px; color: var(--tx-2, #8a6a50); }
+    .pw-pu-btns { display: flex; gap: 5px; flex: 1; }
+    .pw-pu-btn { flex: 1; min-width: 30px; padding: 5px 0; font-size: 13px; font-weight: 700; cursor: pointer; background: transparent; border: 1.5px solid currentColor; border-radius: 6px; opacity: 0.82; transition: opacity 0.15s, background 0.15s; }
+    .pw-pu-btn:hover { opacity: 1; background: rgba(127,127,127,0.12); }
 
     /* per-team name + colour controls (built by main.js) */
     .pw-team-row { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
@@ -84,6 +89,11 @@
     html.light .pw-chip { color: #1a1008; text-shadow: none; }
     .pw-chip .pw-pct { font-variant-numeric: tabular-nums; opacity: 0.92; }
     .pw-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 8px rgba(0,0,0,0.4); }
+    .pw-chip { padding: 2px 9px; border-radius: 7px; transition: background 0.25s ease, transform 0.2s ease; }
+    .pw-chip.pw-lead { transform: scale(1.06); background: rgba(255,255,255,0.08); }
+    html.light .pw-chip.pw-lead { background: rgba(0,0,0,0.07); }
+    body.neon .pw-chip.pw-lead { background: rgba(0,234,255,0.12); box-shadow: 0 0 14px rgba(0,234,255,0.28), inset 0 0 8px rgba(0,234,255,0.1); }
+    body.neon .pw-chip.pw-lead .pw-cname { color: #ffffff; text-shadow: 0 0 10px rgba(0,234,255,0.85); }
 
     /* ── "Starting soon" overlay ── */
     .pw-overlay {
@@ -146,6 +156,7 @@
       mix-blend-mode: overlay; opacity: 0.5;
     }
     body:not(.neon) .pw-fx, html.light .pw-fx { display: none; }
+    body.crt-off .pw-fx { display: none; }
 
     /* ── Neo-Tokyo scoreboard skin (neon mode only) ── */
     body.neon .pw-scoreboard {
@@ -242,14 +253,9 @@
     <div class="hud-section">
       <span class="ctrl-label">Colour theme</span>
       <label><input type="radio" name="preset" value="neon" checked> Neon</label>
-      <label><input type="radio" name="preset" value="classic"> Classic</label>
       <label><input type="radio" name="preset" value="mono"> Monochrome</label>
       <label><input type="radio" name="preset" value="geoblue"> Geometric Neon Blue</label>
-      <label><input type="radio" name="preset" value="psychedelic"> Psychedelic</label>
-      <label><input type="radio" name="preset" value="prism"> Smooth Prism</label>
       <label><input type="radio" name="preset" value="lights"> Lights</label>
-      <label><input type="radio" name="preset" value="lumi"> Lumi</label>
-      <label><input type="radio" name="preset" value="synthwave"> Synthwave</label>
       <label><input type="radio" name="preset" value="hyperpop"> Hyperpop</label>
       <label><input type="radio" name="preset" value="orchid"> Electric Orchid</label>
       <label><input type="radio" name="preset" value="rave"> Cyber Pastel Rave</label>
@@ -281,10 +287,17 @@
     </div>
 
     <div class="hud-section">
+      <span class="ctrl-label">Field saturation: <span id="satValue"></span></span>
+      <input type="range" min="20" max="100" step="1" class="slider" id="satSlider">
+    </div>
+
+    <div class="hud-section">
       <span class="ctrl-label">Options</span>
       <label><input type="checkbox" id="glowCheckbox" checked> Ball glow</label>
       <label><input type="checkbox" id="neonCheckbox" checked> Neo-Tokyo style</label>
       <label><input type="checkbox" id="trailCheckbox" checked> Comet trails</label>
+      <label><input type="checkbox" id="crtCheckbox" checked> CRT overlay</label>
+      <label><input type="checkbox" id="gridCheckbox" checked> Grid lines</label>
       <label><input type="checkbox" id="scoreCheckbox" checked> Show scoreboard</label>
       <label><input type="checkbox" id="autoCheckbox" checked> Auto-restart rounds</label>
     </div>
@@ -313,12 +326,9 @@
     <div class="hud-divider"></div>
 
     <div class="hud-section">
-      <span class="ctrl-label">Chat-event preview</span>
-      <div class="pw-btn-row">
-        <button id="testBoostA">Boost A</button>
-        <button id="testBoostB">Boost B</button>
-        <button id="testDropA">Drop A</button>
-        <button id="testDropB">Drop B</button>
+      <span class="ctrl-label">Power-ups</span>
+      <div id="pwPowerups"></div>
+      <div class="pw-btn-row" style="margin-top: 8px;">
         <button id="testBanner">Banner</button>
         <button id="testShake">Shake</button>
       </div>
