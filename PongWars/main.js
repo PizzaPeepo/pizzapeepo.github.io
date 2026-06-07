@@ -8,6 +8,8 @@
 // #region globals
 var canvasWidth = window.getCanvasWidth();
 var canvasHeight = window.innerHeight;
+var fillWindow = true;
+var gameW = 1000, gameH = 1000;
 
 var cfg = {
 	cell: 24,          // tile size in px (grid resolution)
@@ -35,6 +37,19 @@ var backgroundCanvas = document.getElementById("backgroundCanvas");
 var ctx = backgroundCanvas.getContext("2d");
 
 function applyCanvasSize() {
+	if (fillWindow) {
+		canvasWidth = window.getCanvasWidth();
+		canvasHeight = window.innerHeight;
+		backgroundCanvas.style.top = "0";
+		backgroundCanvas.style.left = "0";
+		backgroundCanvas.style.transform = "none";
+	} else {
+		canvasWidth = gameW;
+		canvasHeight = gameH;
+		backgroundCanvas.style.top = "50%";
+		backgroundCanvas.style.left = "50%";
+		backgroundCanvas.style.transform = "translate(-50%, -50%)";
+	}
 	backgroundCanvas.width = canvasWidth;
 	backgroundCanvas.height = canvasHeight;
 	backgroundCanvas.style.width = canvasWidth + "px";
@@ -197,22 +212,30 @@ function reset() {
 // #region simulation
 function checkSquareCollision(ball) {
 	var cell = cfg.cell;
+	var vx = ball.dx, vy = ball.dy;   // sample against the original velocity, flip once at the end
 	var flipX = false, flipY = false;
 	for (var a = 0; a < Math.PI * 2; a += Math.PI / 4) {
-		var checkX = ball.x + Math.cos(a) * (cell / 2);
-		var checkY = ball.y + Math.sin(a) * (cell / 2);
+		var dirX = Math.cos(a), dirY = Math.sin(a);
+		var checkX = ball.x + dirX * (cell / 2);
+		var checkY = ball.y + dirY * (cell / 2);
 		var i = Math.floor(checkX / cell);
 		var j = Math.floor(checkY / cell);
 		if (i >= 0 && i < nx && j >= 0 && j < ny) {
 			if (squares[i][j] !== ball.team) {
 				squares[i][j] = ball.team;
-				if (Math.abs(Math.cos(a)) > Math.abs(Math.sin(a))) flipX = !flipX;
-				else flipY = !flipY;
+				// OR the flips (never cancel) and only bounce off cells the ball moves toward —
+				// toggling here let an even number of same-axis hits cancel, so the ball tunnelled
+				// straight through a wall while still painting it.
+				if (Math.abs(dirX) > Math.abs(dirY)) {
+					if (dirX * vx > 0) flipX = true;
+				} else {
+					if (dirY * vy > 0) flipY = true;
+				}
 			}
 		}
 	}
-	if (flipX) ball.dx = -ball.dx;
-	if (flipY) ball.dy = -ball.dy;
+	if (flipX) ball.dx = -vx;
+	if (flipY) ball.dy = -vy;
 }
 
 function checkBoundaryCollision(ball) {
@@ -486,6 +509,27 @@ function setPresetRadio(name) {
 }
 
 
+var fillWindowCheckbox = document.getElementById("fillWindowCheckbox");
+var gameWidthInput = document.getElementById("gameWidthInput");
+var gameHeightInput = document.getElementById("gameHeightInput");
+var gameSizeRow = document.getElementById("gameSizeRow");
+
+fillWindowCheckbox.onclick = function () {
+	fillWindow = this.checked;
+	gameSizeRow.style.display = fillWindow ? "none" : "flex";
+	applyCanvasSize();
+	reset();
+};
+
+document.getElementById("applySizeBtn").onclick = function () {
+	gameW = Math.max(200, parseInt(gameWidthInput.value) || 1000);
+	gameH = Math.max(200, parseInt(gameHeightInput.value) || 1000);
+	gameWidthInput.value = gameW;
+	gameHeightInput.value = gameH;
+	applyCanvasSize();
+	reset();
+};
+
 glowCheckbox.onclick = function () { glow = this.checked; };
 scoreCheckbox.onclick = function () { showScore = this.checked; scoreEl.classList.toggle("pw-hidden", !showScore); };
 autoCheckbox.onclick = function () { autoRestart = this.checked; };
@@ -520,9 +564,7 @@ window.addEventListener("keydown", function (e) {
 
 // #region resize
 window.addEventListener("resize", function () {
-	canvasWidth = window.getCanvasWidth();
-	canvasHeight = window.innerHeight;
-	if (window._hudToggling) return;
+	if (window._hudToggling || !fillWindow) return;
 	applyCanvasSize();
 	reset();
 });

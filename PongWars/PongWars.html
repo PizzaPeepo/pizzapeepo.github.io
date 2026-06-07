@@ -9,10 +9,11 @@
   <link rel="stylesheet" href="../CSS/theme.css">
   <style>
     html, body { margin: 0; padding: 0; overflow: hidden; }
-    #backgroundCanvas { position: fixed; top: 0; left: 0; z-index: 0; }
+    #backgroundCanvas { position: fixed; z-index: 0; }
 
-    /* text + colour inputs inside the HUD panel */
-    .hud-panel input[type="text"] {
+    /* text + number inputs inside the HUD panel */
+    .hud-panel input[type="text"],
+    .hud-panel input[type="number"] {
       width: 100%;
       box-sizing: border-box;
       background: var(--bg-lift, #2c2116);
@@ -24,7 +25,11 @@
       padding: 6px 9px;
       margin-top: 4px;
     }
-    .hud-panel input[type="text"]:focus { outline: none; border-color: var(--gold, #f5a623); }
+    .hud-panel input[type="text"]:focus,
+    .hud-panel input[type="number"]:focus { outline: none; border-color: var(--gold, #f5a623); }
+    .pw-size-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+    .pw-size-row input[type="number"] { width: 72px; margin-top: 0; text-align: center; }
+    .pw-size-row span { color: var(--tx-2, #8a6a50); font-size: 13px; flex: 0 0 auto; }
     .pw-btn-row { display: flex; flex-wrap: wrap; gap: 6px; }
     .pw-btn-row button { flex: 1 1 calc(50% - 6px); }
 
@@ -222,6 +227,19 @@
       <label><input type="checkbox" id="glowCheckbox" checked> Ball glow</label>
       <label><input type="checkbox" id="scoreCheckbox" checked> Show scoreboard</label>
       <label><input type="checkbox" id="autoCheckbox" checked> Auto-restart rounds</label>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Game area</span>
+      <label><input type="checkbox" id="fillWindowCheckbox" checked> Fill window</label>
+      <div class="pw-size-row" id="gameSizeRow" style="display:none">
+        <input type="number" id="gameWidthInput" min="200" max="3840" step="10" value="1000">
+        <span>×</span>
+        <input type="number" id="gameHeightInput" min="200" max="2160" step="10" value="1000">
+        <button id="applySizeBtn">Apply</button>
+      </div>
     </div>
 
     <div class="hud-divider"></div>
