@@ -220,18 +220,10 @@ function togglePause() {
 	pauseButton.textContent = paused ? "Resume (Space)" : "Pause (Space)";
 }
 
-document.getElementById("exportButton").onclick = exportPNG;
-function exportPNG() {
-	const link = document.createElement("a");
-	link.download = "reaction-diffusion.png";
-	link.href = backgroundCanvas.toDataURL("image/png");
-	link.click();
-}
 
 window.addEventListener("keydown", function (e) {
 	if (e.code === "Space") { e.preventDefault(); togglePause(); }
 	if (e.key === "r" || e.key === "R") reseed();
-	if (e.key === "s" || e.key === "S") exportPNG();
 });
 // #endregion
 

@@ -154,20 +154,12 @@ function togglePause() {
 
 document.getElementById("seedButton").onclick = newField;
 document.getElementById("resetButton").onclick = buildParticles;
-document.getElementById("exportButton").onclick = exportPNG;
 
-function exportPNG() {
-	const link = document.createElement("a");
-	link.download = "flowfield.png";
-	link.href = backgroundCanvas.toDataURL("image/png");
-	link.click();
-}
 
 window.addEventListener("keydown", function (e) {
 	if (e.code === "Space") { e.preventDefault(); togglePause(); }
 	if (e.key === "r" || e.key === "R") buildParticles();
 	if (e.key === "n" || e.key === "N") newField();
-	if (e.key === "s" || e.key === "S") exportPNG();
 });
 
 window.addEventListener("mousemove", function (e) {

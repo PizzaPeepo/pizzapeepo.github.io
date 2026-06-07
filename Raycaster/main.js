@@ -420,18 +420,6 @@ function updateFps(ts) {
 	}
 }
 
-function savePNG() {
-	const out = document.createElement('canvas');
-	out.width = canvas_width; out.height = canvas_height;
-	const octx = out.getContext('2d');
-	octx.fillStyle = isLight ? '#f5ede0' : '#18140e';
-	octx.fillRect(0, 0, canvas_width, canvas_height);
-	octx.drawImage(canvas, 0, 0);
-	const a = document.createElement('a');
-	a.download = 'raycaster-' + Date.now() + '.png';
-	a.href = out.toDataURL('image/png');
-	a.click();
-}
 
 var pauseButton = document.getElementById("pauseButton");
 function setPaused(p) {
@@ -441,13 +429,11 @@ function setPaused(p) {
 	if (!paused) { _fpsLast = 0; window.requestAnimationFrame(draw); }
 }
 pauseButton.onclick = () => setPaused(!paused);
-document.getElementById("exportButton").onclick = savePNG;
 
 document.addEventListener('keydown', (e) => {
 	if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 	if (e.code === 'Space') { e.preventDefault(); setPaused(!paused); }
 	if (e.key === 'r' || e.key === 'R') GetNewRandomLines();
-	if (e.key === 's' || e.key === 'S') savePNG();
 });
 
 function draw(ts) {

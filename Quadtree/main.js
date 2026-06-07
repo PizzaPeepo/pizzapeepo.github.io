@@ -127,25 +127,11 @@ function setPaused(p) {
 }
 pauseButton.onclick = () => setPaused(!paused);
 
-function savePNG() {
-	const out = document.createElement('canvas');
-	out.width = canvasWidth; out.height = canvasHeight;
-	const octx = out.getContext('2d');
-	octx.fillStyle = bgColor;
-	octx.fillRect(0, 0, canvasWidth, canvasHeight);
-	octx.drawImage(foregroundCanvas, 0, 0);
-	const a = document.createElement('a');
-	a.download = 'quadtree-' + Date.now() + '.png';
-	a.href = out.toDataURL('image/png');
-	a.click();
-}
-document.getElementById('exportButton').onclick = savePNG;
 
 document.addEventListener('keydown', (e) => {
 	if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 	if (e.code === 'Space') { e.preventDefault(); setPaused(!paused); }
 	if (e.key === 'r' || e.key === 'R') { resetCanvas = true; if (paused) setPaused(false); }
-	if (e.key === 's' || e.key === 'S') savePNG();
 });
 // #endregion
 

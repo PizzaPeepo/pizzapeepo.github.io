@@ -484,7 +484,6 @@ function togglePause() {
 
 document.getElementById("newButton").onclick = relaunch;
 document.getElementById("resetButton").onclick = reset;
-document.getElementById("exportButton").onclick = exportPNG;
 
 // chat-event preview buttons — fire the same API a bot/redemption would
 document.getElementById("testBoostA").onclick = function () { PongWars.boost("a", 2.2, 6000); showBanner(names[0] + " boosted! ⚡", 2500); };
@@ -499,16 +498,9 @@ window.addEventListener("keydown", function (e) {
 	if (e.code === "Space") { e.preventDefault(); togglePause(); }
 	if (e.key === "r" || e.key === "R") reset();
 	if (e.key === "n" || e.key === "N") relaunch();
-	if (e.key === "s" || e.key === "S") exportPNG();
 	if (e.key === "o" || e.key === "O") setOverlay(!overlayCheckbox.checked);
 });
 
-function exportPNG() {
-	var link = document.createElement("a");
-	link.download = "pong-wars.png";
-	link.href = backgroundCanvas.toDataURL("image/png");
-	link.click();
-}
 // #endregion
 
 // #region resize

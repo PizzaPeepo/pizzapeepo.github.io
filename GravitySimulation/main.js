@@ -1489,27 +1489,11 @@ function setPaused(p) {
 }
 pauseButton.onclick = () => setPaused(!stop);
 
-// Compose both canvases over the theme background into one PNG.
-function savePNG() {
-	const out = document.createElement('canvas');
-	out.width = canvasWidth; out.height = canvasHeight;
-	const octx = out.getContext('2d');
-	octx.fillStyle = getComputedStyle(backgroundCanvas).backgroundColor || '#18140e';
-	octx.fillRect(0, 0, canvasWidth, canvasHeight);
-	octx.drawImage(backgroundCanvas, 0, 0);
-	octx.drawImage(foregroundCanvas, 0, 0);
-	const a = document.createElement('a');
-	a.download = 'gravity-' + Date.now() + '.png';
-	a.href = out.toDataURL('image/png');
-	a.click();
-}
-document.getElementById('exportButton').onclick = savePNG;
 
 document.addEventListener('keydown', (e) => {
 	if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 	if (e.code === 'Space') { e.preventDefault(); setPaused(!stop); }
 	if (e.key === 'r' || e.key === 'R') { resetCanvas = true; if (stop) setPaused(false); }
-	if (e.key === 's' || e.key === 'S') savePNG();
 	if (e.key === 'g' || e.key === 'G') forceBrushAttract = true;
 	if (e.key === 'h' || e.key === 'H') forceBrushRepel   = true;
 });

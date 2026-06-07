@@ -240,21 +240,13 @@ function togglePause() {
 }
 
 document.getElementById("stepButton").onclick = function () { step(); render(); };
-document.getElementById("exportButton").onclick = exportPNG;
 
-function exportPNG() {
-	const link = document.createElement("a");
-	link.download = "gameoflife.png";
-	link.href = backgroundCanvas.toDataURL("image/png");
-	link.click();
-}
 
 window.addEventListener("keydown", function (e) {
 	if (e.code === "Space") { e.preventDefault(); togglePause(); }
 	if (e.key === "ArrowRight") { step(); render(); }
 	if (e.key === "r" || e.key === "R") randomize();
 	if (e.key === "c" || e.key === "C") clearGrid();
-	if (e.key === "s" || e.key === "S") exportPNG();
 });
 // #endregion
 

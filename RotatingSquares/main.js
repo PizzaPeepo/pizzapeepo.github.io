@@ -170,7 +170,6 @@ fadeSpeedSlider.oninput = function() {
 var resetCanvasButton = document.getElementById("resetCanvasButton");
 resetCanvasButton.onclick = function() { resetCanvas = true; if (paused) setPaused(false); };
 
-document.getElementById("exportButton").onclick = exportPNG;
 
 // pause / fps
 var paused = false;
@@ -201,23 +200,10 @@ window.addEventListener('mousemove', function(e) {
 });
 // #endregion
 
-function exportPNG() {
-	const out = document.createElement('canvas');
-	out.width = canvasWidth; out.height = canvasHeight;
-	const octx = out.getContext('2d');
-	octx.fillStyle = bgColor;
-	octx.fillRect(0, 0, canvasWidth, canvasHeight);
-	octx.drawImage(backgroundCanvas, 0, 0);
-	const link = document.createElement('a');
-	link.download = 'rotating-polygons-' + Date.now() + '.png';
-	link.href = out.toDataURL('image/png');
-	link.click();
-}
 
 window.addEventListener('keydown', function(e) {
 	if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 	if (e.code === 'Space') { e.preventDefault(); setPaused(!paused); }
-	if (e.key === 's' || e.key === 'S') exportPNG();
 	if (e.key === 'r' || e.key === 'R') { resetCanvas = true; if (paused) setPaused(false); }
 });
 

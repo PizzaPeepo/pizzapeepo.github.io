@@ -157,7 +157,6 @@ function togglePause() {
 }
 
 document.getElementById("resetButton").onclick = spawnBoids;
-document.getElementById("exportButton").onclick = exportPNG;
 // #endregion
 
 // #region mouse
@@ -170,17 +169,10 @@ window.addEventListener("mousemove", function (e) {
 window.addEventListener("mouseout", function () { mousePos.inside = false; });
 // #endregion
 
-function exportPNG() {
-	const link = document.createElement("a");
-	link.download = "flocking.png";
-	link.href = backgroundCanvas.toDataURL("image/png");
-	link.click();
-}
 
 window.addEventListener("keydown", function (e) {
 	if (e.code === "Space") { e.preventDefault(); togglePause(); }
 	if (e.key === "r" || e.key === "R") spawnBoids();
-	if (e.key === "s" || e.key === "S") exportPNG();
 });
 
 // #region rendering

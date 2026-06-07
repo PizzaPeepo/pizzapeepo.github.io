@@ -353,18 +353,10 @@ document.getElementById("solveButton").onclick = function () {
 	if (phase === "gen") return;
 	startSearch();
 };
-document.getElementById("exportButton").onclick = exportPNG;
-function exportPNG() {
-	const link = document.createElement("a");
-	link.download = "maze.png";
-	link.href = backgroundCanvas.toDataURL("image/png");
-	link.click();
-}
 
 window.addEventListener("keydown", function (e) {
 	if (e.key === "n" || e.key === "N") generate();
 	if (e.key === "Enter") { if (phase !== "gen") startSearch(); }
-	if (e.key === "s" || e.key === "S") exportPNG();
 });
 // #endregion
 

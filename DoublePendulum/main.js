@@ -172,19 +172,11 @@ function togglePause() {
 }
 
 document.getElementById("resetButton").onclick = resetSim;
-document.getElementById("exportButton").onclick = exportPNG;
 
-function exportPNG() {
-	const link = document.createElement("a");
-	link.download = mode === "double" ? "double-pendulum.png" : "pendulum-wave.png";
-	link.href = backgroundCanvas.toDataURL("image/png");
-	link.click();
-}
 
 window.addEventListener("keydown", function (e) {
 	if (e.code === "Space") { e.preventDefault(); togglePause(); }
 	if (e.key === "r" || e.key === "R") resetSim();
-	if (e.key === "s" || e.key === "S") exportPNG();
 });
 // #endregion
 

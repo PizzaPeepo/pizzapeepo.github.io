@@ -158,27 +158,11 @@ function setPaused(p) {
 }
 if (pauseButton) pauseButton.onclick = () => setPaused(!paused);
 
-function savePNG() {
-	const out = document.createElement('canvas');
-	out.width = canvasWidth; out.height = canvasHeight;
-	const octx = out.getContext('2d');
-	octx.fillStyle = document.documentElement.classList.contains('light') ? '#f5ede0' : '#18140e';
-	octx.fillRect(0, 0, canvasWidth, canvasHeight);
-	octx.drawImage(backgroundCanvas, 0, 0);
-	octx.drawImage(foregroundCanvas, 0, 0);
-	const a = document.createElement('a');
-	a.download = 'lissajous-rotating-' + Date.now() + '.png';
-	a.href = out.toDataURL('image/png');
-	a.click();
-}
-var exportButton = document.getElementById("exportButton");
-if (exportButton) exportButton.onclick = savePNG;
 
 document.addEventListener('keydown', (e) => {
 	if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 	if (e.code === 'Space') { e.preventDefault(); setPaused(!paused); }
 	if (e.key === 'r' || e.key === 'R') { resetCanvas = true; if (paused) setPaused(false); }
-	if (e.key === 's' || e.key === 'S') savePNG();
 });
 
 var fpsBadge = document.getElementById("fpsBadge");

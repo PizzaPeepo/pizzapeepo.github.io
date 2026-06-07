@@ -497,7 +497,6 @@ function render(target) {
 let lastUpdateTime = Date.now();
 let colorUpdateTimer = 0.0;
 let frames = 0, fpsLast = Date.now();
-let captureNext = false;
 
 function calcDeltaTime() {
 	const now = Date.now();
@@ -524,7 +523,6 @@ function update() {
 	if (config.EMITTER && !config.PAUSED) emitFlow();
 	if (!config.PAUSED) step(dt);
 	render(null);
-	if (captureNext) { captureNext = false; saveCanvas(); }
 
 	frames++;
 	const now = Date.now();
@@ -537,15 +535,6 @@ function update() {
 	requestAnimationFrame(update);
 }
 
-function saveCanvas() {
-	canvas.toBlob(b => {
-		if (!b) return;
-		const url = URL.createObjectURL(b);
-		const a = document.createElement('a');
-		a.href = url; a.download = 'fluid.png'; a.click();
-		URL.revokeObjectURL(url);
-	});
-}
 
 // ── actions ──
 function clearDye() {
@@ -619,7 +608,6 @@ function wireUI() {
 	bindButton('splatButton', () => splatStack.push(parseInt(Math.random() * 8) + 8));
 	bindButton('clearDyeButton', () => clearDye());
 	bindButton('resetButton', () => reset());
-	bindButton('exportButton', () => { captureNext = true; });
 	const pauseBtn = document.getElementById('pauseButton');
 	if (pauseBtn) pauseBtn.addEventListener('click', () => {
 		config.PAUSED = !config.PAUSED;
@@ -629,7 +617,6 @@ function wireUI() {
 	window.addEventListener('keydown', e => {
 		if (e.code === 'Space') { e.preventDefault(); if (pauseBtn) pauseBtn.click(); }
 		else if (e.code === 'KeyR') reset();
-		else if (e.code === 'KeyS') captureNext = true;
 		else if (e.code === 'KeyC') clearDye();
 		else if (e.code === 'KeyP') splatStack.push(parseInt(Math.random() * 8) + 8);
 		else if (e.code === 'KeyD') setMode('fluid');
