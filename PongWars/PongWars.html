@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../CSS/theme.css">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500..800&display=swap" rel="stylesheet">
   <style>
     html, body { margin: 0; padding: 0; overflow: hidden; }
     #backgroundCanvas { position: fixed; z-index: 0; }
@@ -136,11 +137,58 @@
       80% { transform: translate(4px, 3px); }
     }
     #backgroundCanvas.pw-shaking { animation: pw-shake 0.5s ease; }
+
+    /* ── Neo-Tokyo post FX (pure CSS, zero per-frame cost) ── */
+    .pw-fx { position: fixed; inset: 0; z-index: 5; pointer-events: none; }
+    .pw-vignette { background: radial-gradient(120% 120% at 50% 42%, transparent 52%, rgba(0,0,0,0.55) 100%); }
+    .pw-scanlines {
+      background: repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0 1px, transparent 1px 3px);
+      mix-blend-mode: overlay; opacity: 0.5;
+    }
+    body:not(.neon) .pw-fx, html.light .pw-fx { display: none; }
+
+    /* ── Neo-Tokyo scoreboard skin (neon mode only) ── */
+    body.neon .pw-scoreboard {
+      font-family: 'Orbitron', ui-sans-serif, system-ui, sans-serif;
+      background: linear-gradient(165deg, rgba(11,14,32,0.74), rgba(7,7,18,0.8));
+      border: 1px solid rgba(0,234,255,0.42);
+      border-radius: 3px;
+      box-shadow: 0 0 0 1px rgba(255,43,209,0.10), 0 0 22px rgba(0,234,255,0.22), inset 0 0 20px rgba(0,234,255,0.05);
+      clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+    }
+    body.neon .pw-bar {
+      border-radius: 2px;
+      border: 1px solid rgba(0,234,255,0.25);
+      background: rgba(0,0,0,0.55);
+      box-shadow: inset 0 0 8px rgba(0,0,0,0.85), 0 0 10px rgba(0,234,255,0.2);
+    }
+    body.neon .pw-bar > div { filter: saturate(1.35) brightness(1.12); }
+    body.neon .pw-chip {
+      font-weight: 600; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase;
+      color: #d8f7ff; text-shadow: 0 0 6px rgba(0,234,255,0.45);
+    }
+    body.neon .pw-pct { color: #00eaff; text-shadow: 0 0 7px rgba(0,234,255,0.7); }
+    body.neon .pw-dot { border-radius: 1px; }
+
+    /* ── Neo-Tokyo game-area frame ── */
+    .pw-frame { position: fixed; z-index: 6; pointer-events: none; box-sizing: border-box; }
+    body:not(.neon) .pw-frame { border: 1px solid rgba(128,128,128,0.22); border-radius: 4px; }
+    body.neon .pw-frame {
+      border: 1px solid rgba(0,234,255,0.45); border-radius: 5px;
+      box-shadow: 0 0 18px rgba(0,234,255,0.22), inset 0 0 26px rgba(0,234,255,0.05), 0 0 0 3px rgba(255,43,209,0.10);
+    }
   </style>
 </head>
 <body>
 
   <canvas id="backgroundCanvas"></canvas>
+
+  <!-- Neo-Tokyo game-area frame (border + corner brackets) -->
+  <div class="pw-frame" id="pwFrame"></div>
+
+  <!-- Neo-Tokyo post FX overlays (CSS only) -->
+  <div class="pw-fx pw-vignette"></div>
+  <div class="pw-fx pw-scanlines"></div>
 
   <!-- Stream scoreboard (segments + legend built by main.js) -->
   <div class="pw-scoreboard" id="pwScore"></div>
@@ -193,8 +241,18 @@
 
     <div class="hud-section">
       <span class="ctrl-label">Colour theme</span>
-      <label><input type="radio" name="preset" value="classic" checked> Classic</label>
+      <label><input type="radio" name="preset" value="neon" checked> Neon</label>
+      <label><input type="radio" name="preset" value="classic"> Classic</label>
       <label><input type="radio" name="preset" value="mono"> Monochrome</label>
+      <label><input type="radio" name="preset" value="geoblue"> Geometric Neon Blue</label>
+      <label><input type="radio" name="preset" value="psychedelic"> Psychedelic</label>
+      <label><input type="radio" name="preset" value="prism"> Smooth Prism</label>
+      <label><input type="radio" name="preset" value="lights"> Lights</label>
+      <label><input type="radio" name="preset" value="lumi"> Lumi</label>
+      <label><input type="radio" name="preset" value="synthwave"> Synthwave</label>
+      <label><input type="radio" name="preset" value="hyperpop"> Hyperpop</label>
+      <label><input type="radio" name="preset" value="orchid"> Electric Orchid</label>
+      <label><input type="radio" name="preset" value="rave"> Cyber Pastel Rave</label>
       <label><input type="radio" name="preset" value="custom"> Custom</label>
     </div>
 
@@ -225,6 +283,8 @@
     <div class="hud-section">
       <span class="ctrl-label">Options</span>
       <label><input type="checkbox" id="glowCheckbox" checked> Ball glow</label>
+      <label><input type="checkbox" id="neonCheckbox" checked> Neo-Tokyo style</label>
+      <label><input type="checkbox" id="trailCheckbox" checked> Comet trails</label>
       <label><input type="checkbox" id="scoreCheckbox" checked> Show scoreboard</label>
       <label><input type="checkbox" id="autoCheckbox" checked> Auto-restart rounds</label>
     </div>
@@ -233,8 +293,7 @@
 
     <div class="hud-section">
       <span class="ctrl-label">Game area</span>
-      <label><input type="checkbox" id="fillWindowCheckbox" checked> Fill window</label>
-      <div class="pw-size-row" id="gameSizeRow" style="display:none">
+      <div class="pw-size-row" id="gameSizeRow">
         <input type="number" id="gameWidthInput" min="200" max="3840" step="10" value="1000">
         <span>×</span>
         <input type="number" id="gameHeightInput" min="200" max="2160" step="10" value="1000">

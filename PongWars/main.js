@@ -6,10 +6,9 @@
 // Twitch chat / channel points can drive it (see TWITCH_IDEAS.md).
 
 // #region globals
-var canvasWidth = window.getCanvasWidth();
-var canvasHeight = window.innerHeight;
-var fillWindow = true;
 var gameW = 1000, gameH = 1000;
+var canvasWidth = gameW;
+var canvasHeight = gameH;
 
 var cfg = {
 	cell: 24,          // tile size in px (grid resolution)
@@ -22,12 +21,15 @@ var teamCount = 2;
 
 var paused = false;
 var glow = true;
+var neon = true;          // neo-tokyo render style (dark fields + neon bloom)
+var trails = true;        // comet trails behind balls
+var TRAIL_LEN = 24;
 var showScore = true;
 var autoRestart = true;
 var roundOver = false;       // frozen during a win celebration
 var resetTimer = null;
 
-var darkCanvasBg = "#0d0b14";
+var darkCanvasBg = "#070711";
 var lightCanvasBg = "#f3eee6";
 var isLight = document.documentElement.classList.contains("light");
 // #endregion
@@ -37,23 +39,32 @@ var backgroundCanvas = document.getElementById("backgroundCanvas");
 var ctx = backgroundCanvas.getContext("2d");
 
 function applyCanvasSize() {
-	if (fillWindow) {
-		canvasWidth = window.getCanvasWidth();
-		canvasHeight = window.innerHeight;
-		backgroundCanvas.style.top = "0";
-		backgroundCanvas.style.left = "0";
-		backgroundCanvas.style.transform = "none";
-	} else {
-		canvasWidth = gameW;
-		canvasHeight = gameH;
-		backgroundCanvas.style.top = "50%";
-		backgroundCanvas.style.left = "50%";
-		backgroundCanvas.style.transform = "translate(-50%, -50%)";
-	}
+	canvasWidth = gameW;
+	canvasHeight = gameH;
+	backgroundCanvas.style.top = "50%";
+	backgroundCanvas.style.left = "50%";
+	backgroundCanvas.style.transform = "translate(-50%, -50%)";
 	backgroundCanvas.width = canvasWidth;
 	backgroundCanvas.height = canvasHeight;
 	backgroundCanvas.style.width = canvasWidth + "px";
 	backgroundCanvas.style.height = canvasHeight + "px";
+
+	// scoreboard sits directly above the game area; frame hugs the canvas
+	var gap = 12;
+	var sb = document.getElementById("pwScore");
+	if (sb) {
+		sb.style.top = "auto";
+		sb.style.bottom = "calc(50% + " + (gameH / 2 + gap) + "px)";
+		sb.style.width = "min(" + gameW + "px, 92vw)";
+	}
+	var fr = document.getElementById("pwFrame");
+	if (fr) {
+		fr.style.top = "50%";
+		fr.style.left = "50%";
+		fr.style.transform = "translate(-50%, -50%)";
+		fr.style.width = canvasWidth + "px";
+		fr.style.height = canvasHeight + "px";
+	}
 }
 applyCanvasSize();
 // #endregion
@@ -62,6 +73,8 @@ applyCanvasSize();
 function applyThemeColors(light) {
 	isLight = light;
 	backgroundCanvas.style.background = light ? lightCanvasBg : darkCanvasBg;
+	document.body.classList.toggle("neon", neon && !light);
+	recomputeStyle();
 }
 applyThemeColors(isLight);
 document.addEventListener("themechange", function (e) { applyThemeColors(e.detail.isLight); });
@@ -76,15 +89,25 @@ var LAYOUTS = { 2: [2, 1], 3: [3, 1], 4: [2, 2] };
 // opposite colour at 2 teams (the iconic day/night look) and in its own colour + a
 // contrast ring beyond that (so it stays visible on its own field).
 var PALETTES = {
+	neon:    ["#00eaff", "#ff2bd1", "#9b5cff", "#4dff7c", "#ffb300", "#ff3b3b", "#2b8bff", "#ff7ab8"],
 	classic: ["#d9e8e3", "#114c5a", "#f5a623", "#c0392b", "#27ae60", "#8e44ad", "#2980b9", "#e67e22"],
 	twitch:  ["#efeff1", "#9146ff", "#00c8af", "#ff5a36", "#1f8b4c", "#f5d423", "#e83e8c", "#3498db"],
 	fireice: ["#dff1ff", "#ff5a36", "#3aa6ff", "#ffb000", "#00d1c1", "#ff3860", "#7ee787", "#b388ff"],
 	mono:    ["#e6e6e6", "#222222", "#9e9e9e", "#4d4d4d", "#c4c4c4", "#3a3a3a", "#7a7a7a", "#5e5e5e"],
+	geoblue:    ["#08F7FE", "#09FBD3", "#FE53BB", "#F5D300"],
+	psychedelic:["#75D5FD", "#B76CFF", "#FF2281", "#011FFD"],
+	prism:      ["#FFFF66", "#FC6E22", "#FF1493", "#C24CF6"],
+	lights:     ["#FFACFC", "#F148FB", "#7122FA", "#560A86"],
+	lumi:       ["#01FFC3", "#01FFFF", "#FFB3FD", "#9D72FF"],
+	synthwave:  ["#16C47F", "#FFD65A", "#FF9D23", "#F93827"],
+	hyperpop:   ["#7C00FE", "#F9E400", "#FFAF00", "#F5004F"],
+	orchid:     ["#6420AA", "#FF3EA5", "#FF7ED4", "#FFB5DA"],
+	rave:       ["#45FFCA", "#FDFF7D", "#FF98CA", "#D67BFF"],
 };
 var DEFAULT_NAMES = ["Day", "Night", "Team 3", "Team 4", "Team 5", "Team 6", "Team 7", "Team 8"];
 
-var preset = "classic";
-var colors = PALETTES.classic.slice(0, teamCount);   // per-team field colours
+var preset = "neon";
+var colors = PALETTES.neon.slice(0, teamCount);   // per-team field colours
 var names = DEFAULT_NAMES.slice(0, teamCount);
 
 var squares = [];            // squares[i][j] = team index
@@ -118,6 +141,34 @@ function contrastColor(hex) {
 	return lum > 0.6 ? "#101015" : "#ffffff";
 }
 
+// #region neon style helpers
+var fields = [];        // darkened per-team tile colours (neon style)
+var accentRGB = [];     // per-team [r,g,b] used for trails / bloom / seams
+
+function hexToRgb(h) {
+	h = String(h).replace("#", "");
+	if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+	return [parseInt(h.substr(0, 2), 16), parseInt(h.substr(2, 2), 16), parseInt(h.substr(4, 2), 16)];
+}
+function mixRgb(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+function rgba(c, a) { return "rgba(" + (c[0] | 0) + "," + (c[1] | 0) + "," + (c[2] | 0) + "," + a + ")"; }
+
+// recompute cached tile/accent colours whenever palette, theme or style changes
+function recomputeStyle() {
+	if (!colors || !colors.length) return;
+	var bgRgb = hexToRgb(isLight ? lightCanvasBg : darkCanvasBg);
+	fields = []; accentRGB = [];
+	var sbGlow = neon && !isLight;
+	for (var t = 0; t < teamCount; t++) {
+		var acc = hexToRgb(colors[t]);
+		accentRGB[t] = acc;
+		fields[t] = rgba(mixRgb(acc, bgRgb, 0.82), 1);   // mostly background, faint accent tint
+		if (dotEls[t]) dotEls[t].style.boxShadow = sbGlow ? "0 0 6px " + rgba(acc, 0.95) + ", 0 0 13px " + rgba(acc, 0.6) : "";
+		if (segEls[t]) segEls[t].style.boxShadow = sbGlow ? "inset 0 0 10px " + rgba(acc, 0.5) + ", inset 0 0 2px rgba(255,255,255,0.45)" : "";
+	}
+}
+// #endregion
+
 function clampTeam(i) { i = i | 0; if (i < 0) i = 0; if (i >= teamCount) i = teamCount - 1; return i; }
 
 // Accepts a team index (0..7 / numeric string), a letter "a".."h", or a (case-insensitive)
@@ -140,6 +191,7 @@ function applyColors() {
 		if (dotEls[t]) dotEls[t].style.background = colors[t];
 		if (colorInputs[t]) colorInputs[t].value = colors[t];
 	}
+	recomputeStyle();
 }
 
 function buildGrid() {
@@ -177,7 +229,7 @@ function makeBall(team, k) {
 		var hx = canvasWidth / 2 + Math.cos(spawnAngle) * dist;
 		var hy = canvasHeight / 2 + Math.sin(spawnAngle) * dist;
 		var ang = Math.random() * Math.PI * 2;
-		return { team: team, x: hx, y: hy, dx: Math.cos(ang) * cfg.speed, dy: Math.sin(ang) * cfg.speed };
+		return { team: team, x: hx, y: hy, dx: Math.cos(ang) * cfg.speed, dy: Math.sin(ang) * cfg.speed, trail: [] };
 	}
 	var L = LAYOUTS[teamCount], cols = L[0], rows = L[1];
 	var col = team % cols, row = Math.floor(team / cols);
@@ -185,7 +237,7 @@ function makeBall(team, k) {
 	var hx = ((col + margin + Math.random() * (1 - 2 * margin)) / cols) * canvasWidth;
 	var hy = ((row + margin + Math.random() * (1 - 2 * margin)) / rows) * canvasHeight;
 	var ang = Math.random() * Math.PI * 2;
-	return { team: team, x: hx, y: hy, dx: Math.cos(ang) * cfg.speed, dy: Math.sin(ang) * cfg.speed };
+	return { team: team, x: hx, y: hy, dx: Math.cos(ang) * cfg.speed, dy: Math.sin(ang) * cfg.speed, trail: [] };
 }
 
 function buildBalls() {
@@ -267,6 +319,7 @@ function step() {
 		var f = boostFactor(ball.team);
 		ball.x += ball.dx * f;
 		ball.y += ball.dy * f;
+		if (ball.trail) { ball.trail.push({ x: ball.x, y: ball.y }); if (ball.trail.length > TRAIL_LEN) ball.trail.shift(); }
 		addRandomness(ball);
 	}
 }
@@ -285,23 +338,116 @@ function rescaleBalls() {
 // #region render
 function drawSquares() {
 	var cell = cfg.cell;
+	var useNeon = neon && !isLight;
+	var pal = useNeon ? fields : colors;
 	for (var t = 0; t < teamCount; t++) scores[t] = 0;
 	for (var i = 0; i < nx; i++) {
 		for (var j = 0; j < ny; j++) {
 			var team = squares[i][j];
 			scores[team]++;
-			ctx.fillStyle = colors[team];
+			ctx.fillStyle = pal[team];
 			ctx.fillRect(i * cell, j * cell, cell, cell);
 		}
 	}
+	if (useNeon) { drawGridLines(); drawFrontier(); }
+}
+
+// faint constant tron-grid so the field reads as a lattice even on solid territory
+function drawGridLines() {
+	var cell = cfg.cell;
+	ctx.save();
+	ctx.strokeStyle = "rgba(120,200,255,0.045)";
+	ctx.lineWidth = 1;
+	ctx.beginPath();
+	for (var x = cell; x < canvasWidth; x += cell) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, canvasHeight); }
+	for (var y = cell; y < canvasHeight; y += cell) { ctx.moveTo(0, y + 0.5); ctx.lineTo(canvasWidth, y + 0.5); }
+	ctx.stroke();
+	ctx.restore();
+}
+
+// glowing neon seams along every border between two territories (the battle frontier)
+function drawFrontier() {
+	var cell = cfg.cell;
+	var w = Math.min(4, Math.max(2, cell * 0.16));
+	ctx.save();
+	ctx.globalCompositeOperation = "lighter";
+	for (var i = 0; i < nx; i++) {
+		for (var j = 0; j < ny; j++) {
+			var t = squares[i][j];
+			if (i + 1 < nx) {
+				var tr = squares[i + 1][j];
+				if (tr !== t) {
+					var x = (i + 1) * cell;
+					ctx.fillStyle = rgba(accentRGB[t], 0.16);  ctx.fillRect(x - w / 2, j * cell, w, cell);
+					ctx.fillStyle = rgba(accentRGB[tr], 0.16); ctx.fillRect(x - w / 2, j * cell, w, cell);
+				}
+			}
+			if (j + 1 < ny) {
+				var tb = squares[i][j + 1];
+				if (tb !== t) {
+					var y = (j + 1) * cell;
+					ctx.fillStyle = rgba(accentRGB[t], 0.16);  ctx.fillRect(i * cell, y - w / 2, cell, w);
+					ctx.fillStyle = rgba(accentRGB[tb], 0.16); ctx.fillRect(i * cell, y - w / 2, cell, w);
+				}
+			}
+		}
+	}
+	ctx.restore();
+}
+
+function drawTrails() {
+	if (!trails) return;
+	var r = cfg.cell / 2;
+	var useNeon = neon && !isLight;
+	var twoTeam = teamCount === 2;
+	ctx.save();
+	ctx.globalCompositeOperation = useNeon ? "lighter" : "source-over";
+	for (var n = 0; n < balls.length; n++) {
+		var ball = balls[n];
+		var pts = ball.trail;
+		if (!pts || pts.length < 2) continue;
+		var rgb = useNeon ? accentRGB[ball.team] : hexToRgb(twoTeam ? colors[1 - ball.team] : colors[ball.team]);
+		var L = pts.length;
+		for (var k = 0; k < L; k++) {
+			var a = (k + 1) / L;                 // 0 = tail, 1 = head
+			ctx.globalAlpha = (useNeon ? 0.5 : 0.28) * a * a;
+			var rad = r * (0.2 + a * 0.85);
+			ctx.beginPath();
+			ctx.arc(pts[k].x, pts[k].y, rad, 0, Math.PI * 2);
+			ctx.fillStyle = rgba(rgb, 1);
+			ctx.fill();
+		}
+	}
+	ctx.restore();
 }
 
 function drawBalls() {
+	drawTrails();
 	var r = cfg.cell / 2;
+	var useNeon = neon && !isLight;
 	var twoTeam = teamCount === 2;
 	for (var n = 0; n < balls.length; n++) {
 		var ball = balls[n];
 		var teamCol = colors[ball.team];
+
+		if (useNeon) {
+			var rgb = accentRGB[ball.team];
+			ctx.save();
+			ctx.globalCompositeOperation = "lighter";
+			if (glow) { ctx.shadowBlur = cfg.cell * 1.4; ctx.shadowColor = teamCol; }
+			ctx.globalAlpha = 0.45;
+			ctx.beginPath(); ctx.arc(ball.x, ball.y, r * 1.7, 0, Math.PI * 2);
+			ctx.fillStyle = rgba(rgb, 1); ctx.fill();
+			ctx.shadowBlur = 0;
+			ctx.globalAlpha = 1;
+			ctx.beginPath(); ctx.arc(ball.x, ball.y, r, 0, Math.PI * 2);
+			ctx.fillStyle = rgba(rgb, 1); ctx.fill();
+			ctx.beginPath(); ctx.arc(ball.x, ball.y, r * 0.42, 0, Math.PI * 2);
+			ctx.fillStyle = "#ffffff"; ctx.fill();
+			ctx.restore();
+			continue;
+		}
+
 		var fill = twoTeam ? colors[1 - ball.team] : teamCol;
 		if (glow) { ctx.shadowBlur = cfg.cell * 0.7; ctx.shadowColor = teamCol; }
 		ctx.beginPath();
@@ -485,6 +631,8 @@ bindSlider("ballsSlider", "ballsValue", parseInt, Object.assign(function (v) {
 var glowCheckbox = document.getElementById("glowCheckbox");
 var scoreCheckbox = document.getElementById("scoreCheckbox");
 var autoCheckbox = document.getElementById("autoCheckbox");
+var neonCheckbox = document.getElementById("neonCheckbox");
+var trailCheckbox = document.getElementById("trailCheckbox");
 
 function applyPreset(name) {
 	preset = name;
@@ -509,17 +657,8 @@ function setPresetRadio(name) {
 }
 
 
-var fillWindowCheckbox = document.getElementById("fillWindowCheckbox");
 var gameWidthInput = document.getElementById("gameWidthInput");
 var gameHeightInput = document.getElementById("gameHeightInput");
-var gameSizeRow = document.getElementById("gameSizeRow");
-
-fillWindowCheckbox.onclick = function () {
-	fillWindow = this.checked;
-	gameSizeRow.style.display = fillWindow ? "none" : "flex";
-	applyCanvasSize();
-	reset();
-};
 
 document.getElementById("applySizeBtn").onclick = function () {
 	gameW = Math.max(200, parseInt(gameWidthInput.value) || 1000);
@@ -531,6 +670,8 @@ document.getElementById("applySizeBtn").onclick = function () {
 };
 
 glowCheckbox.onclick = function () { glow = this.checked; };
+neonCheckbox.onclick = function () { neon = this.checked; document.body.classList.toggle("neon", neon && !isLight); recomputeStyle(); };
+trailCheckbox.onclick = function () { trails = this.checked; };
 scoreCheckbox.onclick = function () { showScore = this.checked; scoreEl.classList.toggle("pw-hidden", !showScore); };
 autoCheckbox.onclick = function () { autoRestart = this.checked; };
 
@@ -563,11 +704,7 @@ window.addEventListener("keydown", function (e) {
 // #endregion
 
 // #region resize
-window.addEventListener("resize", function () {
-	if (window._hudToggling || !fillWindow) return;
-	applyCanvasSize();
-	reset();
-});
+// fixed game-area canvas — no resize handling needed
 // #endregion
 
 // #region remote-control API (Twitch hook)
@@ -673,6 +810,8 @@ var PongWars = {
 	setPreset: function (name) { if (PALETTES[name]) { setPresetRadio(name); applyPreset(name); } },
 	banner: function (text, ms) { showBanner(String(text), ms); },
 	shake: function () { shake(); },
+	setNeon: function (on) { neon = !!on; neonCheckbox.checked = neon; document.body.classList.toggle("neon", neon && !isLight); recomputeStyle(); },
+	setTrails: function (on) { trails = !!on; trailCheckbox.checked = trails; },
 	overlay: function (on, title, sub) {
 		if (title != null) { titleEl.textContent = title; titleInput.value = title; }
 		if (sub != null) { subEl.textContent = sub; subInput.value = sub; }
@@ -701,7 +840,7 @@ window.PongWars = PongWars;
 // methods a remote transport is allowed to invoke (read-only/observer methods excluded)
 var COMMANDS = {
 	boost: 1, spawnBall: 1, removeBall: 1, paintBlob: 1, paintRandom: 1,
-	setTeamName: 1, setTeamColor: 1, setTeamCount: 1, setPreset: 1, banner: 1, shake: 1, overlay: 1,
+	setTeamName: 1, setTeamColor: 1, setTeamCount: 1, setPreset: 1, banner: 1, shake: 1, overlay: 1, setNeon: 1, setTrails: 1,
 	setSpeed: 1, setCellSize: 1, setBallsPerTeam: 1,
 	reset: 1, relaunch: 1, pause: 1, resume: 1, togglePause: 1,
 };
@@ -769,6 +908,8 @@ if (wsParam) connectWS(wsParam);
 	if (q.has("cell")) PongWars.setCellSize(parseInt(q.get("cell"), 10));
 	if (q.has("balls")) PongWars.setBallsPerTeam(parseInt(q.get("balls"), 10));
 	if (q.has("glow")) { glow = q.get("glow") !== "0"; glowCheckbox.checked = glow; }
+	if (q.has("neon")) { neon = q.get("neon") !== "0"; neonCheckbox.checked = neon; document.body.classList.toggle("neon", neon && !isLight); recomputeStyle(); }
+	if (q.has("trails")) { trails = q.get("trails") !== "0"; trailCheckbox.checked = trails; }
 	if (q.has("score")) { showScore = q.get("score") !== "0"; scoreCheckbox.checked = showScore; scoreEl.classList.toggle("pw-hidden", !showScore); }
 	if (q.has("title")) { titleEl.textContent = q.get("title"); titleInput.value = q.get("title"); }
 	if (q.has("sub")) { subEl.textContent = q.get("sub"); subInput.value = q.get("sub"); }
