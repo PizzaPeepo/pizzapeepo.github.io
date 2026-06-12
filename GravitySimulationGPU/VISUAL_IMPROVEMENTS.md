@@ -2,6 +2,16 @@
 
 Suggestions for making the GPU galaxy demo visually exceptional, ordered by impact-vs-effort.
 
+> **Status (2026-06-12)**: items 1–12 implemented (Tier 1 + Tier 2 complete; item 7's
+> velocity-stretch replaced the need for a separate speed attribute — hue now derives from
+> the uploaded velocity vector). Tier 3 (13 dust lanes, 14 GPU compute, 15 DOF) still open.
+> Two deviations from the spec: Neutral tone mapping instead of ACES (ACES skews the
+> saturated blue ramp toward magenta), and chromatic aberration is edge-masked because a
+> full-frame RGB shift dissolves sub-pixel splats into r/g/b triplets. Found & fixed along
+> the way: the original color ramp used TSL's method-form `.mix()`, which is
+> `mixElement(t, e1, e2)` — the receiver is the *factor*, not the start color — so the ramp
+> was producing garbage colors; it now uses global `mix(a, b, t)`.
+
 **Current state**: instanced icosahedron spheres with additive blending, 3-stop speed color ramp
 (royal blue → teal → gold), subtle bloom (`bloom(sceneColor, 0.15, 0.0, 0.5)`), two static star
 shells, flat `0x0c0908` background, core rendered as two static additive spheres. CPU computes

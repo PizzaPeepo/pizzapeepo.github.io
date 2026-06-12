@@ -61,12 +61,13 @@
       <button id="resetButton">Reset</button>
       <button id="pauseButton">Pause</button>
       <button id="burstButton">Burst</button>
-      <button id="bloomButton">Bloom: On</button>
+      <button id="bloomButton">Bloom: High</button>
     </div>
 
     <div class="hud-section">
       <span class="ctrl-label">Presets</span>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+        <button id="presetSpiral" style="grid-column:1 / -1;">Spiral galaxy</button>
         <button id="presetDisk">Galaxy disk</button>
         <button id="presetRing">Ring</button>
         <button id="presetCollapse">Cold collapse</button>
@@ -110,6 +111,16 @@
     <div class="hud-section">
       <span class="ctrl-label">Particle size: <span id="sizeValue"></span></span>
       <input type="range" min="0.2" max="12" step="0.1" value="1.0" class="slider" id="sizeSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Trails: <span id="trailValue"></span></span>
+      <input type="range" min="0" max="0.97" step="0.01" value="0.90" class="slider" id="trailSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Streaks: <span id="streakValue"></span></span>
+      <input type="range" min="0" max="0.08" step="0.002" value="0.02" class="slider" id="streakSlider">
     </div>
 
     <div class="hud-section">
