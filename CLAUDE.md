@@ -101,7 +101,7 @@ Easy to miss any one; a new demo only shows fully when all three are done:
 
 ### Key Demos
 - **GravitySimulation** — N-body gravity via RK4; `particle.js` elastic collision physics; three wall modes (none/infinite/collision)
-- **GravitySimulationGPU** — Barnes-Hut N-body (CPU octree via `Octree.js`, GPU render via Three.js WebGPU). **Outlier**: uses Three.js loaded via importmap from CDN; no dual-canvas pattern; 3D OrbitControls camera
+- **GravitySimulationGPU** — N-body galaxy, two compute paths (HUD toggle): Barnes-Hut CPU octree (`Octree.js`, ≤100k) or TSL GPU compute kernel (storage buffers, stochastic strided n², ≤1M). **Outlier**: uses Three.js loaded via importmap from CDN; no dual-canvas pattern; 3D OrbitControls camera. Gotcha: WebGPU pads vec3 storage buffers to 16B stride (attribute `itemSize` flips 3→4 at buffer creation) — readbacks index by current `itemSize`, uploads stay packed `[3i]`
 - **Raycaster** — 2D line-segment raycasting; `Raycaster.js` casts rays, finds closest wall via `Line2D.GetIntersectionPointWith`
 - **Lissajous / LissajousRotating** — Parametric figures as table; `LissajousTable` manages 2D array of `LissajousFigure` instances
 - **Quadtree** — Spatial partitioning viz; `Quadtree.js` implements Wikipedia pseudocode

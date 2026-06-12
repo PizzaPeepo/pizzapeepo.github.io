@@ -1,18 +1,24 @@
-// Barnes-Hut N-body galaxy — CPU tree, GPU render, full 3D.
+// Barnes-Hut N-body galaxy — CPU tree or GPU compute, GPU render, full 3D.
 //
-// Each frame the CPU builds a Barnes-Hut octree (./Octree.js), flattens it to typed
-// arrays, and walks it with a stackless skip-pointer traversal to get 3D forces —
-// O(n log n) instead of brute-force O(n²). The GPU only draws: particle positions are
-// streamed into an InstancedMesh via a dynamic instanced attribute (one-way upload,
-// no GPU→CPU readback). Self-gravity acts on all three axes, so an initially puffy
-// cloud collapses toward a midplane and flattens into a disk on its own.
+// Two compute paths, toggled from the HUD:
+// - CPU tree (default): each frame the CPU builds a Barnes-Hut octree (./Octree.js),
+//   flattens it to typed arrays, and walks it with a stackless skip-pointer traversal
+//   to get 3D forces — O(n log n). Positions stream to the GPU as instanced
+//   attributes (one-way upload, no readback). Capped at 100k.
+// - GPU n²: a TSL compute kernel integrates entirely on the GPU — positions/velocities
+//   live in storage buffers the render shader reads directly, so nothing crosses the
+//   bus per frame. Exact all-pairs n² up to ~50k; above that each particle samples a
+//   random strided subset of partners per frame (mass-compensated, fresh offset every
+//   frame) to stay inside a fixed pair budget — Monte-Carlo far field, up to 1M.
 //
 // Rendering: particles are camera-facing gaussian-splat billboards (2 tris each),
 // velocity-stretched like a long exposure. Speed drives hue, local density (a free
 // by-product of the force walk) drives brightness, and a static per-particle
-// attribute scatters size/hue so the field reads as stars, not dots. Post chain:
-// afterimage trails → bloom → chromatic aberration → grade/vignette/grain, ACES
-// tone-mapped at output.
+// attribute scatters size/hue so the field reads as stars, not dots. A second pass
+// re-draws a configurable slice of the particles as dark normal-blended blobs —
+// occluding dust lanes the additive pass can't produce. Post chain: afterimage
+// trails → bloom → optional depth of field → chromatic aberration →
+// grade/vignette/grain, tone-mapped at output.
 //
 // Softening/min-cell constants are tuned for ~800px space, so we simulate in that
 // pixel-scale and frame the camera to it.
@@ -21,17 +27,20 @@ import * as THREE from 'three/webgpu';
 import {
 	Fn, attribute, positionLocal, uniform, color, pass,
 	float, vec2, vec3, vec4, uv, time, screenUV, luminance, mix, smoothstep, hash, rtt,
-	mx_fractal_noise_float
+	mx_fractal_noise_float, instancedArray, instanceIndex, Loop, If, uint
 } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { afterImage } from 'three/addons/tsl/display/AfterImageNode.js';
 import { rgbShift } from 'three/addons/tsl/display/RGBShiftNode.js';
+import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Octree } from './Octree.js';
 import { onWindowResize } from "../Utils/ResizeManager.js";
 
 // ── config ──
-const MAX = 100000;           // array capacity = largest selectable count
+const MAX = 100000;           // CPU-path capacity = largest count the tree handles
+const GPU_MAX = 1000000;      // GPU-path capacity (storage buffers, render meshes)
+const PAIR_BUDGET = 2.5e9;    // GPU pair interactions per frame; exact n² ≤ √budget
 const DISK_R = 300;           // disk radius in sim (pixel-scale) units
 const BASE_DISK_MASS = 5000;  // total disk mass; per-particle = BASE_DISK_MASS / count
 let theta = 1.5;              // Barnes-Hut opening angle (higher = faster, looser)
@@ -47,11 +56,25 @@ let paused = false;
 let massEach = BASE_DISK_MASS / count;
 let trailFade = 0.90;         // afterimage damp; 0 = trails off
 let bloomMode = 2;            // 0 = off, 1 = low, 2 = high
+let gpuMode = false;          // false = CPU Barnes-Hut tree, true = GPU compute
+let dustFrac = 0.15;          // fraction of particles re-drawn as dark dust
+let dustN = 0;                // = round(count · dustFrac), kept by updateDustCount()
+let dofOn = false;            // depth-of-field post pass
 
-// ── CPU particle state (structure-of-arrays) ──
-const px = new Float32Array(MAX), py = new Float32Array(MAX), pz = new Float32Array(MAX);
-const vx = new Float32Array(MAX), vy = new Float32Array(MAX), vz = new Float32Array(MAX);
-const dens = new Float32Array(MAX); // Σ m/r² accumulated during the force walk
+// ── CPU particle state (structure-of-arrays; grown to GPU_MAX on first GPU use) ──
+let px = new Float32Array(MAX), py = new Float32Array(MAX), pz = new Float32Array(MAX);
+let vx = new Float32Array(MAX), vy = new Float32Array(MAX), vz = new Float32Array(MAX);
+let dens = new Float32Array(MAX); // Σ m/r² accumulated during the force walk
+let cap = MAX;
+
+function ensureCapacity(n) {
+	if (cap >= n) return;
+	const grow = a => { const b = new Float32Array(n); b.set(a); return b; };
+	px = grow(px); py = grow(py); pz = grow(pz);
+	vx = grow(vx); vy = grow(vy); vz = grow(vz);
+	dens = grow(dens);
+	cap = n;
+}
 
 // persistent particle views the tree consumes ({ position:{x,y}, mass }); reused, no per-frame alloc
 const parts = new Array(MAX);
@@ -92,10 +115,34 @@ const camUpU = uniform(new THREE.Vector3(0, 1, 0));
 const streakU = uniform(0.02);      // velocity-stretch factor (long-exposure streaks)
 const densNormU = uniform(1.0);     // adaptive density → brightness normalization
 
+// ── DOF uniforms ──
+const focusU = uniform(700);        // focus distance, follows camera→core distance
+const apertureU = uniform(0.00012); // blur growth per view-Z unit of defocus
+const maxblurU = uniform(0.012);    // blur cap in UV units
+
+// ── GPU-compute uniforms ──
+const countU = uniform(0, 'uint');
+const sampleCountU = uniform(0, 'uint'); // partners sampled per particle per frame
+const strideU = uniform(1, 'uint');      // partner index stride (1 = exact n²)
+const offsetU = uniform(0, 'uint');      // fresh random offset per frame (decorrelates sampling)
+const gMassU = uniform(0);               // G · massEach · stride (mass compensation)
+const massStrideU = uniform(0);          // massEach · stride (density compensation)
+const gCoreU = uniform(0);               // G · coreMass
+const coreSoft2U = uniform(64);
+const dtU = uniform(0.01);
+const burstKU = uniform(0);
+
 // ── runtime ──
-let renderer, scene, camera, controls, mesh;
-let postProcessing, scenePass, afterImageNode = null, bloomNode = null, rttNode = null;
-let instPos, instVel, instDens; // InstancedBufferAttributes streamed each frame
+let renderer, scene, camera, controls;
+let mesh, geoCPU, meshDustCPU, geoDustCPU;          // CPU-path render objects
+let meshGPU, geoGPU, meshDustGPU, geoDustGPU;       // GPU-path render objects (lazy)
+let postProcessing, scenePass;
+let afterImageNode = null, bloomNode = null, rttNode = null, dofNode = null;
+let instPos, instVel, instDens; // InstancedBufferAttributes streamed each frame (CPU path)
+let gpuReady = false;
+let gpuSuspend = false;         // halts the kernel while readback snapshots pos+vel
+let posBuf, velBuf, densBuf;    // instancedArray storage buffers (GPU path)
+let gpuStepKernel, gpuBurstKernel;
 
 // standard normal (Box-Muller)
 function gauss() {
@@ -105,12 +152,13 @@ function gauss() {
 	return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-// shared disk kinematics: z-profile + circular orbit velocity at (gx, gy)
-function placeDiskParticle(i, gx, gy, zThin, zBulge, sigmaBulge) {
+// shared disk kinematics: z-profile + circular orbit velocity at (gx, gy);
+// zMul < 1 seeds dust particles tighter to the midplane so they read as lanes
+function placeDiskParticle(i, gx, gy, zThin, zBulge, sigmaBulge, zMul) {
 	const r = Math.sqrt(gx * gx + gy * gy);
 	px[i] = gx; py[i] = gy;
 	const bulge = Math.exp(-r * r / (2 * sigmaBulge * sigmaBulge));
-	pz[i] = gauss() * (zThin + zBulge * bulge);
+	pz[i] = gauss() * (zThin + zBulge * bulge) * zMul;
 	const rDir = r < 0.001 ? 0.001 : r;            // avoid div-by-zero at the center
 	const rVel = Math.max(r, DISK_R * 0.05);        // floor speed near the center
 	// circular orbital speed around the core, tangential (-y, x)/r, + small jitter
@@ -118,7 +166,6 @@ function placeDiskParticle(i, gx, gy, zThin, zBulge, sigmaBulge) {
 	vx[i] = (-gy / rDir) * vc + gauss() * vc * 0.03;
 	vy[i] = (gx / rDir) * vc + gauss() * vc * 0.03;
 	vz[i] = gauss() * vc * 0.02; // small vertical dispersion
-	parts[i].mass = massEach;
 }
 
 function initDisk() {
@@ -128,7 +175,7 @@ function initDisk() {
 	const sigmaBulge = DISK_R * 0.3; // radial extent of the bulge
 	for (let i = 0; i < count; i++) {
 		// bell-shaped (Gaussian) blob: dense core, sparse edges
-		placeDiskParticle(i, gauss() * sigmaXY, gauss() * sigmaXY, zThin, zBulge, sigmaBulge);
+		placeDiskParticle(i, gauss() * sigmaXY, gauss() * sigmaXY, zThin, zBulge, sigmaBulge, i < dustN ? 0.35 : 1.0);
 	}
 }
 
@@ -152,7 +199,7 @@ function initSpiral() {
 			const p = 0.22 + 0.78 * Math.pow(0.5 + 0.5 * w, 2);
 			if (Math.random() < p) break;
 		}
-		placeDiskParticle(i, gx, gy, zThin, zBulge, sigmaBulge);
+		placeDiskParticle(i, gx, gy, zThin, zBulge, sigmaBulge, i < dustN ? 0.35 : 1.0);
 	}
 }
 
@@ -165,6 +212,7 @@ function step() {
 		if (y < mny) mny = y; if (y > mxy) mxy = y;
 		if (z < mnz) mnz = z; if (z > mxz) mxz = z;
 		parts[i].position.x = x; parts[i].position.y = y; parts[i].position.z = z;
+		parts[i].mass = massEach;
 	}
 	const cx = (mnx + mxx) * 0.5, cy = (mny + mxy) * 0.5, cz = (mnz + mxz) * 0.5;
 	const half = Math.max(mxx - mnx, mxy - mny, mxz - mnz) * 0.5 + 10;
@@ -218,7 +266,7 @@ function uploadInstances() {
 	instPos.needsUpdate = true;
 	instVel.needsUpdate = true;
 	instDens.needsUpdate = true;
-	mesh.count = count;
+	geoCPU.instanceCount = count;
 	// adaptive brightness normalization: pull the mean density toward mid-ramp
 	const mean = dSum / count;
 	if (mean > 0) {
@@ -244,7 +292,6 @@ function initRing() {
 		vx[i] = -Math.sin(angle) * vc;
 		vy[i] = Math.cos(angle) * vc;
 		vz[i] = gauss() * Math.abs(vc) * 0.01;
-		parts[i].mass = massEach;
 	}
 }
 
@@ -260,7 +307,6 @@ function initCollapse() {
 		py[i] = ry * DISK_R;
 		pz[i] = rz * DISK_R * 0.25;
 		vx[i] = 0; vy[i] = 0; vz[i] = 0;
-		parts[i].mass = massEach;
 	}
 }
 
@@ -291,7 +337,6 @@ function initGalaxyCollision() {
 			vx[i] = bulkVx + (-gy / rDir) * vc;
 			vy[i] = (gx / rDir) * vc;
 			vz[i] = gauss() * Math.abs(vc) * 0.02;
-			parts[i].mass = massEach;
 		}
 	}
 }
@@ -327,17 +372,22 @@ function applyPreset(name) {
 }
 
 function reset() {
+	dustN = Math.round(count * dustFrac);
 	if (currentPreset === 'ring') initRing();
 	else if (currentPreset === 'collapse') initCollapse();
 	else if (currentPreset === 'galaxy') initGalaxyCollision();
 	else if (currentPreset === 'spiral') initSpiral();
 	else initDisk();
 	dens.fill(0, 0, count);
+	if (gpuMode && gpuReady) syncToGPU();
 }
 
 function setCount(n) {
 	count = n;
 	massEach = BASE_DISK_MASS / n;
+	updateGpuSampling();
+	if (geoGPU) geoGPU.instanceCount = count;
+	updateDustCount();
 	reset();
 	document.getElementById('countValue').textContent = n.toLocaleString();
 }
@@ -535,6 +585,234 @@ function updateShockwave(now) {
 	shockMesh.material.opacity = 0.55 * (1 - u);
 }
 
+// ── shared splat rendering: one builder for all four particle materials ──
+// (CPU/GPU source nodes × star/dust look). Instancing goes through
+// InstancedBufferGeometry + plain Mesh, so there is no instanceMatrix at all —
+// positionNode is the entire placement path.
+
+function makeQuadGeometry() {
+	const plane = new THREE.PlaneGeometry(2, 2); // 2 tris/particle; oriented in-shader
+	const geo = new THREE.InstancedBufferGeometry();
+	geo.index = plane.index;
+	geo.setAttribute('position', plane.getAttribute('position'));
+	geo.setAttribute('uv', plane.getAttribute('uv'));
+	geo.instanceCount = 0;
+	return geo;
+}
+
+function makeSplatMaterial(posNode, velNode, densNode, varNode, isDust) {
+	// velocity projected onto the billboard plane → long-exposure stretch direction
+	const velPlane = vec2(velNode.dot(camRightU), velNode.dot(camUpU));
+	const speedPlane = velPlane.length();
+	const stretchAmt = speedPlane.mul(streakU).min(4.0);
+
+	const material = new THREE.MeshBasicNodeMaterial();
+	material.positionNode = Fn(() => {
+		const xy = positionLocal.xy.mul(sizeU.mul(varNode.x).mul(isDust ? 2.6 : 1.0));
+		const dir = velPlane.div(speedPlane.max(0.0001));
+		const stretched = xy.add(dir.mul(xy.dot(dir)).mul(stretchAmt));
+		return posNode
+			.add(camRightU.mul(stretched.x))
+			.add(camUpU.mul(stretched.y));
+	})();
+	if (isDust) {
+		// dark extinction blobs: normal blending is the only thing in the scene that
+		// can *remove* light, which is what makes the lanes read as dust
+		material.colorNode = color(0x0b0705);
+		material.opacityNode = Fn(() => {
+			const d = uv().mul(2.0).sub(1.0);
+			const alpha = d.dot(d).mul(-3.0).exp().sub(0.02).max(0.0);
+			return alpha.mul(0.42).div(stretchAmt.mul(0.5).add(1.0));
+		})();
+		material.blending = THREE.NormalBlending;
+	} else {
+		material.colorNode = Fn(() => {
+			const s = velNode.length().mul(speedScale).add(varNode.y).saturate();
+			// 3-stop ramp: royal blue (slow) → teal (mid) → warm gold (fast)
+			const t1 = s.mul(2.0).saturate();
+			const t2 = s.sub(0.5).mul(2.0).saturate();
+			const attract = mix(mix(color(0x2a4cc0), color(0x3fe0d0), t1), color(0xffe7a0), t2);
+			const repulse = mix(color(0x6a2cff), color(0xff3ce0), s);
+			const ramp = mix(repulse, attract, gSignU);
+			// local density → brightness: clumps and the core glow hot, halo stays faint
+			const b = densNode.mul(densNormU).saturate().pow(0.5);
+			return ramp.mul(b.mul(1.3).add(0.45));
+		})();
+		material.opacityNode = Fn(() => {
+			// gaussian point-spread falloff over the quad, zeroed at the edge
+			const d = uv().mul(2.0).sub(1.0);
+			const alpha = d.dot(d).mul(-4.5).exp().sub(0.011).max(0.0);
+			// dim long streaks: same light spread over more pixels
+			return alpha.div(stretchAmt.mul(0.5).add(1.0));
+		})();
+		material.blending = THREE.AdditiveBlending;
+	}
+	material.transparent = true;
+	material.depthWrite = false;
+	return material;
+}
+
+function makeVarAttribute(n) {
+	// static per-particle variation: x = log-normal size scale, y = hue jitter
+	const varArr = new Float32Array(n * 2);
+	for (let i = 0; i < n; i++) {
+		varArr[2 * i] = Math.min(Math.max(Math.exp(gauss() * 0.5), 0.4), 4.0);
+		varArr[2 * i + 1] = (Math.random() - 0.5) * 0.1;
+	}
+	return new THREE.InstancedBufferAttribute(varArr, 2);
+}
+
+function updateDustCount() {
+	dustN = Math.round(count * dustFrac);
+	if (geoDustCPU) { geoDustCPU.instanceCount = dustN; meshDustCPU.visible = !gpuMode && dustN > 0; }
+	if (geoDustGPU) { geoDustGPU.instanceCount = dustN; meshDustGPU.visible = gpuMode && dustN > 0; }
+}
+
+// ── GPU compute path: storage-buffer state + stochastic strided n² kernel ──
+
+function updateGpuSampling() {
+	// exact all-pairs when count² fits the budget; otherwise every particle sums a
+	// strided subset (fresh random offset each frame), with mass scaled by the stride
+	// so the expected force matches the full sum
+	let samples = count, stride = 1;
+	if (count * count > PAIR_BUDGET) {
+		samples = Math.max(1024, Math.floor(PAIR_BUDGET / count));
+		stride = Math.ceil(count / samples);
+		samples = Math.ceil(count / stride);
+	}
+	sampleCountU.value = samples;
+	strideU.value = stride;
+}
+
+function ensureGPU() {
+	if (gpuReady) return;
+	ensureCapacity(GPU_MAX);
+	posBuf = instancedArray(GPU_MAX, 'vec3');
+	velBuf = instancedArray(GPU_MAX, 'vec3');
+	densBuf = instancedArray(GPU_MAX, 'float');
+
+	gpuStepKernel = Fn(() => {
+		If(instanceIndex.lessThan(countU), () => {
+			const pi = posBuf.element(instanceIndex).toVar();
+			const acc = vec3(0.0).toVar();
+			const di = float(0.0).toVar();
+			Loop({ start: uint(0), end: sampleCountU, type: 'uint', condition: '<' }, ({ i: j }) => {
+				// raw < 2·count by construction, so one conditional subtract wraps it
+				const raw = j.mul(strideU).add(offsetU);
+				const idx = raw.lessThan(countU).select(raw, raw.sub(countU));
+				const d = posBuf.element(idx).sub(pi);
+				const r2 = d.dot(d).add(25.0); // BH softening² (matches the CPU walk)
+				acc.addAssign(d.mul(r2.mul(r2.sqrt()).reciprocal()));
+				di.addAssign(r2.reciprocal());
+			});
+			acc.mulAssign(gMassU);
+			// central core at the origin
+			const r2c = pi.dot(pi).add(coreSoft2U);
+			acc.subAssign(pi.mul(gCoreU.mul(r2c.mul(r2c.sqrt()).reciprocal())));
+			// symplectic Euler: kick then drift
+			const v = velBuf.element(instanceIndex).toVar();
+			v.addAssign(acc.mul(dtU));
+			velBuf.element(instanceIndex).assign(v);
+			posBuf.element(instanceIndex).assign(pi.add(v.mul(dtU)));
+			densBuf.element(instanceIndex).assign(di.mul(massStrideU));
+		});
+	})().compute(GPU_MAX);
+
+	gpuBurstKernel = Fn(() => {
+		If(instanceIndex.lessThan(countU), () => {
+			const p = posBuf.element(instanceIndex);
+			const inv = p.xy.length().add(0.001).reciprocal();
+			const v = velBuf.element(instanceIndex).toVar();
+			v.addAssign(vec3(p.x.mul(inv), p.y.mul(inv), 0.0).mul(burstKU));
+			velBuf.element(instanceIndex).assign(v);
+		});
+	})().compute(GPU_MAX);
+
+	// 1M-capacity render meshes reading the storage buffers directly — the render
+	// shader consumes the same memory the kernel writes, nothing crosses the bus
+	const instVarGPU = makeVarAttribute(GPU_MAX);
+	const posA = posBuf.toAttribute(), velA = velBuf.toAttribute(), densA = densBuf.toAttribute();
+	geoGPU = makeQuadGeometry();
+	geoGPU.setAttribute('instVar', instVarGPU);
+	meshGPU = new THREE.Mesh(geoGPU, makeSplatMaterial(posA, velA, densA, attribute('instVar', 'vec2'), false));
+	meshGPU.frustumCulled = false;
+	meshGPU.visible = false;
+	scene.add(meshGPU);
+	geoDustGPU = makeQuadGeometry();
+	geoDustGPU.setAttribute('instVar', instVarGPU);
+	meshDustGPU = new THREE.Mesh(geoDustGPU, makeSplatMaterial(posA, velA, densA, attribute('instVar', 'vec2'), true));
+	meshDustGPU.frustumCulled = false;
+	meshDustGPU.renderOrder = 1;
+	meshDustGPU.visible = false;
+	scene.add(meshDustGPU);
+	gpuReady = true;
+}
+
+function syncToGPU() {
+	// always write PACKED xyz triplets at [3i]: the WebGPU backend's update path
+	// re-strides vec3 storage data 3→4 from exactly this layout on every upload
+	// (even after it flips the attribute's itemSize to 4 — see readbackFromGPU)
+	const pa = posBuf.value.array, va = velBuf.value.array;
+	for (let i = 0; i < count; i++) {
+		pa[3 * i] = px[i]; pa[3 * i + 1] = py[i]; pa[3 * i + 2] = pz[i];
+		va[3 * i] = vx[i]; va[3 * i + 1] = vy[i]; va[3 * i + 2] = vz[i];
+	}
+	densBuf.value.array.fill(0, 0, count);
+	posBuf.value.needsUpdate = true;
+	velBuf.value.needsUpdate = true;
+	densBuf.value.needsUpdate = true;
+}
+
+async function readbackFromGPU() {
+	const pa = new Float32Array(await renderer.getArrayBufferAsync(posBuf.value));
+	const va = new Float32Array(await renderer.getArrayBufferAsync(velBuf.value));
+	// vec3 storage buffers live on the GPU at 16-byte stride (WGSL alignment): the
+	// backend re-strides the attribute 3→4 floats at buffer creation and flips its
+	// itemSize to 4, so the readback is padded — index with the *current* itemSize
+	const ps = posBuf.value.itemSize, vs = velBuf.value.itemSize;
+	const n = Math.min(count, MAX);
+	for (let i = 0; i < n; i++) {
+		px[i] = pa[ps * i]; py[i] = pa[ps * i + 1]; pz[i] = pa[ps * i + 2];
+		vx[i] = va[vs * i]; vy[i] = va[vs * i + 1]; vz[i] = va[vs * i + 2];
+	}
+}
+
+async function setComputeMode(gpu) {
+	if (gpu === gpuMode) return;
+	if (gpu && renderer.backend.isWebGPUBackend !== true) return; // WebGL2 fallback can't run the kernel
+	const countSl = document.getElementById('countSlider');
+	const note = document.getElementById('countNote');
+	if (gpu) {
+		ensureGPU();
+		gpuMode = true;
+		syncToGPU(); // carry the running CPU state over seamlessly
+		countSl.max = '6';
+		note.textContent = 'GPU n² compute — up to 1M; far field sampled above ~50k';
+	} else {
+		// pull positions/velocities back so the CPU tree continues where the GPU left
+		// off. The kernel must not step between the two snapshots — positions and
+		// velocities from different times heat the disk into a spheroid.
+		gpuSuspend = true;
+		try { await readbackFromGPU(); } catch (e) { console.warn('GPU readback failed; resuming from last CPU state', e); }
+		gpuSuspend = false;
+		gpuMode = false;
+		if (count > MAX) {
+			count = MAX;
+			massEach = BASE_DISK_MASS / count;
+			countSl.value = '5';
+			document.getElementById('countValue').textContent = count.toLocaleString();
+			updateGpuSampling();
+		}
+		countSl.max = '5';
+		note.textContent = 'Barnes-Hut CPU tree — 1 to 100k, log scale';
+	}
+	mesh.visible = !gpuMode;
+	if (meshGPU) { meshGPU.visible = gpuMode; geoGPU.instanceCount = count; }
+	updateDustCount();
+	buildPost(); // fresh afterimage target: don't smear the switch discontinuity into the trails
+	document.getElementById('computeButton').textContent = gpuMode ? 'Compute: GPU n²' : 'Compute: CPU tree';
+}
+
 async function init() {
 	scene = new THREE.Scene();
 	scene.background = new THREE.Color(0x05050a);
@@ -553,71 +831,35 @@ async function init() {
 	document.body.appendChild(renderer.domElement);
 	await renderer.init();
 
-	// camera-facing gaussian splat billboards; position/velocity/density streamed
-	// from the CPU each frame, size/hue variation static per particle
-	const geometry = new THREE.PlaneGeometry(2, 2); // 2 tris/particle; oriented in-shader
+	// CPU-path mesh: position/velocity/density streamed from the CPU each frame
 	instPos = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3).setUsage(THREE.DynamicDrawUsage);
 	instVel = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3).setUsage(THREE.DynamicDrawUsage);
 	instDens = new THREE.InstancedBufferAttribute(new Float32Array(MAX), 1).setUsage(THREE.DynamicDrawUsage);
-	// static per-particle variation: x = log-normal size scale, y = hue jitter
-	const varArr = new Float32Array(MAX * 2);
-	for (let i = 0; i < MAX; i++) {
-		varArr[2 * i] = Math.min(Math.max(Math.exp(gauss() * 0.5), 0.4), 4.0);
-		varArr[2 * i + 1] = (Math.random() - 0.5) * 0.1;
-	}
-	const instVar = new THREE.InstancedBufferAttribute(varArr, 2);
-	geometry.setAttribute('instPos', instPos);
-	geometry.setAttribute('instVel', instVel);
-	geometry.setAttribute('instDens', instDens);
-	geometry.setAttribute('instVar', instVar);
-
-	const ivel = attribute('instVel', 'vec3');
-	const ivar = attribute('instVar', 'vec2');
-	// velocity projected onto the billboard plane → long-exposure stretch direction
-	const velPlane = vec2(ivel.dot(camRightU), ivel.dot(camUpU));
-	const speedPlane = velPlane.length();
-	const stretchAmt = speedPlane.mul(streakU).min(4.0);
-
-	const material = new THREE.MeshBasicNodeMaterial();
-	material.positionNode = Fn(() => {
-		const xy = positionLocal.xy.mul(sizeU.mul(ivar.x));
-		const dir = velPlane.div(speedPlane.max(0.0001));
-		const stretched = xy.add(dir.mul(xy.dot(dir)).mul(stretchAmt));
-		return attribute('instPos', 'vec3')
-			.add(camRightU.mul(stretched.x))
-			.add(camUpU.mul(stretched.y));
-	})();
-	material.colorNode = Fn(() => {
-		const s = ivel.length().mul(speedScale).add(ivar.y).saturate();
-		// 3-stop ramp: royal blue (slow) → teal (mid) → warm gold (fast)
-		const t1 = s.mul(2.0).saturate();
-		const t2 = s.sub(0.5).mul(2.0).saturate();
-		const attract = mix(mix(color(0x2a4cc0), color(0x3fe0d0), t1), color(0xffe7a0), t2);
-		const repulse = mix(color(0x6a2cff), color(0xff3ce0), s);
-		const ramp = mix(repulse, attract, gSignU);
-		// local density → brightness: clumps and the core glow hot, halo stays faint
-		const b = attribute('instDens', 'float').mul(densNormU).saturate().pow(0.5);
-		return ramp.mul(b.mul(1.3).add(0.45));
-	})();
-	material.opacityNode = Fn(() => {
-		// gaussian point-spread falloff over the quad, zeroed at the edge
-		const d = uv().mul(2.0).sub(1.0);
-		const alpha = d.dot(d).mul(-4.5).exp().sub(0.011).max(0.0);
-		// dim long streaks: same light spread over more pixels
-		return alpha.div(stretchAmt.mul(0.5).add(1.0));
-	})();
-	material.transparent = true;
-	material.depthWrite = false;
-	material.blending = THREE.AdditiveBlending;
-
-	mesh = new THREE.InstancedMesh(geometry, material, MAX);
+	const instVar = makeVarAttribute(MAX);
+	geoCPU = makeQuadGeometry();
+	geoCPU.setAttribute('instPos', instPos);
+	geoCPU.setAttribute('instVel', instVel);
+	geoCPU.setAttribute('instDens', instDens);
+	geoCPU.setAttribute('instVar', instVar);
+	mesh = new THREE.Mesh(geoCPU, makeSplatMaterial(
+		attribute('instPos', 'vec3'), attribute('instVel', 'vec3'),
+		attribute('instDens', 'float'), attribute('instVar', 'vec2'), false));
 	mesh.frustumCulled = false;
-	// instanceMatrix is zero-filled by default (collapses to origin); set identity —
-	// real placement happens in positionNode via the instPos attribute.
-	const idMat = new THREE.Matrix4();
-	for (let i = 0; i < MAX; i++) mesh.setMatrixAt(i, idMat);
-	mesh.instanceMatrix.needsUpdate = true;
 	scene.add(mesh);
+
+	// dust lanes: the first dustN particles re-drawn dark after the additive pass
+	// (same physics arrays — shared attributes — different material)
+	geoDustCPU = makeQuadGeometry();
+	geoDustCPU.setAttribute('instPos', instPos);
+	geoDustCPU.setAttribute('instVel', instVel);
+	geoDustCPU.setAttribute('instDens', instDens);
+	geoDustCPU.setAttribute('instVar', instVar);
+	meshDustCPU = new THREE.Mesh(geoDustCPU, makeSplatMaterial(
+		attribute('instPos', 'vec3'), attribute('instVel', 'vec3'),
+		attribute('instDens', 'float'), attribute('instVar', 'vec2'), true));
+	meshDustCPU.frustumCulled = false;
+	meshDustCPU.renderOrder = 1;
+	scene.add(meshDustCPU);
 
 	controls = new OrbitControls(camera, renderer.domElement);
 	controls.enableDamping = true;
@@ -636,13 +878,38 @@ async function init() {
 
 	onWindowResize(onResize);
 	wireUI();
+
+	// the compute path needs real WebGPU storage buffers; under the WebGL2
+	// fallback the renderer still draws, but the kernel can't run
+	if (renderer.backend.isWebGPUBackend !== true) {
+		const btn = document.getElementById('computeButton');
+		btn.disabled = true;
+		btn.textContent = 'GPU compute: n/a';
+	}
+
+	// query params (used by automated checks too): ?compute=gpu&count=300000&dof=1&dust=0.2
+	const q = new URLSearchParams(window.location.search);
+	if (q.get('compute') === 'gpu') await setComputeMode(true);
+	if (q.has('count')) {
+		const sl = document.getElementById('countSlider');
+		sl.value = String(Math.log10(Math.max(1, +q.get('count') || 1)));
+		sl.dispatchEvent(new Event('input'));
+	}
+	if (q.has('dust')) {
+		const sl = document.getElementById('dustSlider');
+		sl.value = q.get('dust');
+		sl.dispatchEvent(new Event('input'));
+	}
+	if (q.get('dof') === '1') document.getElementById('dofButton').click();
+
 	renderer.setAnimationLoop(animate);
 }
 
-// ── post chain: scene → afterimage trails → bloom → CA → grade/vignette/grain ──
+// ── post chain: scene → afterimage trails → bloom → DOF → CA → grade/vignette/grain ──
 function buildPost() {
 	if (afterImageNode) { afterImageNode.dispose?.(); afterImageNode = null; }
 	if (bloomNode) { bloomNode.dispose?.(); bloomNode = null; }
+	if (dofNode) { dofNode.dispose?.(); dofNode = null; }
 	if (rttNode) { rttNode.dispose?.(); rttNode = null; }
 
 	let node = scenePass.getTextureNode('output');
@@ -654,6 +921,12 @@ function buildPost() {
 		const [st, ra, th] = bloomMode === 1 ? [0.4, 0.35, 0.45] : [0.9, 0.5, 0.4];
 		bloomNode = bloom(node, st, ra, th);
 		node = node.add(bloomNode);
+	}
+	if (dofOn) {
+		// focusU tracks the camera→core distance each frame, so the core stays sharp
+		// while near/far particles and the starfield melt into bokeh
+		dofNode = dof(node, scenePass.getViewZNode(), focusU, apertureU, maxblurU);
+		node = dofNode;
 	}
 	// chromatic aberration needs to resample the composite → render it to a texture.
 	// On sub-pixel splats a full-frame shift dissolves dots into r/g/b triplets, so
@@ -683,8 +956,21 @@ let frames = 0, fpsLast = Date.now();
 
 async function animate() {
 	const now = Date.now();
-	if (!paused) step();
-	uploadInstances();
+	if (gpuMode) {
+		if (!paused && !gpuSuspend) {
+			countU.value = count;
+			dtU.value = dt;
+			gCoreU.value = G * coreMass;
+			coreSoft2U.value = coreSoft * coreSoft;
+			gMassU.value = G * massEach * strideU.value;
+			massStrideU.value = massEach * strideU.value;
+			offsetU.value = Math.floor(Math.random() * count);
+			await renderer.computeAsync(gpuStepKernel);
+		}
+	} else {
+		if (!paused) step();
+		uploadInstances();
+	}
 	updateTwinkle(performance.now() * 0.001);
 	updateShockwave(now);
 
@@ -717,6 +1003,7 @@ async function animate() {
 	camera.updateMatrixWorld();
 	camRightU.value.setFromMatrixColumn(camera.matrixWorld, 0);
 	camUpU.value.setFromMatrixColumn(camera.matrixWorld, 1);
+	if (dofOn) focusU.value = camera.position.length();
 	await postProcessing.renderAsync();
 	if (sx || sy || sz) {
 		camera.position.x -= sx; camera.position.y -= sy; camera.position.z -= sz;
@@ -738,11 +1025,17 @@ function onResize() {
 }
 
 function burst() {
-	const k = Math.sqrt(G * coreMass / DISK_R) * 0.8; // ~comparable to orbital speed
-	for (let i = 0; i < count; i++) {
-		const x = px[i], y = py[i];
-		const inv = 1 / (Math.sqrt(x * x + y * y) + 0.001);
-		vx[i] += x * inv * k; vy[i] += y * inv * k;
+	const k = Math.sqrt(Math.abs(G * coreMass) / DISK_R) * 0.8; // ~comparable to orbital speed
+	if (gpuMode) {
+		countU.value = count;
+		burstKU.value = k;
+		renderer.computeAsync(gpuBurstKernel);
+	} else {
+		for (let i = 0; i < count; i++) {
+			const x = px[i], y = py[i];
+			const inv = 1 / (Math.sqrt(x * x + y * y) + 0.001);
+			vx[i] += x * inv * k; vy[i] += y * inv * k;
+		}
 	}
 	shakeT0 = Date.now();
 	shockT0 = Date.now();
@@ -764,6 +1057,7 @@ function wireUI() {
 	bindNum('sizeSlider', 'sizeValue', v => sizeU.value = v, v => v.toFixed(1));
 	bindNum('thetaSlider', 'thetaValue', v => theta = v, v => v.toFixed(2));
 	bindNum('streakSlider', 'streakValue', v => streakU.value = v, v => v === 0 ? 'Off' : v.toFixed(3));
+	bindNum('dustSlider', 'dustValue', v => { dustFrac = v; updateDustCount(); }, v => v === 0 ? 'Off' : Math.round(v * 100) + '%');
 	bindNum('trailSlider', 'trailValue', v => {
 		const wasOn = trailFade > 0;
 		trailFade = v;
@@ -793,6 +1087,13 @@ function wireUI() {
 		bloomBtn.textContent = bloomLabels[bloomMode];
 		buildPost();
 	});
+	const dofBtn = document.getElementById('dofButton');
+	dofBtn.addEventListener('click', () => {
+		dofOn = !dofOn;
+		dofBtn.textContent = dofOn ? 'DOF: On' : 'DOF: Off';
+		buildPost();
+	});
+	document.getElementById('computeButton').addEventListener('click', () => setComputeMode(!gpuMode));
 	const pauseBtn = document.getElementById('pauseButton');
 	pauseBtn.addEventListener('click', () => {
 		paused = !paused;

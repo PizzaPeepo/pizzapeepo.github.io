@@ -2,20 +2,37 @@
 
 Suggestions for making the GPU galaxy demo visually exceptional, ordered by impact-vs-effort.
 
-> **Status (2026-06-12)**: items 1–12 implemented (Tier 1 + Tier 2 complete; item 7's
+> **Status (2026-06-13)**: all 15 items implemented (Tier 1–3 complete; item 7's
 > velocity-stretch replaced the need for a separate speed attribute — hue now derives from
-> the uploaded velocity vector). Tier 3 (13 dust lanes, 14 GPU compute, 15 DOF) still open.
-> Two deviations from the spec: Neutral tone mapping instead of ACES (ACES skews the
-> saturated blue ramp toward magenta), and chromatic aberration is edge-masked because a
-> full-frame RGB shift dissolves sub-pixel splats into r/g/b triplets. Found & fixed along
-> the way: the original color ramp used TSL's method-form `.mix()`, which is
-> `mixElement(t, e1, e2)` — the receiver is the *factor*, not the start color — so the ramp
-> was producing garbage colors; it now uses global `mix(a, b, t)`.
+> the uploaded velocity vector). Deviations from the spec:
+> - Neutral tone mapping instead of ACES (ACES skews the saturated blue ramp toward
+>   magenta); chromatic aberration is edge-masked (a full-frame RGB shift dissolves
+>   sub-pixel splats into r/g/b triplets).
+> - Item 13: dust re-draws the first `count·dustFrac` particles dark (NormalBlending,
+>   renderOrder 1) instead of simulating a separate population; disk/spiral presets seed
+>   those indices tighter to the midplane. HUD slider 0–30%.
+> - Item 14: above ~50k particles the kernel is not pure n² — each particle sums a random
+>   strided partner subset per frame (fixed 2.5e9 pair budget, mass-compensated, fresh
+>   offset every frame): Monte-Carlo far field instead of workgroup tiling; exact n² below
+>   50k. Render meshes are `InstancedBufferGeometry` + plain `Mesh` (no instanceMatrix);
+>   `positionNode` reads the storage buffers via `.toAttribute()`. CPU↔GPU toggle in the
+>   HUD carries the running state across (upload on enter, readback on leave).
+> - Item 15: DOF sits between bloom and CA; focus tracks `camera.position.length()`.
+>
+> Found & fixed along the way: the original color ramp used TSL's method-form `.mix()`,
+> which is `mixElement(t, e1, e2)` — the receiver is the *factor*, not the start color —
+> so the ramp was producing garbage colors; it now uses global `mix(a, b, t)`. Also: the
+> WebGPU backend re-strides vec3 storage buffers 3→4 floats (16-byte WGSL alignment) at
+> buffer creation and flips the attribute's `itemSize` to 4 — `getArrayBufferAsync`
+> readback must be indexed with the *current* `itemSize`, while CPU→GPU uploads must stay
+> packed at `[3i]` (the backend re-pads from that layout on every update). And: never let
+> the kernel step between the position and velocity readbacks (suspend it), or the two
+> snapshots come from different times and the phase-space mismatch heats the disk.
 
-**Current state**: instanced icosahedron spheres with additive blending, 3-stop speed color ramp
-(royal blue → teal → gold), subtle bloom (`bloom(sceneColor, 0.15, 0.0, 0.5)`), two static star
-shells, flat `0x0c0908` background, core rendered as two static additive spheres. CPU computes
-Barnes-Hut forces, GPU only renders; 100k particle cap.
+**Current state**: gaussian-splat billboards with velocity stretch, speed→hue + density→brightness,
+dust-lane second pass, animated core (black-hole mode at high mass), fBM nebula + three twinkling
+star shells, post chain afterimage→bloom→DOF→CA→grade/vignette/grain. Compute: Barnes-Hut CPU tree
+(≤100k) or TSL GPU kernel (≤1M, HUD toggle).
 
 ---
 
