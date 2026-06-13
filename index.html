@@ -70,6 +70,42 @@
       --shadow-lg: 0 20px 48px rgba(0,0,0,0.14), 0 6px 14px rgba(0,0,0,0.09);
     }
 
+    /* Viper — true black + venom greens; highlights glow pastel rainbow */
+    html.viper {
+      --bg:      #030806;
+      --bg-card: #07120b;
+      --bg-lift: #0b1a10;
+
+      --gold-hi:  #9bffc6;
+      --gold:     #14ff7e;
+      --gold-mid: #0aec6c;
+      --gold-lo:  #0a7a44;
+      --gold-tint: rgba(20,255,126,0.16);
+
+      --coral-hi:  #c6ffa0;
+      --coral:     #5cff3a;
+      --coral-mid: #46e81f;
+      --coral-lo:  #2f8016;
+      --coral-tint: rgba(92,255,58,0.16);
+
+      --tx:    #e0ffee;
+      --tx-2:  #6fcf9c;
+      --tx-3:  #3f8f60;
+      --tx-4:  #1f4d31;
+
+      --shadow-sm: 0 2px 8px rgba(0,0,0,0.45), 0 1px 2px rgba(0,0,0,0.30);
+      --shadow-md: 0 8px 28px rgba(0,0,0,0.55), 0 3px 8px rgba(0,0,0,0.35);
+      --shadow-lg: 0 20px 48px rgba(0,0,0,0.65), 0 6px 14px rgba(0,0,0,0.40);
+
+      /* pastel rainbow ramp — interaction highlights only */
+      --rb-1: #ffb3c8;
+      --rb-2: #ffd9a8;
+      --rb-3: #fdffb0;
+      --rb-4: #b3ffc9;
+      --rb-5: #a8e4ff;
+      --rb-6: #d9b8ff;
+    }
+
     /* ─── BASE ─── */
     html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 
@@ -303,6 +339,41 @@
     }
     /* filtered mode collapses the lift — suppress the big shadow too */
     .grid.filtered .card:hover::after { opacity: 0; }
+
+    /* Cursor spotlight — center tracks pointer via --mx/--my (set in JS) */
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 16px;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0;
+      transition: opacity 0.35s ease;
+      background: radial-gradient(240px circle at var(--mx, 50%) var(--my, 40%),
+                  color-mix(in srgb, var(--gold) 16%, transparent), transparent 70%);
+    }
+    .card:hover::before,
+    .card.card-pill-hover::before { opacity: 1; }
+    .grid.filtered .card:hover::before { opacity: 0; }
+
+    /* Viper spotlight: conic pastel rainbow under a soft radial mask, slowly hue-rotating */
+    html.viper .card::before {
+      background: conic-gradient(from 0deg at var(--mx, 50%) var(--my, 40%),
+                  var(--rb-1), var(--rb-2), var(--rb-3), var(--rb-4),
+                  var(--rb-5), var(--rb-6), var(--rb-1));
+      -webkit-mask-image: radial-gradient(230px circle at var(--mx, 50%) var(--my, 40%),
+                          black, transparent 75%);
+      mask-image: radial-gradient(230px circle at var(--mx, 50%) var(--my, 40%),
+                  black, transparent 75%);
+      animation: spotHue 8s linear infinite;
+    }
+    html.viper .card:hover::before,
+    html.viper .card.card-pill-hover::before { opacity: 0.22; }
+    @keyframes spotHue {
+      from { filter: hue-rotate(0deg); }
+      to   { filter: hue-rotate(360deg); }
+    }
     .card:nth-child(1)  { animation-delay: 0.10s; }
     .card:nth-child(2)  { animation-delay: 0.17s; }
     .card:nth-child(3)  { animation-delay: 0.24s; }
@@ -438,7 +509,8 @@
     /* ─── KINETIC LETTERS ─── */
     .hdr-title .kl {
       display: inline-block;
-      transition: transform 0.55s cubic-bezier(0.34,1.4,0.64,1);
+      transition: transform 0.55s cubic-bezier(0.34,1.4,0.64,1),
+                  color 0.25s ease, text-shadow 0.25s ease;
       will-change: transform;
     }
 
@@ -515,6 +587,77 @@
     }
     html.light .card:hover {
       background: rgba(255, 252, 248, 0.6);
+    }
+
+    /* ─── VIPER ACCENTS ─── */
+    html.viper .card {
+      background: rgba(6, 14, 9, 0.55);
+      border-color: rgba(120, 255, 180, 0.10);
+    }
+    html.viper .card:hover,
+    html.viper .card.card-pill-hover {
+      background: rgba(10, 22, 14, 0.60);
+    }
+    html.viper .card::after {
+      box-shadow: 0 40px 80px rgba(0,0,0,0.75),
+                  0 16px 32px rgba(0,0,0,0.40),
+                  0 0 60px rgba(65,241,149,0.13);
+    }
+
+    html.viper .hdr-eyebrow .pip { animation-name: glowViper; }
+    @keyframes glowViper {
+      0%,100% { box-shadow: 0 0 0 0 rgba(65,241,149,0.5); opacity: 1; }
+      50%      { box-shadow: 0 0 0 7px rgba(65,241,149,0); opacity: 0.6; }
+    }
+
+    html.viper .hdr-divider {
+      background: linear-gradient(90deg, var(--rb-1), var(--rb-2), var(--rb-3),
+                  var(--rb-4), var(--rb-5), var(--rb-6));
+    }
+
+    /* "interactive." pulses through the pastel ramp — text-shadow follows the kinetic letters */
+    html.viper .hdr-title em {
+      color: var(--gold-hi);
+      animation: emGlow 9s linear infinite;
+    }
+    @keyframes emGlow {
+      0%, 100% { text-shadow: 0 0 26px rgba(255,179,200,0.60); }
+      17%      { text-shadow: 0 0 26px rgba(255,217,168,0.60); }
+      33%      { text-shadow: 0 0 26px rgba(253,255,176,0.60); }
+      50%      { text-shadow: 0 0 26px rgba(179,255,201,0.65); }
+      67%      { text-shadow: 0 0 26px rgba(168,228,255,0.60); }
+      83%      { text-shadow: 0 0 26px rgba(217,184,255,0.60); }
+    }
+
+    /* keep black truly black — calm the blobs */
+    html.viper .blob-1 { opacity: 0.17; }
+    html.viper .blob-2 { opacity: 0.14; }
+    html.viper .blob-3 { opacity: 0.10; }
+
+    /* teal shift for the green tag family so it reads against all the venom */
+    html.viper .card-tag.green        { background: rgba(80,230,190,0.10); color: #5ce8c8; }
+    html.viper .filter-pill.green:hover  { border-color: #5ce8c8; color: #5ce8c8; }
+    html.viper .filter-pill.green.active {
+      background: rgba(80,230,190,0.10);
+      border-color: rgba(80,230,190,0.5);
+      color: #5ce8c8;
+    }
+
+    html.viper ::selection { background: #41f195; color: #04130a; }
+
+    html.viper ::-webkit-scrollbar { width: 11px; }
+    html.viper ::-webkit-scrollbar-track { background: #030806; }
+    html.viper ::-webkit-scrollbar-thumb {
+      background: #14422a;
+      border-radius: 6px;
+      border: 2px solid #030806;
+    }
+    html.viper ::-webkit-scrollbar-thumb:hover { background: #21d977; }
+
+    @media (prefers-reduced-motion: reduce) {
+      html.viper .card::before,
+      html.viper .hdr-title em,
+      html.viper .hdr-eyebrow .pip { animation: none; }
     }
 
     /* ─── CARD BORDER SVG ─── */
@@ -923,6 +1066,29 @@
           grad.appendChild(stop);
         });
         defs.appendChild(grad);
+
+        // Viper: pastel rainbow comet — gradient slowly rotates via SMIL
+        var gradV = document.createElementNS(NS, 'linearGradient');
+        gradV.id = gid + 'v';
+        gradV.setAttribute('x1', '0%'); gradV.setAttribute('y1', '0%');
+        gradV.setAttribute('x2', '100%'); gradV.setAttribute('y2', '100%');
+        [['0%','#ffb3c8'], ['20%','#ffd9a8'], ['40%','#fdffb0'],
+         ['60%','#b3ffc9'], ['80%','#a8e4ff'], ['100%','#d9b8ff']].forEach(function(s) {
+          var stop = document.createElementNS(NS, 'stop');
+          stop.setAttribute('offset', s[0]);
+          stop.setAttribute('stop-color', s[1]);
+          gradV.appendChild(stop);
+        });
+        var spin = document.createElementNS(NS, 'animateTransform');
+        spin.setAttribute('attributeName', 'gradientTransform');
+        spin.setAttribute('type', 'rotate');
+        spin.setAttribute('from', '0 0.5 0.5');
+        spin.setAttribute('to', '360 0.5 0.5');
+        spin.setAttribute('dur', '6s');
+        spin.setAttribute('repeatCount', 'indefinite');
+        gradV.appendChild(spin);
+        defs.appendChild(gradV);
+
         svg.appendChild(defs);
 
         function makeRect(sw, blurPx, baseOp) {
@@ -975,7 +1141,9 @@
 
         card.addEventListener('mouseenter', function() {
           if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = null; }
+          var useId = document.documentElement.classList.contains('viper') ? gid + 'v' : gid;
           [trailRect, headRect, headGlow].forEach(function(r) {
+            r.style.stroke = 'url(#' + useId + ')';
             r.style.transition = 'none';
             r.style.strokeDashoffset = '1000';
             r.style.opacity = '0';
@@ -1067,8 +1235,12 @@
       window.addEventListener('scroll', scheduleMeasure, { passive: true });
 
       var raf = 0, mx = 0, my = 0;
+      function clearBlush(l) {
+        if (l.style.color) { l.style.color = ''; l.style.textShadow = ''; }
+      }
       function apply() {
         raf = 0;
+        var viper = document.documentElement.classList.contains('viper');
         for (var i = 0; i < letters.length; i++) {
           var c = centers[i];
           var dx = c.x - mx, dy = c.y - my;
@@ -1078,8 +1250,17 @@
             var px = (dx / dist) * force * MAX_PUSH;
             var py = (dy / dist) * force * MAX_PUSH;
             letters[i].style.transform = 'translate(' + px.toFixed(1) + 'px,' + py.toFixed(1) + 'px)';
+            if (viper) {
+              // blush: push direction picks the pastel hue, force pulls it away from white
+              var hue = (Math.atan2(dy, dx) * 57.2958 + 180).toFixed(0);
+              letters[i].style.color = 'hsl(' + hue + ', 95%, ' + (90 - force * 14).toFixed(0) + '%)';
+              letters[i].style.textShadow = '0 0 ' + (force * 22).toFixed(0) + 'px hsla(' + hue + ', 95%, 75%, 0.8)';
+            } else {
+              clearBlush(letters[i]);
+            }
           } else {
             letters[i].style.transform = '';
+            clearBlush(letters[i]);
           }
         }
       }
@@ -1091,7 +1272,7 @@
 
       document.addEventListener('mouseleave', function () {
         if (raf) { cancelAnimationFrame(raf); raf = 0; }
-        letters.forEach(function (l) { l.style.transform = ''; });
+        letters.forEach(function (l) { l.style.transform = ''; clearBlush(l); });
       });
     })();
   </script>
@@ -1103,18 +1284,29 @@
       const icon  = btn.querySelector('.toggle-icon');
       const label = btn.querySelector('.toggle-label');
 
-      function applyTheme(isLight) {
-        root.classList.toggle('light', isLight);
-        icon.textContent  = isLight ? '☾' : '☀';
-        label.textContent = isLight ? 'Dark' : 'Light';
+      const THEMES = ['viper', 'dark', 'light'];
+      const META = {
+        viper: { icon: '❋', label: 'Viper' },
+        dark:  { icon: '☀', label: 'Ember' },
+        light: { icon: '☾', label: 'Light' },
+      };
+
+      function applyTheme(theme) {
+        root.classList.toggle('light', theme === 'light');
+        root.classList.toggle('viper', theme === 'viper');
+        icon.textContent  = META[theme].icon;
+        label.textContent = META[theme].label;
+        document.dispatchEvent(new CustomEvent('themechange', { detail: { theme: theme } }));
       }
 
-      applyTheme(localStorage.getItem('theme') === 'light');
+      let theme = localStorage.getItem('theme');
+      if (THEMES.indexOf(theme) === -1) theme = 'viper';
+      applyTheme(theme);
 
       btn.addEventListener('click', function () {
-        const isLight = !root.classList.contains('light');
-        applyTheme(isLight);
-        localStorage.setItem('theme', isLight ? 'light' : 'dark');
+        theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+        applyTheme(theme);
+        localStorage.setItem('theme', theme);
       });
     })();
   </script>
@@ -1359,17 +1551,16 @@
         });
       });
 
-      /* ── 3D TILT ── */
-      var MAX_TILT = 10;
-
+      /* ── CURSOR SPOTLIGHT — writes --mx/--my consumed by .card::before ──
+         (replaces the old 3D tilt: perspective/rotate renders the card on a
+         3D plane => GPU resamples => blurry text. Lift is CSS top:-6px.) */
       cards.forEach(function (card) {
-        var isWide = card.classList.contains('card-wide');
-        var scale  = 1;   // no zoom — scale>1 upscales the layer bitmap => blurry text
         var raf = 0, nx = 0, ny = 0, rect = null;
 
         function apply() {
-          raf = 0;   // 3D tilt disabled: perspective/rotate renders the card on a
-                     // 3D plane => GPU resamples => blurry text. Lift is CSS top:-6px.
+          raf = 0;
+          card.style.setProperty('--mx', (nx * 100 + 50).toFixed(1) + '%');
+          card.style.setProperty('--my', (ny * 100 + 50).toFixed(1) + '%');
         }
 
         // Cache geometry on enter so mousemove never forces a sync layout read.

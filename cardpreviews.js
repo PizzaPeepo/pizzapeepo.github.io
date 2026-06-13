@@ -6,12 +6,15 @@
   var CORAL  = 'rgba(255,107,71,';
   var LITE_G = 'rgba(160,80,0,';
   var LITE_C = 'rgba(180,50,20,';
+  var VIP_G  = 'rgba(65,241,149,';
+  var VIP_C  = 'rgba(195,245,80,';
 
-  function isLight() {
-    return document.documentElement.classList.contains('light');
+  function theme() {
+    var cls = document.documentElement.classList;
+    return cls.contains('viper') ? 2 : cls.contains('light') ? 1 : 0;
   }
-  function g(a) { return (isLight() ? LITE_G : GOLD) + a + ')'; }
-  function c(a) { return (isLight() ? LITE_C : CORAL) + a + ')'; }
+  function g(a) { var t = theme(); return (t === 2 ? VIP_G : t === 1 ? LITE_G : GOLD) + a + ')'; }
+  function c(a) { var t = theme(); return (t === 2 ? VIP_C : t === 1 ? LITE_C : CORAL) + a + ')'; }
 
   /* ── Per-card draw functions ── */
   var DEMOS = [

@@ -80,6 +80,7 @@
     'in vec2  vScrPos;',
     'uniform float uTime;',
     'uniform float uLight;',
+    'uniform float uViper;',
     'out vec4 fragColor;',
     '',
     'void main() {',
@@ -103,10 +104,24 @@
     '  vec3 cl  = t < 0.5 ? mix(l0, l1, t * 2.0) : mix(l1, l2, (t - 0.5) * 2.0);',
     '  vec3 col = mix(cd, cl, uLight);',
     '',
+    '  // Viper ramp: black -> emerald -> bright venom',
+    '  vec3 v0 = vec3(0.02, 0.06, 0.04);',
+    '  vec3 v1 = vec3(0.04, 0.58, 0.26);',
+    '  vec3 v2 = vec3(0.28, 1.00, 0.50);',
+    '  vec3 cv = t < 0.5 ? mix(v0, v1, t * 2.0) : mix(v1, v2, (t - 0.5) * 2.0);',
+    '  col = mix(col, cv, uViper);',
+    '',
     '  // Trail glow — bright gold in dark, deep amber in light',
     '  vec3 trailDark  = vec3(1.00, 0.96, 0.72);',
     '  vec3 trailLight = vec3(0.70, 0.35, 0.02);',
-    '  col = mix(col, mix(trailDark, trailLight, uLight), vTrail * 0.88);',
+    '  vec3 trailCol = mix(trailDark, trailLight, uLight);',
+    '',
+    '  // Viper trail: pastel rainbow, hue drifts with time + position',
+    '  float hue = fract(uTime * 0.08 + vScrPos.x * 0.18 + vScrPos.y * 0.10);',
+    '  vec3 rb = clamp(abs(mod(hue * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);',
+    '  trailCol = mix(trailCol, mix(vec3(1.0), rb, 0.5), uViper);',
+    '',
+    '  col = mix(col, trailCol, vTrail * 0.88);',
     '',
     '  float a = mix(0.12 + t * 0.50, 0.72 + t * 0.26, uLight) * soft;',
     '  a = mix(a, soft * 0.95, vTrail * 0.65);',
@@ -153,10 +168,12 @@
   canvas.insertAdjacentElement('afterend', tint);
 
   function updateTint() {
-    var lite = document.documentElement.classList.contains('light');
-    tint.style.background = lite
-      ? 'rgba(250,245,238,0.38)'
-      : 'rgba(24,18,16,0.58)';
+    var cls = document.documentElement.classList;
+    tint.style.background = cls.contains('viper')
+      ? 'rgba(2,7,5,0.40)'
+      : cls.contains('light')
+        ? 'rgba(250,245,238,0.38)'
+        : 'rgba(24,18,16,0.58)';
   }
   updateTint();
   new MutationObserver(updateTint).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
@@ -183,6 +200,7 @@
     uMouse:   gl.getUniformLocation(prog, 'uMouse'),
     uAspect:  gl.getUniformLocation(prog, 'uAspect'),
     uLight:   gl.getUniformLocation(prog, 'uLight'),
+    uViper:   gl.getUniformLocation(prog, 'uViper'),
     uRipples: gl.getUniformLocation(prog, 'uRipples[0]'),
     uTrail:   gl.getUniformLocation(prog, 'uTrail[0]'),
   };
@@ -198,6 +216,7 @@
 
   var DARK_BG  = [24/255, 18/255, 16/255];
   var LIGHT_BG = [250/255, 245/255, 238/255];
+  var VIPER_BG = [3/255, 8/255, 6/255];
 
   function resize() {
     canvas.width  = window.innerWidth;
@@ -235,8 +254,10 @@
   /* ── Render loop ── */
   function frame() {
     var t    = (performance.now() - t0) * 0.001;
-    var lite = document.documentElement.classList.contains('light') ? 1.0 : 0.0;
-    var bg   = lite ? LIGHT_BG : DARK_BG;
+    var cls  = document.documentElement.classList;
+    var lite = cls.contains('light') ? 1.0 : 0.0;
+    var vip  = cls.contains('viper') ? 1.0 : 0.0;
+    var bg   = vip ? VIPER_BG : lite ? LIGHT_BG : DARK_BG;
 
     gl.clearColor(bg[0], bg[1], bg[2], 1.0);
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -252,6 +273,7 @@
     gl.uniform2fv(LOC.uMouse, mouse);
     gl.uniform1f(LOC.uAspect, canvas.width / canvas.height);
     gl.uniform1f(LOC.uLight,  lite);
+    gl.uniform1f(LOC.uViper,  vip);
     gl.uniform4fv(LOC.uRipples, ripData);
     gl.uniform3fv(LOC.uTrail,   trailData);
 

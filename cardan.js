@@ -9,6 +9,7 @@
 	cvs.id = 'cardan-canvas';
 	var FILTER_DARK = 'drop-shadow(0 0 2px #fff8e7) drop-shadow(0 0 7px #fdd87a) drop-shadow(0 0 18px #f5a623) drop-shadow(0 0 36px rgba(245,120,20,0.5)) drop-shadow(0 0 60px rgba(220,80,10,0.22))';
 	var FILTER_LITE = 'drop-shadow(0 0 2px rgba(160,105,20,0.40)) drop-shadow(0 0 8px rgba(140,85,10,0.22)) drop-shadow(0 0 22px rgba(110,65,5,0.10))';
+	var FILTER_VIPER = 'drop-shadow(0 0 2px #eafff2) drop-shadow(0 0 7px #b3ffc9) drop-shadow(0 0 18px #41f195) drop-shadow(0 0 36px rgba(168,228,255,0.5)) drop-shadow(0 0 60px rgba(217,184,255,0.25))';
 	cvs.style.cssText = [
 		'position:fixed', 'top:0', 'left:0',
 		'width:100%', 'height:100%',
@@ -16,7 +17,8 @@
 		'opacity:0', 'transition:opacity 1.4s ease',
 	].join(';');
 	function updateFilter() {
-		cvs.style.filter = document.documentElement.classList.contains('light') ? FILTER_LITE : FILTER_DARK;
+		var cls = document.documentElement.classList;
+		cvs.style.filter = cls.contains('viper') ? FILTER_VIPER : cls.contains('light') ? FILTER_LITE : FILTER_DARK;
 	}
 	updateFilter();
 	document.addEventListener('themechange', updateFilter);
@@ -95,6 +97,7 @@
 		'in float vVis;',
 		'in float vLat;',
 		'uniform float uLight;',
+		'uniform float uViper;',
 		'uniform float uPulse;',
 		'uniform float uAlphaMul;',
 		'out vec4 fragColor;',
@@ -106,7 +109,10 @@
 		'  vec3 dark=mix(vec3(0.72,0.40,0.12),vec3(1.0,0.95,0.60),(vLat*0.5+0.5));',
 		'  vec3 lite=mix(vec3(0.50,0.18,0.02),vec3(0.78,0.35,0.04),(vLat*0.5+0.5));',
 		'  vec3 col=mix(dark,lite,uLight);',
+		'  vec3 vip=mix(vec3(0.08,0.66,0.32),vec3(0.42,1.0,0.60),(vLat*0.5+0.5));',
+		'  col=mix(col,vip,uViper);',
 		'  vec3 pulseCol=mix(vec3(1.0,0.95,0.75),vec3(0.90,0.42,0.06),uLight);',
+		'  pulseCol=mix(pulseCol,vec3(0.92,1.0,0.96),uViper);',
 		'  col=mix(col,pulseCol,uPulse*0.6);',
 		'  float soft=1.0-smoothstep(0.3,1.0,dot(c,c));',
 		'  fragColor=vec4(col,vis*soft*1.0*uAlphaMul);',
@@ -127,6 +133,7 @@
 		uPulse:    gl.getUniformLocation(progG, 'uPulse'),
 		uAlphaMul: gl.getUniformLocation(progG, 'uAlphaMul'),
 		uLight:    gl.getUniformLocation(progG, 'uLight'),
+		uViper:    gl.getUniformLocation(progG, 'uViper'),
 	} : null;
 
 	var LOC = {
@@ -362,6 +369,11 @@
 		[0.65, 0.42, 0.08, 1.0],
 		[0.65, 0.42, 0.08, 1.0],
 	];
+	var VIPER = [
+		[0.30, 0.96, 0.58, 1.0],
+		[0.30, 0.96, 0.58, 1.0],
+		[0.45, 1.00, 0.70, 1.0],
+	];
 	// Glow colors: lighter/warmer, used with additive blending
 	var DARK_GLOW = [
 		[1.0, 0.88, 0.42, 0.22],
@@ -400,8 +412,9 @@
 		gl.enable(gl.DEPTH_TEST);
 
 		var pv     = mul(persp(Math.PI / 3, W / H, 0.1, 20.0), tz(-3.5));
-		var isLite = document.documentElement.classList.contains('light');
-		var COLS   = isLite ? LITE : DARK;
+		var isLite  = document.documentElement.classList.contains('light');
+		var isViper = document.documentElement.classList.contains('viper');
+		var COLS   = isViper ? VIPER : isLite ? LITE : DARK;
 		var GCOLS  = isLite ? LITE_GLOW : DARK_GLOW;
 		var offset = txy(1.55, 1.15);
 
@@ -475,6 +488,7 @@
 			gl.uniform1f(LOC_G.uPulse, pulseVal);
 			gl.uniform1f(LOC_G.uAlphaMul, 1.0);
 			gl.uniform1f(LOC_G.uLight, isLite ? 1.0 : 0.0);
+			gl.uniform1f(LOC_G.uViper, isViper ? 1.0 : 0.0);
 			gl.bindBuffer(gl.ARRAY_BUFFER, window._cardanGlobeVBO);
 			gl.enableVertexAttribArray(LOC_G.aPos);
 			gl.vertexAttribPointer(LOC_G.aPos, 3, gl.FLOAT, false, 0, 0);

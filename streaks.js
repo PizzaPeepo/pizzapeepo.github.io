@@ -41,6 +41,7 @@
       wo:  1.2 + Math.random() * 3.2,
       wc:  0.4 + Math.random() * 1.1,
       as:  0.35 + Math.random() * 0.65,
+      hue: Math.floor(Math.random() * 360),
       t: 0, dur: IN_DUR,
       state: 'in',
       alpha: 0,
@@ -80,7 +81,9 @@
     prevNow = now;
     ctx.clearRect(0, 0, cvs.width, cvs.height);
 
-    var isLight = document.documentElement.classList.contains('light');
+    var cls     = document.documentElement.classList;
+    var isViper = cls.contains('viper');
+    var isLight = cls.contains('light');
     var gold = isLight ? '200,85,5'  : '245,166,35';
     var hot  = isLight ? '220,100,0' : '255,235,130';
 
@@ -114,15 +117,23 @@
       var tx   = s.x - DIR_X * fLen;
       var ty   = s.y - DIR_Y * fLen;
 
+      // color prefixes — viper streaks each carry their own pastel hue
+      var mainPre = 'rgba(' + gold + ',';
+      var hotPre  = 'rgba(' + hot  + ',';
+      if (isViper) {
+        mainPre = 'hsla(' + s.hue + ',95%,78%,';
+        hotPre  = 'hsla(' + s.hue + ',95%,90%,';
+      }
+
       var grad = ctx.createLinearGradient(tx, ty, s.x, s.y);
-      grad.addColorStop(0,    'rgba(' + gold + ',0)');
-      grad.addColorStop(0.35, 'rgba(' + gold + ',' + (a * 0.20).toFixed(3) + ')');
-      grad.addColorStop(0.75, 'rgba(' + gold + ',' + (a * 0.80).toFixed(3) + ')');
-      grad.addColorStop(1,    'rgba(' + hot  + ',' + a.toFixed(3) + ')');
+      grad.addColorStop(0,    mainPre + '0)');
+      grad.addColorStop(0.35, mainPre + (a * 0.20).toFixed(3) + ')');
+      grad.addColorStop(0.75, mainPre + (a * 0.80).toFixed(3) + ')');
+      grad.addColorStop(1,    hotPre  + a.toFixed(3) + ')');
 
       ctx.save();
       ctx.shadowBlur  = 30;
-      ctx.shadowColor = 'rgba(' + gold + ',1)';
+      ctx.shadowColor = mainPre + '1)';
       ctx.strokeStyle = grad;
       ctx.lineWidth   = s.wo;
       ctx.lineCap     = 'round';
@@ -131,9 +142,9 @@
       ctx.lineTo(s.x, s.y);
       ctx.stroke();
       ctx.shadowBlur  = 8;
-      ctx.shadowColor = 'rgba(' + hot + ',1)';
+      ctx.shadowColor = hotPre + '1)';
       ctx.lineWidth   = s.wc;
-      ctx.strokeStyle = 'rgba(' + hot + ',' + (a * 0.95).toFixed(3) + ')';
+      ctx.strokeStyle = hotPre + (a * 0.95).toFixed(3) + ')';
       ctx.beginPath();
       ctx.moveTo(tx, ty);
       ctx.lineTo(s.x, s.y);
