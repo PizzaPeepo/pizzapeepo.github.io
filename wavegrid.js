@@ -105,9 +105,9 @@
     '  vec3 col = mix(cd, cl, uLight);',
     '',
     '  // Viper ramp: black -> emerald -> bright venom',
-    '  vec3 v0 = vec3(0.02, 0.06, 0.04);',
-    '  vec3 v1 = vec3(0.04, 0.58, 0.26);',
-    '  vec3 v2 = vec3(0.28, 1.00, 0.50);',
+    '  vec3 v0 = vec3(0.02, 0.12, 0.05);',
+    '  vec3 v1 = vec3(0.07, 0.82, 0.16);',
+    '  vec3 v2 = vec3(0.18, 1.00, 0.22);',
     '  vec3 cv = t < 0.5 ? mix(v0, v1, t * 2.0) : mix(v1, v2, (t - 0.5) * 2.0);',
     '  col = mix(col, cv, uViper);',
     '',
@@ -125,7 +125,7 @@
     '',
     '  float a = mix(0.12 + t * 0.50, 0.72 + t * 0.26, uLight) * soft;',
     '  a = mix(a, soft * 0.95, vTrail * 0.65);',
-    '  fragColor = vec4(col, a);',
+    '  fragColor = vec4(col, min(a * (1.0 + uViper * 0.8), 0.98));',
     '}'
   ].join('\n');
 
@@ -170,7 +170,7 @@
   function updateTint() {
     var cls = document.documentElement.classList;
     tint.style.background = cls.contains('viper')
-      ? 'rgba(2,7,5,0.40)'
+      ? 'rgba(2,7,5,0.18)'
       : cls.contains('light')
         ? 'rgba(250,245,238,0.38)'
         : 'rgba(24,18,16,0.58)';

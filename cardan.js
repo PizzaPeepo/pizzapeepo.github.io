@@ -9,7 +9,7 @@
 	cvs.id = 'cardan-canvas';
 	var FILTER_DARK = 'drop-shadow(0 0 2px #fff8e7) drop-shadow(0 0 7px #fdd87a) drop-shadow(0 0 18px #f5a623) drop-shadow(0 0 36px rgba(245,120,20,0.5)) drop-shadow(0 0 60px rgba(220,80,10,0.22))';
 	var FILTER_LITE = 'drop-shadow(0 0 2px rgba(160,105,20,0.40)) drop-shadow(0 0 8px rgba(140,85,10,0.22)) drop-shadow(0 0 22px rgba(110,65,5,0.10))';
-	var FILTER_VIPER = 'drop-shadow(0 0 2px #eafff2) drop-shadow(0 0 7px #b3ffc9) drop-shadow(0 0 18px #41f195) drop-shadow(0 0 36px rgba(168,228,255,0.5)) drop-shadow(0 0 60px rgba(217,184,255,0.25))';
+	var FILTER_VIPER = 'drop-shadow(0 0 2px #eafff2) drop-shadow(0 0 7px #a6ff84) drop-shadow(0 0 18px #22ff22) drop-shadow(0 0 36px rgba(34,255,34,0.60)) drop-shadow(0 0 60px rgba(20,220,20,0.34))';
 	cvs.style.cssText = [
 		'position:fixed', 'top:0', 'left:0',
 		'width:100%', 'height:100%',
@@ -46,7 +46,7 @@
 		'  vec3 N = normalize(uNorm * aNorm);',
 		'  vec3 L = normalize(vec3(0.6, 1.0, 0.7));',
 		'  float diff = max(dot(N, L), 0.0);',
-		'  vLight = mix(1.0, 0.42 + 0.58 * diff, uShade);',
+		'  vLight = mix(1.0, 0.05 + 0.95 * diff, uShade);',
 		'  gl_Position = uMVP * vec4(aPos, 1.0);',
 		'}',
 	].join('\n');
@@ -109,10 +109,10 @@
 		'  vec3 dark=mix(vec3(0.72,0.40,0.12),vec3(1.0,0.95,0.60),(vLat*0.5+0.5));',
 		'  vec3 lite=mix(vec3(0.50,0.18,0.02),vec3(0.78,0.35,0.04),(vLat*0.5+0.5));',
 		'  vec3 col=mix(dark,lite,uLight);',
-		'  vec3 vip=mix(vec3(0.08,0.66,0.32),vec3(0.42,1.0,0.60),(vLat*0.5+0.5));',
+		'  vec3 vip=mix(vec3(0.04,0.34,0.06),vec3(0.22,1.0,0.18),(vLat*0.5+0.5));',
 		'  col=mix(col,vip,uViper);',
 		'  vec3 pulseCol=mix(vec3(1.0,0.95,0.75),vec3(0.90,0.42,0.06),uLight);',
-		'  pulseCol=mix(pulseCol,vec3(0.92,1.0,0.96),uViper);',
+		'  pulseCol=mix(pulseCol,vec3(0.40,1.0,0.26),uViper);',
 		'  col=mix(col,pulseCol,uPulse*0.6);',
 		'  float soft=1.0-smoothstep(0.3,1.0,dot(c,c));',
 		'  fragColor=vec4(col,vis*soft*1.0*uAlphaMul);',
@@ -370,9 +370,9 @@
 		[0.65, 0.42, 0.08, 1.0],
 	];
 	var VIPER = [
-		[0.30, 0.96, 0.58, 1.0],
-		[0.30, 0.96, 0.58, 1.0],
-		[0.45, 1.00, 0.70, 1.0],
+		[0.13, 1.00, 0.13, 1.0],
+		[0.13, 1.00, 0.13, 1.0],
+		[0.26, 1.00, 0.22, 1.0],
 	];
 	// Glow colors: lighter/warmer, used with additive blending
 	var DARK_GLOW = [
@@ -446,8 +446,8 @@
 			gl.uniformMatrix4fv(LOC.uMVP,  false, mul(pv, model));
 			gl.uniformMatrix3fv(LOC.uNorm, false, mat3of(model));
 			var c = COLS[i];
-			var bandA  = isLite ? 0.55 : 0.12;
-			var bandMul = isLite ? 0.45 : 0.08;
+			var bandA  = isLite ? 0.28 : 0.06;
+			var bandMul = isLite ? 0.22 : 0.04;
 			gl.uniform4fv(LOC.uCol, new Float32Array([c[0] * bandMul, c[1] * bandMul, c[2] * bandMul, bandA]));
 			gl.bindVertexArray(ring.vao);
 			gl.drawElements(gl.TRIANGLES, ring.count, gl.UNSIGNED_INT, 0);
