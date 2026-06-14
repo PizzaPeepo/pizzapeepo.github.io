@@ -55,11 +55,11 @@ let dt = 0.01;
 let paused = false;
 let massEach = BASE_DISK_MASS / count;
 let trailFade = 0.90;         // afterimage damp; 0 = trails off
-let bloomMode = 2;            // 0 = off, 1 = low, 2 = high
+let bloomMode = 1;            // 0 = off, 1 = low, 2 = high
 let gpuMode = false;          // false = CPU Barnes-Hut tree, true = GPU compute
 let dustFrac = 0.15;          // fraction of particles re-drawn as dark dust
 let dustN = 0;                // = round(count · dustFrac), kept by updateDustCount()
-let dofOn = false;            // depth-of-field post pass
+let dofOn = true;             // depth-of-field post pass
 
 // ── CPU particle state (structure-of-arrays; grown to GPU_MAX on first GPU use) ──
 let px = new Float32Array(MAX), py = new Float32Array(MAX), pz = new Float32Array(MAX);
@@ -123,8 +123,8 @@ const densNormU = uniform(1.0);     // adaptive density → brightness normaliza
 // Max blur kicks in at UV radius = maxblur / (radialScale * aperture).
 const focusU = uniform(0);          // focal plane at screen center (sun)
 const radialScaleU = uniform(800);  // larger = tighter focus zone
-const apertureU = uniform(0.00003); // blur growth per radial unit
-const maxblurU = uniform(0.016);    // blur cap in UV units
+const apertureU = uniform(0.000035); // blur growth per radial unit
+const maxblurU = uniform(0.032);    // blur cap in UV units
 
 // ── GPU-compute uniforms ──
 const countU = uniform(0, 'uint');
@@ -895,7 +895,7 @@ async function init() {
 
 	// query params (used by automated checks too): ?compute=gpu&count=300000&dof=1&dust=0.2
 	const q = new URLSearchParams(window.location.search);
-	if (q.get('compute') === 'gpu') await setComputeMode(true);
+	if (q.get('compute') !== 'cpu') await setComputeMode(true); // GPU default; ?compute=cpu forces tree
 	if (q.has('count')) {
 		const sl = document.getElementById('countSlider');
 		sl.value = String(Math.log10(Math.max(1, +q.get('count') || 1)));
@@ -906,7 +906,7 @@ async function init() {
 		sl.value = q.get('dust');
 		sl.dispatchEvent(new Event('input'));
 	}
-	if (q.get('dof') === '1') document.getElementById('dofButton').click();
+	if (q.get('dof') === '0') document.getElementById('dofButton').click(); // DOF default on; ?dof=0 forces off
 
 	renderer.setAnimationLoop(animate);
 }
