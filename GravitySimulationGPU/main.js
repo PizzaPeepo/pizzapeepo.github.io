@@ -1062,6 +1062,10 @@ function wireUI() {
 	bindNum('dtSlider', 'dtValue', v => dt = v, v => v.toFixed(3));
 	bindNum('sizeSlider', 'sizeValue', v => sizeU.value = v, v => v.toFixed(1));
 	bindNum('thetaSlider', 'thetaValue', v => theta = v, v => v.toFixed(2));
+	bindNum('dofFocusSlider', 'dofFocusValue', v => focusU.value = v, v => v.toFixed(0));
+	bindNum('dofScaleSlider', 'dofScaleValue', v => radialScaleU.value = v, v => v.toFixed(0));
+	bindNum('dofApertureSlider', 'dofApertureValue', v => apertureU.value = v, v => v.toExponential(1));
+	bindNum('dofMaxblurSlider', 'dofMaxblurValue', v => maxblurU.value = v, v => v.toFixed(3));
 	bindNum('streakSlider', 'streakValue', v => streakU.value = v, v => v === 0 ? 'Off' : v.toFixed(3));
 	bindNum('dustSlider', 'dustValue', v => { dustFrac = v; updateDustCount(); }, v => v === 0 ? 'Off' : Math.round(v * 100) + '%');
 	bindNum('trailSlider', 'trailValue', v => {
