@@ -446,8 +446,8 @@
 			gl.uniformMatrix4fv(LOC.uMVP,  false, mul(pv, model));
 			gl.uniformMatrix3fv(LOC.uNorm, false, mat3of(model));
 			var c = COLS[i];
-			var bandA  = isLite ? 0.28 : 0.06;
-			var bandMul = isLite ? 0.22 : 0.04;
+			var bandA  = isLite ? 0.55 : isViper ? 0.06 : 0.12;
+			var bandMul = isLite ? 0.45 : isViper ? 0.04 : 0.08;
 			gl.uniform4fv(LOC.uCol, new Float32Array([c[0] * bandMul, c[1] * bandMul, c[2] * bandMul, bandA]));
 			gl.bindVertexArray(ring.vao);
 			gl.drawElements(gl.TRIANGLES, ring.count, gl.UNSIGNED_INT, 0);

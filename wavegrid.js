@@ -123,7 +123,8 @@
     '',
     '  col = mix(col, trailCol, vTrail * 0.88);',
     '',
-    '  float a = mix(0.12 + t * 0.50, 0.72 + t * 0.26, uLight) * soft;',
+    '  float aBase = mix(0.12 + t * 0.50, 0.72 + t * 0.26, uLight);',
+    '  float a = mix(aBase, 0.07 + t * 0.32, uViper) * soft;',
     '  a = mix(a, soft * 0.95, vTrail * 0.65);',
     '  fragColor = vec4(col, min(a * (1.0 + uViper * 0.8), 0.98));',
     '}'
@@ -170,7 +171,7 @@
   function updateTint() {
     var cls = document.documentElement.classList;
     tint.style.background = cls.contains('viper')
-      ? 'rgba(2,7,5,0.18)'
+      ? 'rgba(2,7,5,0.42)'
       : cls.contains('light')
         ? 'rgba(250,245,238,0.38)'
         : 'rgba(24,18,16,0.58)';
