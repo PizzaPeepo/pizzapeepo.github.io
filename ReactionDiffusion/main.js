@@ -12,7 +12,7 @@ var kill = 0.062;
 var stepsPerFrame = 10;
 var gridW = 200;
 var brushSize = 8;
-var palette = "ember"; // ember | ice | mono
+var palette = document.documentElement.classList.contains("viper") ? "viper" : "ember"; // viper | ember | ice | mono
 var paused = false;
 
 const dA = 1.0, dB = 0.5;
@@ -126,6 +126,15 @@ function colorFor(v, p) {
 		r = Math.round(v * 120);
 		g = Math.round(40 + v * 180);
 		b = Math.round(80 + v * 175);
+	} else if (palette === "viper") {
+		const g2 = v * v;
+		const baseR = 40 * g2;
+		const baseG = 255 * v;
+		const baseB = 69 * g2;
+		const w = Math.max(0, (v - 0.8) / 0.2)*0.75;
+		r = Math.round(baseR + (255 - baseR) * w);
+		g = Math.round(baseG + (255 - baseG) * w);
+		b = Math.round(baseB + (255 - baseB) * w);
 	} else {
 		// ember: black -> deep red -> orange -> pale gold
 		r = Math.round(Math.min(1, v * 2.2) * 255);
@@ -200,6 +209,10 @@ bindSlider("brushSlider", "brushValue", parseInt, Object.assign(function (v) {
 document.querySelectorAll('input[name="palette"]').forEach(function (radio) {
 	radio.addEventListener("change", function () { if (this.checked) palette = this.value; });
 });
+(function () {
+	var r = document.querySelector('input[name="palette"][value="' + palette + '"]');
+	if (r) r.checked = true;
+})();
 
 document.querySelectorAll('[data-f]').forEach(function (btn) {
 	btn.addEventListener("click", function () {
@@ -240,8 +253,12 @@ window.addEventListener("mousemove", function (e) { if (painting) paintAt(e.clie
 window.addEventListener("mouseup", function () { painting = false; });
 // #endregion
 
-// theme: palette is independent of light/dark; nothing to do
-document.addEventListener("themechange", function () {});
+document.addEventListener("themechange", function (e) {
+	if (e.detail.theme === "viper") palette = "viper";
+	else if (palette === "viper") palette = "ember";
+	var r = document.querySelector('input[name="palette"][value="' + palette + '"]');
+	if (r) r.checked = true;
+});
 
 // #region loop
 var fpsBadge = document.getElementById("fpsBadge");

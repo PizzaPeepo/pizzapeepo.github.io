@@ -19,6 +19,7 @@ var sites = [];        // {x, y, vx, vy, hue}
 var sampleH = 1;
 
 var isLight = document.documentElement.classList.contains("light");
+var isViper = document.documentElement.classList.contains("viper");
 // #endregion
 
 // #region canvas
@@ -63,7 +64,7 @@ function hslToRgb(h, s, l) {
 function refreshColors() {
 	siteR = []; siteG = []; siteB = [];
 	for (let i = 0; i < sites.length; i++) {
-		const [r, g, b] = hslToRgb(sites[i].hue, 0.6, isLight ? 0.6 : 0.5);
+		const [r, g, b] = hslToRgb(sites[i].hue, isViper ? 0.75 : 0.6, isLight ? 0.6 : 0.5);
 		siteR.push(r); siteG.push(g); siteB.push(b);
 	}
 }
@@ -105,7 +106,7 @@ function moveSites() {
 // #region render cells
 function renderCells() {
 	const n = sites.length;
-	if (n === 0) { ctx.fillStyle = isLight ? "#eee" : "#111"; ctx.fillRect(0, 0, canvasWidth, canvasHeight); return; }
+	if (n === 0) { ctx.fillStyle = isLight ? "#eee" : isViper ? "#030806" : "#111"; ctx.fillRect(0, 0, canvasWidth, canvasHeight); return; }
 	const sx = canvasWidth / sampleW;
 	const sy = canvasHeight / sampleH;
 	// site positions in buffer space
@@ -123,8 +124,9 @@ function renderCells() {
 			}
 			if (colorMode === "dist") {
 				const t = Math.min(Math.sqrt(bestD) / (sampleW * 0.18), 1);
-				const c = Math.round((isLight ? 235 : 30) + (isLight ? -180 : 200) * (1 - t));
-				pixels[p] = c; pixels[p + 1] = c; pixels[p + 2] = Math.round(c * (isLight ? 0.95 : 1.1));
+				const c = Math.round((isLight ? 235 : isViper ? 20 : 30) + (isLight ? -180 : isViper ? 230 : 200) * (1 - t));
+				if (isViper) { pixels[p] = Math.round(c * 0.05); pixels[p + 1] = c; pixels[p + 2] = Math.round(c * 0.2); }
+				else { pixels[p] = c; pixels[p + 1] = c; pixels[p + 2] = Math.round(c * (isLight ? 0.95 : 1.1)); }
 			} else {
 				// slight darkening toward cell edge for depth
 				const shade = Math.max(0.55, 1 - Math.sqrt(bestD) / (sampleW * 0.5));
@@ -145,15 +147,15 @@ function renderCells() {
 // #region render mesh
 function renderDelaunay(overlay) {
 	if (!overlay) {
-		ctx.fillStyle = isLight ? "#f2efe8" : "#0e0e12";
+		ctx.fillStyle = isLight ? "#f2efe8" : isViper ? "#030806" : "#0e0e12";
 		ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 	}
 	if (sites.length < 3) return;
 	const tris = triangulate(sites);
 	ctx.lineWidth = 1;
 	ctx.strokeStyle = overlay
-		? (isLight ? "rgba(20,20,20,0.5)" : "rgba(255,255,255,0.5)")
-		: (isLight ? "rgba(40,40,40,0.7)" : "rgba(230,220,200,0.7)");
+		? (isLight ? "rgba(20,20,20,0.5)" : isViper ? "rgba(40,255,69,0.4)" : "rgba(255,255,255,0.5)")
+		: (isLight ? "rgba(40,40,40,0.7)" : isViper ? "rgba(40,255,69,0.6)" : "rgba(230,220,200,0.7)");
 	ctx.beginPath();
 	for (const tr of tris) {
 		const a = sites[tr.a], b = sites[tr.b], c = sites[tr.c];
@@ -169,7 +171,7 @@ function drawPoints() {
 		const s = sites[i];
 		ctx.beginPath();
 		ctx.arc(s.x, s.y, 3, 0, Math.PI * 2);
-		ctx.fillStyle = isLight ? "#1a1a1a" : "#fff";
+		ctx.fillStyle = isLight ? "#1a1a1a" : isViper ? "#28ff45" : "#fff";
 		ctx.fill();
 	}
 }
@@ -189,6 +191,7 @@ function render() {
 // #region theme
 document.addEventListener("themechange", function (e) {
 	isLight = e.detail.isLight;
+	isViper = e.detail.theme === "viper";
 	refreshColors();
 });
 // #endregion

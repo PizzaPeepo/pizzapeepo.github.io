@@ -92,10 +92,11 @@ function drawSpokes() {
 
 function applyThemeColors(light) {
 	isLight = light;
-	bgColor = light ? '#f5ede0' : '#18140e';
+	var isViper = document.documentElement.classList.contains('viper');
+	bgColor = light ? '#f5ede0' : isViper ? '#030806' : '#18140e';
 	backgroundCanvas.style.background = bgColor;
-	spokeColor = light ? 'rgba(40,25,10,0.13)' : 'rgba(255,255,255,0.12)';
-	monoColor  = light ? 'rgba(40,25,10,0.95)' : 'rgba(245,232,212,1)';
+	spokeColor = light ? 'rgba(40,25,10,0.13)' : isViper ? 'rgba(40,255,69,0.10)' : 'rgba(255,255,255,0.12)';
+	monoColor  = light ? 'rgba(40,25,10,0.95)' : isViper ? 'rgba(168,255,166,1)' : 'rgba(245,232,212,1)';
 	buildColors();
 	drawSpokes();
 }
@@ -163,7 +164,7 @@ function renderFrame(phase, opacity) {
 	const phaseOffset = spread * (2 * Math.PI) / numberOfDots;
 	if (connect) {
 		fgCtx.globalAlpha = opacity * 0.5;
-		fgCtx.strokeStyle = colorMode === 'mono' ? monoColor : (isLight ? 'rgba(180,110,0,0.6)' : 'rgba(255,200,110,0.5)');
+		fgCtx.strokeStyle = colorMode === 'mono' ? monoColor : (isLight ? 'rgba(180,110,0,0.6)' : document.documentElement.classList.contains('viper') ? 'rgba(40,255,69,0.6)' : 'rgba(255,200,110,0.5)');
 		fgCtx.lineWidth = 1.5;
 		fgCtx.beginPath();
 		for (let j = 0; j < numberOfDots; j++) {

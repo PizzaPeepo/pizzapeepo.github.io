@@ -25,6 +25,7 @@ var maxDisplay = 6.0;    // scent value mapped to full brightness
 var mouse = { x: 0, y: 0, active: false };
 
 var isLight = document.documentElement.classList.contains("light");
+var isViper = document.documentElement.classList.contains("viper");
 // #endregion
 
 // #region canvas
@@ -170,7 +171,8 @@ function render() {
 		let r, g, b;
 		if (palette === "mono") {
 			const c = Math.round(v * 255);
-			r = g = b = isLight ? 255 - c : c;
+			if (isViper) { r = Math.round(c * 0.08); g = c; b = Math.round(c * 0.25); }
+			else { r = g = b = isLight ? 255 - c : c; }
 		} else if (palette === "plasma") {
 			r = Math.round(Math.min(1, v * 1.6) * 255);
 			g = Math.round(Math.max(0, Math.min(1, v * 1.8 - 0.3)) * 120);
@@ -265,7 +267,7 @@ window.addEventListener("mousemove", function (e) { if (mouse.active) setMouse(e
 window.addEventListener("mouseup", function () { mouse.active = false; });
 // #endregion
 
-document.addEventListener("themechange", function (e) { isLight = e.detail.isLight; });
+document.addEventListener("themechange", function (e) { isLight = e.detail.isLight; isViper = e.detail.theme === "viper"; });
 
 // #region loop
 var fpsBadge = document.getElementById("fpsBadge");

@@ -26,6 +26,7 @@ const N = 1, E = 2, S = 4, W = 8;
 var darkBg = "#0e0f13";
 var lightBg = "#eceae3";
 var isLight = document.documentElement.classList.contains("light");
+var isViper = document.documentElement.classList.contains("viper");
 // #endregion
 
 // #region canvas
@@ -229,7 +230,8 @@ function setStatus(s) { statusLabel.textContent = s; }
 
 function applyThemeColors(light) {
 	isLight = light;
-	backgroundCanvas.style.background = light ? lightBg : darkBg;
+	isViper = document.documentElement.classList.contains("viper");
+	backgroundCanvas.style.background = light ? lightBg : isViper ? "#030806" : darkBg;
 }
 
 // #region render
@@ -239,21 +241,21 @@ function fillCell(i, style) {
 }
 
 function render() {
-	ctx.fillStyle = isLight ? lightBg : darkBg;
+	ctx.fillStyle = isLight ? lightBg : isViper ? "#030806" : darkBg;
 	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
 	// visited / frontier overlays
 	if (search) {
 		const st = search.state;
 		for (let i = 0; i < st.length; i++) {
-			if (st[i] === 2) fillCell(i, isLight ? "rgba(245,166,35,0.18)" : "rgba(245,166,35,0.14)");
-			else if (st[i] === 1) fillCell(i, isLight ? "rgba(255,107,71,0.4)" : "rgba(255,107,71,0.35)");
+			if (st[i] === 2) fillCell(i, isLight ? "rgba(245,166,35,0.18)" : isViper ? "rgba(40,255,69,0.12)" : "rgba(245,166,35,0.14)");
+			else if (st[i] === 1) fillCell(i, isLight ? "rgba(255,107,71,0.4)" : isViper ? "rgba(107,255,40,0.30)" : "rgba(255,107,71,0.35)");
 		}
 	}
 
 	// generation frontier
 	if (phase === "gen") {
-		for (let i = 0; i < genVisited.length; i++) if (genVisited[i]) fillCell(i, isLight ? "rgba(120,120,140,0.12)" : "rgba(180,180,210,0.08)");
+		for (let i = 0; i < genVisited.length; i++) if (genVisited[i]) fillCell(i, isLight ? "rgba(120,120,140,0.12)" : isViper ? "rgba(40,255,69,0.06)" : "rgba(180,180,210,0.08)");
 		if (genStack.length) fillCell(genStack[genStack.length - 1], "rgba(255,107,71,0.6)");
 	}
 
@@ -261,8 +263,8 @@ function render() {
 	if (pathCells.length) {
 		const upto = Math.min(pathAnim, pathCells.length);
 		ctx.save();
-		if (!isLight) { ctx.shadowBlur = 14; ctx.shadowColor = "#ffb84d"; }
-		ctx.strokeStyle = isLight ? "#c25a00" : "#ffd27a";
+		if (!isLight) { ctx.shadowBlur = 14; ctx.shadowColor = isViper ? "#28ff45" : "#ffb84d"; }
+		ctx.strokeStyle = isLight ? "#c25a00" : isViper ? "#28ff45" : "#ffd27a";
 		ctx.lineWidth = Math.max(2, cellSize * 0.28);
 		ctx.lineJoin = "round";
 		ctx.lineCap = "round";
@@ -278,7 +280,7 @@ function render() {
 	}
 
 	// walls
-	ctx.strokeStyle = isLight ? "#2a2a30" : "#c9c4b4";
+	ctx.strokeStyle = isLight ? "#2a2a30" : isViper ? "#294d1f" : "#c9c4b4";
 	ctx.lineWidth = 1.5;
 	ctx.beginPath();
 	for (let i = 0; i < walls.length; i++) {
@@ -292,8 +294,8 @@ function render() {
 	ctx.stroke();
 
 	// start / goal markers
-	fillCell(startIdx, isLight ? "rgba(40,150,80,0.85)" : "rgba(80,210,120,0.85)");
-	fillCell(goalIdx, isLight ? "rgba(200,40,40,0.8)" : "rgba(255,90,90,0.85)");
+	fillCell(startIdx, isLight ? "rgba(40,150,80,0.85)" : isViper ? "rgba(40,255,120,0.85)" : "rgba(80,210,120,0.85)");
+	fillCell(goalIdx, isLight ? "rgba(200,40,40,0.8)" : isViper ? "rgba(255,60,60,0.85)" : "rgba(255,90,90,0.85)");
 }
 // #endregion
 
@@ -301,7 +303,7 @@ function render() {
 initGrid();
 applyThemeColors(isLight);
 generate();
-document.addEventListener("themechange", function (e) { applyThemeColors(e.detail.isLight); });
+document.addEventListener("themechange", function (e) { isViper = e.detail.theme === "viper"; applyThemeColors(e.detail.isLight); });
 // #endregion
 
 // #region resize

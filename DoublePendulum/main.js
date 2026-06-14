@@ -30,7 +30,8 @@ var waveTime = 0;
 var wave = null;
 
 var isLight = document.documentElement.classList.contains("light");
-var darkBg = "#18140e", lightBg = "#f5ede0";
+var isViper = document.documentElement.classList.contains("viper");
+var darkBg = "#18140e", viperBg = "#030806", lightBg = "#f5ede0";
 // #endregion
 
 // #region canvas
@@ -46,7 +47,7 @@ function applyCanvasSize() {
 applyCanvasSize();
 
 function clearCanvas() {
-	ctx.fillStyle = isLight ? lightBg : darkBg;
+	ctx.fillStyle = isLight ? lightBg : isViper ? viperBg : darkBg;
 	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 }
 // #endregion
@@ -54,10 +55,11 @@ function clearCanvas() {
 // #region theme
 function applyThemeColors(light) {
 	isLight = light;
-	backgroundCanvas.style.background = light ? lightBg : darkBg;
+	isViper = document.documentElement.classList.contains("viper");
+	backgroundCanvas.style.background = light ? lightBg : isViper ? viperBg : darkBg;
 }
 applyThemeColors(isLight);
-document.addEventListener("themechange", (e) => applyThemeColors(e.detail.isLight));
+document.addEventListener("themechange", (e) => { isViper = e.detail.theme === "viper"; applyThemeColors(e.detail.isLight); });
 // #endregion
 
 function maxTrailLength() {
@@ -214,7 +216,7 @@ function renderDouble() {
 			ctx.moveTo(pivotX, pivotY);
 			ctx.lineTo(pos.x1, pos.y1);
 			ctx.lineTo(pos.x2, pos.y2);
-			ctx.strokeStyle = isLight ? "rgba(60,40,20,0.45)" : "rgba(220,200,170,0.4)";
+			ctx.strokeStyle = isLight ? "rgba(60,40,20,0.45)" : isViper ? "rgba(40,255,69,0.35)" : "rgba(220,200,170,0.4)";
 			ctx.lineWidth = 1.5;
 			ctx.stroke();
 
@@ -227,7 +229,7 @@ function renderDouble() {
 	}
 
 	// Pivot marker
-	drawBob(pivotX, pivotY, 4, isLight ? "#3a2210" : "#a08060");
+	drawBob(pivotX, pivotY, 4, isLight ? "#3a2210" : isViper ? "#4f8f3f" : "#a08060");
 }
 
 function drawBob(x, y, r, color) {
@@ -254,7 +256,7 @@ function renderWave() {
 	ctx.beginPath();
 	ctx.moveTo(marginX - 20, railY);
 	ctx.lineTo(canvasWidth - marginX + 20, railY);
-	ctx.strokeStyle = isLight ? "rgba(60,40,20,0.35)" : "rgba(200,180,150,0.3)";
+	ctx.strokeStyle = isLight ? "rgba(60,40,20,0.35)" : isViper ? "rgba(40,255,69,0.25)" : "rgba(200,180,150,0.3)";
 	ctx.lineWidth = 2;
 	ctx.stroke();
 
@@ -268,7 +270,7 @@ function renderWave() {
 		ctx.beginPath();
 		ctx.moveTo(pivotX, railY);
 		ctx.lineTo(bx, by);
-		ctx.strokeStyle = isLight ? "rgba(60,40,20,0.3)" : "rgba(200,180,150,0.25)";
+		ctx.strokeStyle = isLight ? "rgba(60,40,20,0.3)" : isViper ? "rgba(40,255,69,0.20)" : "rgba(200,180,150,0.25)";
 		ctx.lineWidth = 1;
 		ctx.stroke();
 

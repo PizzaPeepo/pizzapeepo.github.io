@@ -30,6 +30,7 @@ var grabbed = -1;
 var darkBg = "#101015";
 var lightBg = "#efeae0";
 var isLight = document.documentElement.classList.contains("light");
+var isViper = document.documentElement.classList.contains("viper");
 // #endregion
 
 // #region canvas
@@ -91,7 +92,8 @@ function build() {
 
 function applyThemeColors(light) {
 	isLight = light;
-	backgroundCanvas.style.background = light ? lightBg : darkBg;
+	isViper = document.documentElement.classList.contains("viper");
+	backgroundCanvas.style.background = light ? lightBg : isViper ? "#030806" : darkBg;
 }
 
 // #region physics
@@ -135,12 +137,12 @@ function solve() {
 // #region render
 function strainColor(d, rest) {
 	const s = Math.min(Math.max((d / rest - 1) / (tearFactor - 1), 0), 1);
-	const hue = 200 - s * 200; // calm blue -> hot red as it stretches
+	const hue = isViper ? 120 - s * 120 : 200 - s * 200; // viper: green->red; dark: blue->red
 	return `hsl(${hue}, 80%, ${isLight ? 45 : 60}%)`;
 }
 
 function render() {
-	ctx.fillStyle = isLight ? lightBg : darkBg;
+	ctx.fillStyle = isLight ? lightBg : isViper ? "#030806" : darkBg;
 	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
 	if (drawMode === "solid") {
@@ -179,7 +181,7 @@ function render() {
 	}
 
 	// pinned anchors
-	ctx.fillStyle = isLight ? "#222" : "#fff";
+	ctx.fillStyle = isLight ? "#222" : isViper ? "#a8ffa6" : "#fff";
 	for (let i = 0; i < P.length; i++) {
 		if (P[i].pinned) { ctx.beginPath(); ctx.arc(P[i].x, P[i].y, 2.5, 0, Math.PI * 2); ctx.fill(); }
 	}
@@ -189,7 +191,7 @@ function render() {
 // #region init
 build();
 applyThemeColors(isLight);
-document.addEventListener("themechange", function (e) { applyThemeColors(e.detail.isLight); });
+document.addEventListener("themechange", function (e) { isViper = e.detail.theme === "viper"; applyThemeColors(e.detail.isLight); });
 // #endregion
 
 // #region resize

@@ -22,8 +22,10 @@ var drawing = false;
 var rawPoints = [];
 
 var darkBg = "#0c0d12";
+var viperBg = "#030806";
 var lightBg = "#efece4";
 var isLight = document.documentElement.classList.contains("light");
+var isViper = document.documentElement.classList.contains("viper");
 // #endregion
 
 // #region canvas
@@ -41,7 +43,8 @@ applyCanvasSize();
 
 function applyThemeColors(light) {
 	isLight = light;
-	backgroundCanvas.style.background = light ? lightBg : darkBg;
+	isViper = document.documentElement.classList.contains("viper");
+	backgroundCanvas.style.background = light ? lightBg : isViper ? viperBg : darkBg;
 }
 
 // #region transform
@@ -165,13 +168,13 @@ function epicycleChain(time) {
 }
 
 function render() {
-	ctx.fillStyle = isLight ? lightBg : darkBg;
+	ctx.fillStyle = isLight ? lightBg : isViper ? viperBg : darkBg;
 	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
 	if (epicycles.length === 0) return;
 
 	if (showOriginal && originalPath.length) {
-		ctx.strokeStyle = isLight ? "rgba(40,40,50,0.25)" : "rgba(200,200,220,0.2)";
+		ctx.strokeStyle = isLight ? "rgba(40,40,50,0.25)" : isViper ? "rgba(40,255,69,0.15)" : "rgba(200,200,220,0.2)";
 		ctx.lineWidth = 1;
 		ctx.beginPath();
 		for (let i = 0; i < originalPath.length; i++) {
@@ -190,12 +193,12 @@ function render() {
 			const a = chain[i], b = chain[i + 1];
 			const r = Math.hypot(b.x - a.x, b.y - a.y);
 			if (r > 0.5) {
-				ctx.strokeStyle = isLight ? "rgba(120,120,140,0.35)" : "rgba(180,180,210,0.22)";
+				ctx.strokeStyle = isLight ? "rgba(120,120,140,0.35)" : isViper ? "rgba(40,255,69,0.18)" : "rgba(180,180,210,0.22)";
 				ctx.beginPath();
 				ctx.arc(a.x, a.y, r, 0, Math.PI * 2);
 				ctx.stroke();
 			}
-			ctx.strokeStyle = isLight ? "rgba(180,50,20,0.6)" : "rgba(255,107,71,0.6)";
+			ctx.strokeStyle = isLight ? "rgba(180,50,20,0.6)" : isViper ? "rgba(107,255,40,0.65)" : "rgba(255,107,71,0.6)";
 			ctx.beginPath();
 			ctx.moveTo(a.x, a.y);
 			ctx.lineTo(b.x, b.y);
@@ -209,8 +212,8 @@ function render() {
 	if (trace.length > 1400) trace.pop();
 
 	ctx.save();
-	if (!isLight) { ctx.shadowBlur = 12; ctx.shadowColor = "#ffb84d"; }
-	ctx.strokeStyle = isLight ? "#b8860b" : "#ffd27a";
+	if (!isLight) { ctx.shadowBlur = 12; ctx.shadowColor = isViper ? "#28ff45" : "#ffb84d"; }
+	ctx.strokeStyle = isLight ? "#b8860b" : isViper ? "#28ff45" : "#ffd27a";
 	ctx.lineWidth = 2;
 	ctx.beginPath();
 	for (let i = 0; i < trace.length; i++) {
@@ -219,7 +222,7 @@ function render() {
 	ctx.stroke();
 
 	// tip dot
-	ctx.fillStyle = isLight ? "#b8860b" : "#fff2cc";
+	ctx.fillStyle = isLight ? "#b8860b" : isViper ? "#a8ffa6" : "#fff2cc";
 	ctx.beginPath();
 	ctx.arc(tip.x, tip.y, 3, 0, Math.PI * 2);
 	ctx.fill();
@@ -230,7 +233,7 @@ function render() {
 // #region init
 computeEpicycles(shapePoints("star"));
 applyThemeColors(isLight);
-document.addEventListener("themechange", function (e) { applyThemeColors(e.detail.isLight); });
+document.addEventListener("themechange", function (e) { isViper = e.detail.theme === "viper"; applyThemeColors(e.detail.isLight); });
 // #endregion
 
 // #region resize
@@ -325,9 +328,9 @@ window.addEventListener("mouseup", function () {
 
 // While drawing, show the in-progress stroke directly.
 function renderDrawing() {
-	ctx.fillStyle = isLight ? lightBg : darkBg;
+	ctx.fillStyle = isLight ? lightBg : isViper ? viperBg : darkBg;
 	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-	ctx.strokeStyle = isLight ? "#b8860b" : "#ffd27a";
+	ctx.strokeStyle = isLight ? "#b8860b" : isViper ? "#28ff45" : "#ffd27a";
 	ctx.lineWidth = 2;
 	ctx.beginPath();
 	for (let i = 0; i < rawPoints.length; i++) {

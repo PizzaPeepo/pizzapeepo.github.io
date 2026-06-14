@@ -57,7 +57,8 @@ applyCanvasSize();
 
 // #region theme
 function applyThemeColors(isLight) {
-	backgroundCanvas.style.background = isLight ? '#f5ede0' : '#18140e';
+	var isViper = document.documentElement.classList.contains('viper');
+	backgroundCanvas.style.background = isLight ? '#f5ede0' : isViper ? '#030806' : '#18140e';
 }
 onThemeChange(applyThemeColors);
 // #endregion

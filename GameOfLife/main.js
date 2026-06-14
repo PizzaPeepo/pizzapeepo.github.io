@@ -19,6 +19,7 @@ var generation = 0;
 var darkBg = "#0c0f0c";
 var lightBg = "#eef1ea";
 var isLight = document.documentElement.classList.contains("light");
+var isViper = document.documentElement.classList.contains("viper");
 // #endregion
 
 // #region canvas
@@ -102,7 +103,8 @@ const PENTADECATHLON = [
 
 function applyThemeColors(light) {
 	isLight = light;
-	backgroundCanvas.style.background = light ? lightBg : darkBg;
+	isViper = document.documentElement.classList.contains("viper");
+	backgroundCanvas.style.background = light ? lightBg : isViper ? "#030806" : darkBg;
 	render();
 }
 
@@ -140,15 +142,15 @@ function ageColor(a) {
 	// young = warm/bright, old = cool/settled
 	const t = Math.min(a / 60, 1);
 	const hue = 130 - t * 130; // green -> red as it survives
-	const lum = isLight ? 42 : 58;
+	const lum = isLight ? 42 : isViper ? 62 : 58;
 	return `hsl(${hue}, 70%, ${lum}%)`;
 }
 
 function render() {
-	ctx.fillStyle = isLight ? lightBg : darkBg;
+	ctx.fillStyle = isLight ? lightBg : isViper ? "#030806" : darkBg;
 	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-	const liveColor = isLight ? "#2a2a2a" : "#e8e2d4";
+	const liveColor = isLight ? "#2a2a2a" : isViper ? "#28ff45" : "#e8e2d4";
 	for (let y = 0; y < rows; y++) {
 		for (let x = 0; x < cols; x++) {
 			const i = y * cols + x;
@@ -159,7 +161,7 @@ function render() {
 	}
 
 	if (showGrid && cellSize >= 6) {
-		ctx.strokeStyle = isLight ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.06)";
+		ctx.strokeStyle = isLight ? "rgba(0,0,0,0.08)" : isViper ? "rgba(40,255,69,0.08)" : "rgba(255,255,255,0.06)";
 		ctx.lineWidth = 1;
 		ctx.beginPath();
 		for (let x = 0; x <= cols; x++) { ctx.moveTo(x * cellSize, 0); ctx.lineTo(x * cellSize, rows * cellSize); }
@@ -173,7 +175,7 @@ function render() {
 allocate();
 randomize();
 applyThemeColors(isLight);
-document.addEventListener("themechange", function (e) { applyThemeColors(e.detail.isLight); });
+document.addEventListener("themechange", function (e) { isViper = e.detail.theme === "viper"; applyThemeColors(e.detail.isLight); });
 // #endregion
 
 // #region resize

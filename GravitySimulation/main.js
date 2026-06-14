@@ -49,6 +49,12 @@ const themeColors = {
 		attraction: ['#3a2810', '#8a1530', '#c04060', '#ff70a0'],
 		repulsion:  ['#3a2810', '#1050b0', '#3090d0', '#50d0ff'],
 	},
+	viper: {
+		bg:         '#030806',
+		sun:        '#28ff45',
+		attraction: ['#e8ffe0', '#6bff28', '#28ff45', '#00cc20'],
+		repulsion:  ['#e8ffe0', '#5ce8c8', '#00ffcc', '#0088ff'],
+	},
 };
 
 const WallBehaviorEnum = Object.freeze({ none: 1, infinite: 2, collision: 3 });
@@ -233,7 +239,8 @@ function buildGlowSprites(lut) {
 }
 
 function applyThemeColors(isLight) {
-	const t = isLight ? themeColors.light : themeColors.dark;
+	const isViper = document.documentElement.classList.contains('viper');
+	const t = isLight ? themeColors.light : isViper ? themeColors.viper : themeColors.dark;
 	backgroundCanvas.style.background = t.bg;
 	sunColor        = helpers.HexToRGBA(t.sun);
 	attractionColors = t.attraction.map(c => helpers.HexToRGBA(c));
@@ -244,6 +251,7 @@ function applyThemeColors(isLight) {
 	repulsionSprites  = buildGlowSprites(repulsionLUT);
 	fadeColor = isLight
 		? 'rgba(245,237,224,' + TRAIL_FADE_SPEED + ')'
+		: isViper ? 'rgba(3,8,6,' + TRAIL_FADE_SPEED + ')'
 		: 'rgba(24,18,14,' + TRAIL_FADE_SPEED + ')';
 	bgCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 }

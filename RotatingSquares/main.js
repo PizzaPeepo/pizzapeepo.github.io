@@ -73,9 +73,10 @@ applyCanvasSize();
 // #region theme
 let bgColor = '#18140e';
 function applyThemeColors(isLight) {
-	bgColor = isLight ? '#f5ede0' : '#18140e';
+	var isViper = document.documentElement.classList.contains('viper');
+	bgColor = isLight ? '#f5ede0' : isViper ? '#030806' : '#18140e';
 	backgroundCanvas.style.background = bgColor;
-	strokeColor = isLight ? 'rgba(20, 10, 0, 1.0)' : 'rgba(255, 255, 255, 1.0)';
+	strokeColor = isLight ? 'rgba(20, 10, 0, 1.0)' : isViper ? 'rgba(40,255,69,0.85)' : 'rgba(255, 255, 255, 1.0)';
 	bgCtx.strokeStyle = strokeColor;
 }
 onThemeChange(applyThemeColors);

@@ -90,9 +90,10 @@ let rayColor  = 'rgba(255, 255, 255, 0.6)';
 
 function applyThemeColors(light) {
 	isLight = light;
-	canvas.style.background = light ? '#f5ede0' : '#18140e';
-	wallColor = light ? 'rgba(20, 10, 0, 1.0)'  : 'rgba(255, 255, 255, 1.0)';
-	rayColor  = light ? 'rgba(20, 10, 0, 0.5)'  : 'rgba(255, 255, 255, 0.6)';
+	var isViper = document.documentElement.classList.contains('viper');
+	canvas.style.background = light ? '#f5ede0' : isViper ? '#030806' : '#18140e';
+	wallColor = light ? 'rgba(20, 10, 0, 1.0)'  : isViper ? 'rgba(40,255,69,1.0)' : 'rgba(255, 255, 255, 1.0)';
+	rayColor  = light ? 'rgba(20, 10, 0, 0.5)'  : isViper ? 'rgba(40,255,69,0.5)' : 'rgba(255, 255, 255, 0.6)';
 }
 onThemeChange(applyThemeColors);
 // #endregion
@@ -249,7 +250,7 @@ function drawRays(raycaster) {
 	// light theme: plain dark strokes (additive is invisible on a light bg).
 	if (!isLight) {
 		ctx.globalCompositeOperation = 'lighter';
-		ctx.strokeStyle = 'rgba(255, 205, 95, 0.14)';
+		ctx.strokeStyle = document.documentElement.classList.contains('viper') ? 'rgba(40,255,69,0.10)' : 'rgba(255, 205, 95, 0.14)';
 		ctx.lineWidth = 1.2;
 	} else {
 		ctx.strokeStyle = rayColor;
@@ -274,10 +275,15 @@ function drawVisibilityPolygon(intersectionPoints, pos) {
 	// radial falloff from the source → lit area reads like a real torch beam
 	const litR = Math.max(canvas_width, canvas_height) * 0.6;
 	const grad = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, litR);
+	var _isViper = document.documentElement.classList.contains('viper');
 	if (isLight) {
 		grad.addColorStop(0,   'rgba(200, 140, 0, 0.22)');
 		grad.addColorStop(0.5, 'rgba(200, 140, 0, 0.10)');
 		grad.addColorStop(1,   'rgba(200, 140, 0, 0.02)');
+	} else if (_isViper) {
+		grad.addColorStop(0,   'rgba(40, 255, 69, 0.18)');
+		grad.addColorStop(0.5, 'rgba(40, 255, 69, 0.08)');
+		grad.addColorStop(1,   'rgba(40, 255, 69, 0.01)');
 	} else {
 		grad.addColorStop(0,   'rgba(255, 220, 110, 0.20)');
 		grad.addColorStop(0.5, 'rgba(255, 200, 80, 0.08)');
@@ -291,7 +297,7 @@ function drawVisibilityPolygon(intersectionPoints, pos) {
 function drawSourceGlow(pos) {
 	ctx.save();
 	const grad = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, 70);
-	grad.addColorStop(0, isLight ? 'rgba(200, 140, 0, 0.55)' : 'rgba(255, 220, 100, 0.55)');
+	grad.addColorStop(0, isLight ? 'rgba(200, 140, 0, 0.55)' : document.documentElement.classList.contains('viper') ? 'rgba(40, 255, 69, 0.55)' : 'rgba(255, 220, 100, 0.55)');
 	grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
 	ctx.fillStyle = grad;
 	ctx.beginPath();
@@ -303,7 +309,7 @@ function drawSourceGlow(pos) {
 function drawHighlightedWall(wall) {
 	if (!wall) return;
 	ctx.save();
-	ctx.strokeStyle = isLight ? 'rgba(200, 40, 0, 0.9)' : 'rgba(255, 80, 60, 0.9)';
+	ctx.strokeStyle = isLight ? 'rgba(200, 40, 0, 0.9)' : document.documentElement.classList.contains('viper') ? 'rgba(107,255,40,0.9)' : 'rgba(255, 80, 60, 0.9)';
 	ctx.lineWidth = 4;
 	ctx.beginPath();
 	wall.Draw(ctx);
@@ -314,7 +320,7 @@ function drawHighlightedWall(wall) {
 function drawWallPreview() {
 	if (!isDrawing || !drawStart || !drawCurrent) return;
 	ctx.save();
-	ctx.strokeStyle = isLight ? 'rgba(200, 100, 0, 0.7)' : 'rgba(255, 180, 60, 0.7)';
+	ctx.strokeStyle = isLight ? 'rgba(200, 100, 0, 0.7)' : document.documentElement.classList.contains('viper') ? 'rgba(40,255,69,0.7)' : 'rgba(255, 180, 60, 0.7)';
 	ctx.lineWidth = 2;
 	ctx.setLineDash([6, 4]);
 	ctx.beginPath();

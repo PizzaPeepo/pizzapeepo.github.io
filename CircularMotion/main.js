@@ -106,9 +106,10 @@ applyCanvasSize();
 let bgColor = '#18140e';
 let lineColor = 'rgba(255,255,255,0.85)';
 function applyThemeColors(isLight) {
-	bgColor = isLight ? '#f5ede0' : '#18140e';
+	var isViper = document.documentElement.classList.contains('viper');
+	bgColor = isLight ? '#f5ede0' : isViper ? '#030806' : '#18140e';
 	document.body.style.background = bgColor;
-	lineColor = isLight ? 'rgba(40,25,10,0.7)' : 'rgba(255,255,255,0.85)';
+	lineColor = isLight ? 'rgba(40,25,10,0.7)' : isViper ? 'rgba(40,255,69,0.85)' : 'rgba(255,255,255,0.85)';
 }
 onThemeChange(applyThemeColors);
 // #endregion

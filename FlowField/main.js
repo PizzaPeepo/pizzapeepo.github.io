@@ -23,8 +23,10 @@ var fieldTime = 0;
 var maxLife = 220;
 
 var darkCanvasBg = "#0d0b14";
+var viperCanvasBg = "#030806";
 var lightCanvasBg = "#f3eee6";
 var isLight = document.documentElement.classList.contains("light");
+var isViper = document.documentElement.classList.contains("viper");
 
 // cursor vortex — particles swirl around the pointer
 var mouse = { x: 0, y: 0, inside: false };
@@ -46,16 +48,17 @@ applyCanvasSize();
 
 // #region theme
 function clearCanvas() {
-	ctx.fillStyle = isLight ? lightCanvasBg : darkCanvasBg;
+	ctx.fillStyle = isLight ? lightCanvasBg : isViper ? viperCanvasBg : darkCanvasBg;
 	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 }
 function applyThemeColors(light) {
 	isLight = light;
-	backgroundCanvas.style.background = light ? lightCanvasBg : darkCanvasBg;
+	isViper = document.documentElement.classList.contains("viper");
+	backgroundCanvas.style.background = light ? lightCanvasBg : isViper ? viperCanvasBg : darkCanvasBg;
 	clearCanvas();
 }
 applyThemeColors(isLight);
-document.addEventListener("themechange", function (e) { applyThemeColors(e.detail.isLight); });
+document.addEventListener("themechange", function (e) { isViper = e.detail.theme === "viper"; applyThemeColors(e.detail.isLight); });
 // #endregion
 
 function spawnParticle(p) {
@@ -174,7 +177,7 @@ window.addEventListener("mouseout", function () { mouse.inside = false; });
 // #region rendering helpers
 function strokeColor(angle, speed) {
 	if (colorMode === "mono") {
-		return isLight ? "rgba(40,30,20,0.5)" : "rgba(230,220,205,0.5)";
+		return isLight ? "rgba(40,30,20,0.5)" : isViper ? "rgba(40,255,69,0.45)" : "rgba(230,220,205,0.5)";
 	}
 	if (colorMode === "speed") {
 		const t = Math.min(speed / (cfg.speed * 1.5), 1);
@@ -188,7 +191,7 @@ function strokeColor(angle, speed) {
 
 function drawFieldArrows() {
 	const step = cfg.scale * 4;
-	ctx.strokeStyle = isLight ? "rgba(60,50,40,0.35)" : "rgba(200,200,220,0.25)";
+	ctx.strokeStyle = isLight ? "rgba(60,50,40,0.35)" : isViper ? "rgba(40,255,69,0.18)" : "rgba(200,200,220,0.25)";
 	ctx.lineWidth = 1;
 	for (let y = step / 2; y < canvasHeight; y += step) {
 		for (let x = step / 2; x < canvasWidth; x += step) {
@@ -254,7 +257,7 @@ function draw(now) {
 	if (document.hidden) return;
 
 	// fade previous frame toward background
-	ctx.fillStyle = isLight ? `rgba(243,238,230,${fadeSpeed})` : `rgba(13,11,20,${fadeSpeed})`;
+	ctx.fillStyle = isLight ? `rgba(243,238,230,${fadeSpeed})` : isViper ? `rgba(3,8,6,${fadeSpeed})` : `rgba(13,11,20,${fadeSpeed})`;
 	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
 	if (!paused) step();

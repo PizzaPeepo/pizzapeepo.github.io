@@ -43,10 +43,11 @@ let bgColor = '#18140e';
 
 function applyThemeColors(light) {
 	isLight = light;
-	bgColor = light ? '#f5ede0' : '#18140e';
+	var isViper = document.documentElement.classList.contains('viper');
+	bgColor = light ? '#f5ede0' : isViper ? '#030806' : '#18140e';
 	backgroundCanvas.style.background = bgColor;
-	cellRGB = light ? '180, 110, 0'  : '255, 210, 120';
-	dotRGB  = light ? '60, 40, 20'   : '245, 232, 212';
+	cellRGB = light ? '180, 110, 0'  : isViper ? '40, 255, 69' : '255, 210, 120';
+	dotRGB  = light ? '60, 40, 20'   : isViper ? '168, 255, 166' : '245, 232, 212';
 }
 onThemeChange(applyThemeColors);
 applyThemeColors(isLight);

@@ -7,7 +7,7 @@ var canvasHeight = window.innerHeight;
 
 // Steering config — mutated live by the sliders.
 const cfg = {
-	count: 350,
+	count: 1000,
 	separation: 1.5,
 	alignment: 1.0,
 	cohesion: 0.9,
@@ -23,12 +23,14 @@ var paused = false;
 var trailsEnabled = true;
 var colorBySpeed = true;
 var fadeSpeed = 0.12;
-var mouseMode = "off"; // off | attract | repel
+var mouseMode = "repel"; // off | attract | repel
 var mousePos = { x: canvasWidth / 2, y: canvasHeight / 2, inside: false };
 
 var darkCanvasBg = "#18140e";
+var viperCanvasBg = "#030806";
 var lightCanvasBg = "#f5ede0";
 var isLight = document.documentElement.classList.contains("light");
+var isViper = document.documentElement.classList.contains("viper");
 
 let hash = new SpatialHash(cfg.perception);
 // #endregion
@@ -49,17 +51,19 @@ applyCanvasSize();
 // #region theme
 function applyThemeColors(light) {
 	isLight = light;
-	backgroundCanvas.style.background = light ? lightCanvasBg : darkCanvasBg;
+	isViper = document.documentElement.classList.contains("viper");
+	backgroundCanvas.style.background = light ? lightCanvasBg : isViper ? viperCanvasBg : darkCanvasBg;
 	clearCanvas();
 }
 applyThemeColors(isLight);
 document.addEventListener("themechange", function (e) {
+	isViper = e.detail.theme === "viper";
 	applyThemeColors(e.detail.isLight);
 });
 // #endregion
 
 function clearCanvas() {
-	ctx.fillStyle = isLight ? lightCanvasBg : darkCanvasBg;
+	ctx.fillStyle = isLight ? lightCanvasBg : isViper ? viperCanvasBg : darkCanvasBg;
 	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 }
 
@@ -198,11 +202,12 @@ function drawBoid(b) {
 
 	if (colorBySpeed) {
 		const t = Math.min(b.hue, 1); // 0 slow .. 1 fast
-		const hue = 45 - t * 35;      // gold -> coral
-		const lum = isLight ? 45 : 62;
-		ctx.fillStyle = `hsl(${hue}, 85%, ${lum}%)`;
+		const hue = isViper ? 120 - t * 40 : 45 - t * 35;
+		const lum = isLight ? 45 : isViper ? 65 : 62;
+		const sat = isViper ? 100 : 85;
+		ctx.fillStyle = `hsl(${hue}, ${sat}%, ${lum}%)`;
 	} else {
-		ctx.fillStyle = isLight ? "rgba(40,24,8,0.9)" : "rgba(245,210,150,0.9)";
+		ctx.fillStyle = isLight ? "rgba(40,24,8,0.9)" : isViper ? "rgba(40,255,69,0.9)" : "rgba(245,210,150,0.9)";
 	}
 	ctx.fill();
 }
@@ -248,7 +253,7 @@ function draw(now) {
 		// Fade previous frame toward background — leaves motion trails.
 		ctx.fillStyle = isLight
 			? `rgba(245,237,224,${fadeSpeed})`
-			: `rgba(24,20,14,${fadeSpeed})`;
+			: isViper ? `rgba(3,8,6,${fadeSpeed})` : `rgba(24,20,14,${fadeSpeed})`;
 		ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 	} else {
 		clearCanvas();

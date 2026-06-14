@@ -17,6 +17,7 @@ var sources = [];      // {x, y} in canvas px
 var t = 0;
 
 var isLight = document.documentElement.classList.contains("light");
+var isViper = document.documentElement.classList.contains("viper");
 // #endregion
 
 // #region canvas
@@ -151,7 +152,7 @@ function render() {
 }
 
 // #region theme — palette already neutral; just re-render
-document.addEventListener("themechange", function (e) { isLight = e.detail.isLight; });
+document.addEventListener("themechange", function (e) { isLight = e.detail.isLight; isViper = e.detail.theme === "viper"; });
 // #endregion
 
 // #region resize
