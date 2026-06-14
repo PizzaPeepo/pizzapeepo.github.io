@@ -6,19 +6,30 @@
   var icon  = btn.querySelector('.toggle-icon');
   var label = btn.querySelector('.toggle-label');
 
-  function applyTheme(isLight) {
-    root.classList.toggle('light', isLight);
-    if (icon)  icon.textContent  = isLight ? '☾' : '☀';
-    if (label) label.textContent = isLight ? 'Dark' : 'Light';
-    // Let demo JS react if it wants to
-    document.dispatchEvent(new CustomEvent('themechange', { detail: { isLight: isLight } }));
+  var THEMES = ['viper', 'dark', 'light'];
+  var META = {
+    viper: { icon: '❋', label: 'Viper' },
+    dark:  { icon: '☀', label: 'Ember' },
+    light: { icon: '☾', label: 'Light' },
+  };
+
+  function applyTheme(theme) {
+    root.classList.toggle('light', theme === 'light');
+    root.classList.toggle('viper', theme === 'viper');
+    if (icon)  icon.textContent  = META[theme].icon;
+    if (label) label.textContent = META[theme].label;
+    document.dispatchEvent(new CustomEvent('themechange', {
+      detail: { theme: theme, isLight: theme === 'light' }
+    }));
   }
 
-  applyTheme(localStorage.getItem('theme') === 'light');
+  var theme = localStorage.getItem('theme');
+  if (THEMES.indexOf(theme) === -1) theme = 'viper';
+  applyTheme(theme);
 
   btn.addEventListener('click', function () {
-    var isLight = !root.classList.contains('light');
-    applyTheme(isLight);
-    localStorage.setItem('theme', isLight ? 'light' : 'dark');
+    theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+    applyTheme(theme);
+    localStorage.setItem('theme', theme);
   });
 })();

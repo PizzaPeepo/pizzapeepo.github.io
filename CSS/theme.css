@@ -67,6 +67,38 @@ html.light {
   --canvas-bg: #18140e; /* always dark — simulations need it */
 }
 
+html.viper {
+  --bg:      #030806;
+  --bg-card: #07120b;
+  --bg-lift: #0b1a10;
+
+  --gold-hi:   #a8ffa6;
+  --gold:      #28ff45;
+  --gold-mid:  #16d83a;
+  --gold-lo:   #147a1f;
+  --gold-tint: rgba(40,255,69,0.18);
+
+  --coral-hi:   #d6ff8a;
+  --coral:      #6bff28;
+  --coral-mid:  #54e014;
+  --coral-lo:   #357d0c;
+  --coral-tint: rgba(107,255,40,0.18);
+
+  --tx:   #e8ffe0;
+  --tx-2: #84cf72;
+  --tx-3: #4f8f3f;
+  --tx-4: #294d1f;
+
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.45), 0 1px 2px rgba(0,0,0,0.30);
+  --shadow-md: 0 8px 28px rgba(0,0,0,0.55), 0 3px 8px rgba(0,0,0,0.35);
+  --shadow-lg: 0 20px 48px rgba(0,0,0,0.65), 0 6px 14px rgba(0,0,0,0.40);
+
+  --canvas-bg: #18140e;
+}
+
+html.viper .blob-1 { opacity: 0.10; }
+html.viper .blob-2 { opacity: 0.08; }
+
 /* ── BASE ── */
 html { scroll-behavior: smooth; }
 
