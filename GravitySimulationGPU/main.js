@@ -116,9 +116,15 @@ const streakU = uniform(0.02);      // velocity-stretch factor (long-exposure st
 const densNormU = uniform(1.0);     // adaptive density → brightness normalization
 
 // ── DOF uniforms ──
-const focusU = uniform(700);        // focus distance, follows camera→core distance
-const apertureU = uniform(0.00012); // blur growth per view-Z unit of defocus
-const maxblurU = uniform(0.012);    // blur cap in UV units
+// Radial DOF: blur = distance from screen center, so sun (OrbitControls target = origin)
+// is always sharp. Scene uses depthWrite:false everywhere, so viewZ from scenePass is
+// useless — we drive the DOF node with a synthetic radial "viewZ" instead.
+// factor = focus(0) + radialZ → 0 at center, -ve outward → clamp(factor*aperture, ±maxblur)
+// Max blur kicks in at UV radius = maxblur / (radialScale * aperture).
+const focusU = uniform(0);          // focal plane at screen center (sun)
+const radialScaleU = uniform(800);  // larger = tighter focus zone
+const apertureU = uniform(0.00003); // blur growth per radial unit
+const maxblurU = uniform(0.016);    // blur cap in UV units
 
 // ── GPU-compute uniforms ──
 const countU = uniform(0, 'uint');
@@ -923,9 +929,10 @@ function buildPost() {
 		node = node.add(bloomNode);
 	}
 	if (dofOn) {
-		// focusU tracks the camera→core distance each frame, so the core stays sharp
-		// while near/far particles and the starfield melt into bokeh
-		dofNode = dof(node, scenePass.getViewZNode(), focusU, apertureU, maxblurU);
+		// Radial viewZ proxy: 0 at screen center, negative outward.
+		// DOF formula: factor = focus(0) + radialZ → blur grows away from center.
+		const radialZ = uv().sub(vec2(0.5, 0.5)).length().mul(radialScaleU).negate();
+		dofNode = dof(node, radialZ, focusU, apertureU, maxblurU);
 		node = dofNode;
 	}
 	// chromatic aberration needs to resample the composite → render it to a texture.
@@ -1003,7 +1010,6 @@ async function animate() {
 	camera.updateMatrixWorld();
 	camRightU.value.setFromMatrixColumn(camera.matrixWorld, 0);
 	camUpU.value.setFromMatrixColumn(camera.matrixWorld, 1);
-	if (dofOn) focusU.value = camera.position.length();
 	await postProcessing.renderAsync();
 	if (sx || sy || sz) {
 		camera.position.x -= sx; camera.position.y -= sy; camera.position.z -= sz;
