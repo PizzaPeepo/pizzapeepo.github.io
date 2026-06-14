@@ -202,7 +202,7 @@ function drawBoid(b) {
 
 	if (colorBySpeed) {
 		const t = Math.min(b.hue, 1); // 0 slow .. 1 fast
-		const hue = isViper ? 120 - t * 40 : 45 - t * 35;
+		const hue = isViper ? 130 - t * 30 : 45 - t * 35;
 		const lum = isLight ? 45 : isViper ? 65 : 62;
 		const sat = isViper ? 100 : 85;
 		ctx.fillStyle = `hsl(${hue}, ${sat}%, ${lum}%)`;
