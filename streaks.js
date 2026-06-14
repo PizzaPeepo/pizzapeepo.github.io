@@ -121,8 +121,8 @@
       var mainPre = 'rgba(' + gold + ',';
       var hotPre  = 'rgba(' + hot  + ',';
       if (isViper) {
-        mainPre = 'hsla(' + s.hue + ',95%,78%,';
-        hotPre  = 'hsla(' + s.hue + ',95%,90%,';
+        mainPre = 'hsla(108,100%,50%,';
+        hotPre  = 'hsla(108,100%,68%,';
       }
 
       var grad = ctx.createLinearGradient(tx, ty, s.x, s.y);

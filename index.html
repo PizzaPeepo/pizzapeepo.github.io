@@ -98,12 +98,12 @@
       --shadow-lg: 0 20px 48px rgba(0,0,0,0.65), 0 6px 14px rgba(0,0,0,0.40);
 
       /* pastel rainbow ramp — interaction highlights only */
-      --rb-1: #ffb3c8;
-      --rb-2: #ffd9a8;
-      --rb-3: #fdffb0;
-      --rb-4: #b3ffc9;
-      --rb-5: #a8e4ff;
-      --rb-6: #d9b8ff;
+      --rb-1: #ff3366;
+      --rb-2: #ffa733;
+      --rb-3: #f8ff33;
+      --rb-4: #33ff70;
+      --rb-5: #33bbff;
+      --rb-6: #9933ff;
     }
 
     /* ─── BASE ─── */
@@ -611,8 +611,8 @@
     }
 
     html.viper .hdr-divider {
-      background: linear-gradient(90deg, var(--rb-1), var(--rb-2), var(--rb-3),
-                  var(--rb-4), var(--rb-5), var(--rb-6));
+      height: 2px;
+      background: linear-gradient(90deg, #39ff14, #5dff2e, #39ff14);
     }
 
     /* "interactive." pulses through the pastel ramp — text-shadow follows the kinetic letters */
@@ -1072,8 +1072,8 @@
         gradV.id = gid + 'v';
         gradV.setAttribute('x1', '0%'); gradV.setAttribute('y1', '0%');
         gradV.setAttribute('x2', '100%'); gradV.setAttribute('y2', '100%');
-        [['0%','#ffb3c8'], ['20%','#ffd9a8'], ['40%','#fdffb0'],
-         ['60%','#b3ffc9'], ['80%','#a8e4ff'], ['100%','#d9b8ff']].forEach(function(s) {
+        [['0%','#ff3366'], ['20%','#ffa733'], ['40%','#f8ff33'],
+         ['60%','#33ff70'], ['80%','#33bbff'], ['100%','#9933ff']].forEach(function(s) {
           var stop = document.createElementNS(NS, 'stop');
           stop.setAttribute('offset', s[0]);
           stop.setAttribute('stop-color', s[1]);
