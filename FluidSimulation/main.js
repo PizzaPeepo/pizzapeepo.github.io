@@ -719,9 +719,11 @@ function wireUI() {
 	bindCheckbox('asciiToggle', v => {
 		config.ASCII = v;
 		resetAsciiView();
-		if (v) {                                  // ASCII has its own glow; drop bloom to keep the phosphors crisp
+		if (v) {                                  // ASCII has its own glow; drop bloom + sunrays to keep the phosphors crisp
 			config.BLOOM = false;
 			const bt = document.getElementById('bloomToggle'); if (bt) bt.checked = false;
+			config.SUNRAYS = false;
+			const st = document.getElementById('sunraysToggle'); if (st) st.checked = false;
 			updateKeywords();
 			setSliderValue('denDissSlider', 1.45);   // tuned for the ASCII look
 			setSliderValue('splatRadiusSlider', 0.45);
@@ -765,6 +767,8 @@ function wireUI() {
 			if (config.ASCII) {
 				config.BLOOM = false;
 				const bt = document.getElementById('bloomToggle'); if (bt) bt.checked = false;
+				config.SUNRAYS = false;
+				const st = document.getElementById('sunraysToggle'); if (st) st.checked = false;
 				updateKeywords();
 			}
 		}
