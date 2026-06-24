@@ -645,6 +645,16 @@
 
     html.viper ::selection { background: #41f195; color: #04130a; }
 
+    /* stylized scrollbar — themed via vars; viper overrides below */
+    ::-webkit-scrollbar { width: 11px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb {
+      background: color-mix(in srgb, var(--tx-4) 60%, var(--bg));
+      border-radius: 6px;
+      border: 2px solid var(--bg);
+    }
+    ::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+
     html.viper ::-webkit-scrollbar { width: 11px; }
     html.viper ::-webkit-scrollbar-track { background: #030806; }
     html.viper ::-webkit-scrollbar-thumb {

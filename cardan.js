@@ -427,24 +427,35 @@
 		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tx, 0);
 		return f;
 	}
+	var SAMPLES = Math.min(4, gl.getParameter(gl.MAX_SAMPLES) | 0);
 	var TARGETS = null;
 	function makeTargets() {
 		if (TARGETS) {
-			gl.deleteTexture(TARGETS.sceneTex); gl.deleteRenderbuffer(TARGETS.depthRB); gl.deleteFramebuffer(TARGETS.sceneFBO);
+			gl.deleteRenderbuffer(TARGETS.msColorRB); gl.deleteRenderbuffer(TARGETS.msDepthRB); gl.deleteFramebuffer(TARGETS.msFBO);
+			gl.deleteTexture(TARGETS.sceneTex); gl.deleteFramebuffer(TARGETS.sceneFBO);
 			gl.deleteTexture(TARGETS.blurTexA); gl.deleteFramebuffer(TARGETS.blurFBOA);
 			gl.deleteTexture(TARGETS.blurTexB); gl.deleteFramebuffer(TARGETS.blurFBOB);
 		}
 		var W = cvs.width, H = cvs.height;
 		var bw = Math.max(1, W >> 2), bh = Math.max(1, H >> 2);   // quarter-res blur buffers
-		var sceneTex = mkTex(W, H), sceneFBO = fboWith(sceneTex);
-		var depthRB = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, depthRB);
-		gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, W, H);
-		gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthRB);
+
+		// Multisampled scene target — real MSAA on the geometry edges. Rendered
+		// here, then blit-resolved into sceneTex (FBO textures have no MSAA).
+		var msFBO = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, msFBO);
+		var msColorRB = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, msColorRB);
+		gl.renderbufferStorageMultisample(gl.RENDERBUFFER, SAMPLES, gl.RGBA8, W, H);
+		gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, msColorRB);
+		var msDepthRB = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, msDepthRB);
+		gl.renderbufferStorageMultisample(gl.RENDERBUFFER, SAMPLES, gl.DEPTH_COMPONENT16, W, H);
+		gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, msDepthRB);
+
+		var sceneTex = mkTex(W, H), sceneFBO = fboWith(sceneTex);   // resolve target
 		var blurTexA = mkTex(bw, bh), blurFBOA = fboWith(blurTexA);
 		var blurTexB = mkTex(bw, bh), blurFBOB = fboWith(blurTexB);
 		gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.bindTexture(gl.TEXTURE_2D, null); gl.bindRenderbuffer(gl.RENDERBUFFER, null);
 		TARGETS = {
-			sceneTex: sceneTex, sceneFBO: sceneFBO, depthRB: depthRB, bw: bw, bh: bh,
+			msFBO: msFBO, msColorRB: msColorRB, msDepthRB: msDepthRB,
+			sceneTex: sceneTex, sceneFBO: sceneFBO, bw: bw, bh: bh,
 			blurTexA: blurTexA, blurFBOA: blurFBOA, blurTexB: blurTexB, blurFBOB: blurFBOB,
 		};
 	}
@@ -469,7 +480,7 @@
 	function frame(now) {
 		var t = (now - t0) * 0.001;
 		var W = cvs.width, H = cvs.height;
-		gl.bindFramebuffer(gl.FRAMEBUFFER, TARGETS.sceneFBO);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, TARGETS.msFBO);
 		gl.viewport(0, 0, W, H);
 		gl.clearColor(0, 0, 0, 0);
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -559,6 +570,12 @@
 			gl.depthMask(true);
 			gl.bindBuffer(gl.ARRAY_BUFFER, null);
 		}
+
+		// Resolve the multisampled scene into sceneTex (downsamples MSAA → AA edges).
+		gl.bindFramebuffer(gl.READ_FRAMEBUFFER, TARGETS.msFBO);
+		gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, TARGETS.sceneFBO);
+		gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
 		// ── bloom: blur the scene target (separable gaussian, 2 iterations at
 		// quarter res), then composite glow additively + crisp scene on top ──
