@@ -170,6 +170,10 @@
       <label><input type="checkbox" id="asciiToggle"> Render as ASCII (A)</label>
       <span class="ctrl-label" style="font-size:0.8em;">Columns: <span id="asciiColsValue"></span></span>
       <input type="range" min="60" max="320" step="20" value="120" class="slider" id="asciiColsSlider">
+      <span class="ctrl-label" style="font-size:0.8em;">Persistence: <span id="asciiPersistValue"></span></span>
+      <input type="range" min="0" max="0.97" step="0.01" value="0.85" class="slider" id="asciiPersistSlider">
+      <label><input type="radio" name="asciiPersistMode" value="max" checked> Phosphor (new over fade)</label>
+      <label><input type="radio" name="asciiPersistMode" value="add"> Additive glow</label>
       <span class="ctrl-label" style="font-size:0.72em;opacity:0.6;">Scroll = zoom · middle-drag = pan · double-click = reset. Zoom in to reveal RGB pixels.</span>
     </div>
 

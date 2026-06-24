@@ -517,7 +517,28 @@ void main () {
 	float m0 = texture2D(uGlyphs, vec2((idx + cuv.x) / uGlyphCount, cuv.y)).r;
 	float m1 = texture2D(uGlyphs, vec2((idx1 + cuv.x) / uGlyphCount, cuv.y)).r;
 	float mask = mix(m0, m1, fblend);              // smooth glyph->glyph (no instant pops)
-	gl_FragColor = vec4(neon * (0.08 + 0.8 * mask), 1.0);   // crisp glyph, no dim cell tile
+	gl_FragColor = vec4(neon * (0.8 * mask), 1.0);   // crisp glyph, no dim cell tile
+}
+`;
+
+// Stage A2: phosphor persistence. Combine the fresh glyph bitmap with a decaying
+// accumulator so a moving cell leaves a trail of fading chars while the new glyph is
+// drawn on top. Two looks via uMode: 0 = phosphor max (new on top, old fades under),
+// 1 = additive glow (trails pile up brightness). The "- 1/255" guarantees the 8-bit
+// accumulator reaches true 0 instead of sticking on a rounded ghost floor.
+export const asciiFade = `
+precision highp float;
+precision highp sampler2D;
+varying vec2 vUv;
+uniform sampler2D uNew;    // fresh glyph bitmap (this frame)
+uniform sampler2D uPrev;   // decaying accumulator (last frame)
+uniform float uFade;       // keep-fraction per frame (0 = no trail)
+uniform float uMode;       // 0 = phosphor max, 1 = additive glow
+void main () {
+	vec3 cur = texture2D(uNew, vUv).rgb;
+	vec3 decayed = max(texture2D(uPrev, vUv).rgb * uFade - 1.0 / 255.0, 0.0);
+	vec3 outc = uMode < 0.5 ? max(cur, decayed) : cur + decayed;
+	gl_FragColor = vec4(outc, 1.0);
 }
 `;
 

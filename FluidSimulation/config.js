@@ -32,4 +32,6 @@ export const config = {
 	EMITTER_FORCE: 1400,
 	ASCII: false,              // render the fluid as a colored ASCII grid
 	ASCII_COLS: 120,           // glyph columns (rows derived from canvas aspect)
+	ASCII_PERSIST: 0.85,       // glyph trail keep-fraction per frame (0 = off)
+	ASCII_PERSIST_MODE: 'max', // 'max' phosphor (new over fading old) | 'add' additive glow
 };

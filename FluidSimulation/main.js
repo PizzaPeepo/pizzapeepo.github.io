@@ -79,6 +79,7 @@ const sunraysMaskProgram = new Program(gl, baseVS, fs(S.sunraysMask));
 const sunraysProgram = new Program(gl, baseVS, fs(S.sunrays));
 const obstacleStampProgram = new Program(gl, baseVS, fs(S.obstacleStamp));
 const asciiArtProgram = new Program(gl, baseVS, fs(S.asciiArt));
+const asciiFadeProgram = new Program(gl, baseVS, fs(S.asciiFade));
 const asciiPresentProgram = new Program(gl, baseVS, fs(S.asciiPresent));
 const displayMaterial = new Material(gl, baseVS, S.display);
 
@@ -124,7 +125,7 @@ let bloomFBO, sunrays, sunraysTemp;
 const bloomFramebuffers = [];
 
 // ASCII targets: asciiScene = one LDR texel per cell; asciiBitmap = the glyph image.
-let asciiScene, asciiBitmap, asciiCols = 0, asciiRows = 0;
+let asciiScene, asciiBitmap, asciiTrail, asciiCols = 0, asciiRows = 0;
 function initAsciiTargets() {
 	const cols = Math.max(8, Math.round(config.ASCII_COLS));
 	const rows = Math.max(8, Math.round(cols * canvas.height / canvas.width));
@@ -135,6 +136,12 @@ function initAsciiTargets() {
 	// soften minification (zoomed-out) without blurring zoomed-in fat pixels
 	gl.bindTexture(gl.TEXTURE_2D, asciiBitmap.texture);
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+	// phosphor-persistence accumulator: ping-pong, same size/filtering as the bitmap
+	asciiTrail = createDoubleFBO(gl, cols * ASCII_GP, rows * ASCII_GP, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
+	for (const f of [asciiTrail.read, asciiTrail.write]) {
+		gl.bindTexture(gl.TEXTURE_2D, f.texture);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+	}
 }
 
 function getResolution(resolution) {
@@ -585,9 +592,21 @@ function renderAscii() {
 	gl.uniform1f(asciiArtProgram.uniforms.uGlyphCount, glyphAtlas.count);
 	blit(asciiBitmap);                               // → crisp glyph bitmap
 
+	// Stage A2: fold the fresh bitmap into the decaying trail accumulator.
+	// Advance only while running so a paused frame holds steady (no additive creep).
+	if (!config.PAUSED) {
+		asciiFadeProgram.bind();
+		gl.uniform1i(asciiFadeProgram.uniforms.uNew, asciiBitmap.attach(0));
+		gl.uniform1i(asciiFadeProgram.uniforms.uPrev, asciiTrail.read.attach(1));
+		gl.uniform1f(asciiFadeProgram.uniforms.uFade, config.ASCII_PERSIST);
+		gl.uniform1f(asciiFadeProgram.uniforms.uMode, config.ASCII_PERSIST_MODE === 'add' ? 1.0 : 0.0);
+		blit(asciiTrail.write);
+		asciiTrail.swap();
+	}
+
 	asciiPresentProgram.bind();
-	gl.uniform1i(asciiPresentProgram.uniforms.uAscii, asciiBitmap.attach(0));
-	gl.uniform2f(asciiPresentProgram.uniforms.uAsciiSize, asciiBitmap.width, asciiBitmap.height);
+	gl.uniform1i(asciiPresentProgram.uniforms.uAscii, asciiTrail.read.attach(0));
+	gl.uniform2f(asciiPresentProgram.uniforms.uAsciiSize, asciiTrail.read.width, asciiTrail.read.height);
 	gl.uniform2f(asciiPresentProgram.uniforms.uScreen, gl.drawingBufferWidth, gl.drawingBufferHeight);
 	gl.uniform1f(asciiPresentProgram.uniforms.uZoom, asciiZoom);
 	gl.uniform2f(asciiPresentProgram.uniforms.uPan, asciiPanX, asciiPanY);
@@ -663,6 +682,7 @@ function clearDye() {
 	gl.uniform4f(colorProgram.uniforms.color, 0, 0, 0, 1);
 	blit(dye.read); blit(dye.write);
 	blit(velocity.read); blit(velocity.write);
+	if (asciiTrail) { blit(asciiTrail.read); blit(asciiTrail.write); }  // no ghost trail
 }
 function reset() {
 	clearDye();
@@ -726,6 +746,8 @@ function applyAsciiPreset() {
 	setSliderValue('sunraysWeightSlider', 0.15);
 	setSliderValue('colorSpeedSlider', 5.0);
 	setSliderValue('asciiColsSlider', 100);
+	setSliderValue('asciiPersistSlider', 0.85);
+	setRadioValue('asciiPersistMode', 'max');
 	setRadioValue('colorMode', 'velocity');
 	setMode('fluid');
 	setCheckboxValue('shadingToggle', true);
@@ -767,6 +789,10 @@ function wireUI() {
 		if (v) applyAsciiPreset();
 	});
 	bindSlider('asciiColsSlider', 'asciiColsValue', v => parseInt(v), v => { config.ASCII_COLS = v; initAsciiTargets(); });
+	bindSlider('asciiPersistSlider', 'asciiPersistValue', parseFloat, v => config.ASCII_PERSIST = v, v => v.toFixed(2));
+	document.querySelectorAll('input[name="asciiPersistMode"]').forEach(el => {
+		el.addEventListener('change', () => { if (el.checked) config.ASCII_PERSIST_MODE = el.value; });
+	});
 
 	document.querySelectorAll('input[name="colorMode"]').forEach(el => {
 		el.addEventListener('change', () => { if (el.checked) { config.COLOR_MODE = el.value; updateKeywords(); } });
