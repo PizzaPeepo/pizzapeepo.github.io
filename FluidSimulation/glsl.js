@@ -543,8 +543,8 @@ void main () {
 	vec3 crt = lit * (core * 3.0 + glow * 1.4);
 	vec2 cellId = floor(uv * uAsciiSize);             // per-phosphor flicker + global mains hum
 	float h = hash(cellId);
-	float flick = 0.82 + 0.18 * sin(uTime * (5.0 + h * 9.0) + h * 6.2831);
-	float hum = 0.95 + 0.05 * sin(uTime * 90.0);
+	float flick = 0.82 + 0.18 * sin(uTime * (1.6 + h * 3.0) + h * 6.2831);
+	float hum = 0.95 + 0.05 * sin(uTime * 24.0);
 	crt *= flick * hum;
 	gl_FragColor = vec4(mix(base, crt, t), 1.0);
 }

@@ -684,6 +684,13 @@ function bindButton(id, fn) {
 	const el = document.getElementById(id);
 	if (el) el.addEventListener('click', fn);
 }
+// Set a slider's value and fire its 'input' handler (updates config + label).
+function setSliderValue(id, val) {
+	const sl = document.getElementById(id);
+	if (!sl) return;
+	sl.value = val;
+	sl.dispatchEvent(new Event('input'));
+}
 
 function snapSimRes(v) { return [64, 128, 256].reduce((a, b) => Math.abs(b - v) < Math.abs(a - v) ? b : a); }
 
@@ -709,7 +716,17 @@ function wireUI() {
 	bindCheckbox('colorfulToggle', v => config.COLORFUL = v);
 	bindCheckbox('emitterToggle', v => config.EMITTER = v);
 	bindCheckbox('transparentToggle', v => config.TRANSPARENT = v);
-	bindCheckbox('asciiToggle', v => { config.ASCII = v; resetAsciiView(); });
+	bindCheckbox('asciiToggle', v => {
+		config.ASCII = v;
+		resetAsciiView();
+		if (v) {                                  // ASCII has its own glow; drop bloom to keep the phosphors crisp
+			config.BLOOM = false;
+			const bt = document.getElementById('bloomToggle'); if (bt) bt.checked = false;
+			updateKeywords();
+			setSliderValue('denDissSlider', 1.45);   // tuned for the ASCII look
+			setSliderValue('splatRadiusSlider', 0.45);
+		}
+	});
 	bindSlider('asciiColsSlider', 'asciiColsValue', v => parseInt(v), v => { config.ASCII_COLS = v; initAsciiTargets(); });
 
 	document.querySelectorAll('input[name="colorMode"]').forEach(el => {
@@ -745,6 +762,11 @@ function wireUI() {
 		else if (e.code === 'KeyA') {
 			config.ASCII = !config.ASCII; resetAsciiView();
 			const cb = document.getElementById('asciiToggle'); if (cb) cb.checked = config.ASCII;
+			if (config.ASCII) {
+				config.BLOOM = false;
+				const bt = document.getElementById('bloomToggle'); if (bt) bt.checked = false;
+				updateKeywords();
+			}
 		}
 	});
 	window.addEventListener('keydown', e => { if (e.key === 'Shift') shiftHeld = true; });

@@ -31,5 +31,5 @@ export const config = {
 	EMITTER: false,            // continuous left-edge inflow (drives the vortex-street demo)
 	EMITTER_FORCE: 1400,
 	ASCII: false,              // render the fluid as a colored ASCII grid
-	ASCII_COLS: 160,           // glyph columns (rows derived from canvas aspect)
+	ASCII_COLS: 120,           // glyph columns (rows derived from canvas aspect)
 };
