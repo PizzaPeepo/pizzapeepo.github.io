@@ -7,27 +7,18 @@
 
 	var cvs = document.createElement('canvas');
 	cvs.id = 'cardan-canvas';
-	var FILTER_DARK = 'drop-shadow(0 0 2px #fff8e7) drop-shadow(0 0 7px #fdd87a) drop-shadow(0 0 18px #f5a623) drop-shadow(0 0 36px rgba(245,120,20,0.5)) drop-shadow(0 0 60px rgba(220,80,10,0.22))';
-	var FILTER_LITE = 'drop-shadow(0 0 2px rgba(160,105,20,0.40)) drop-shadow(0 0 8px rgba(140,85,10,0.22)) drop-shadow(0 0 22px rgba(110,65,5,0.10))';
-	var FILTER_VIPER = 'drop-shadow(0 0 2px #eafff2) drop-shadow(0 0 7px #a6ff84) drop-shadow(0 0 18px #22ff22) drop-shadow(0 0 36px rgba(34,255,34,0.60)) drop-shadow(0 0 60px rgba(20,220,20,0.34))';
 	cvs.style.cssText = [
 		'position:fixed', 'top:0', 'left:0',
 		'width:100%', 'height:100%',
 		'pointer-events:none', 'z-index:0',
 		'opacity:0', 'transition:opacity 1.4s ease',
 	].join(';');
-	function updateFilter() {
-		var cls = document.documentElement.classList;
-		cvs.style.filter = cls.contains('viper') ? FILTER_VIPER : cls.contains('light') ? FILTER_LITE : FILTER_DARK;
-	}
-	updateFilter();
-	document.addEventListener('themechange', updateFilter);
 	var wgRef = document.body.firstChild;
 	document.body.insertBefore(cvs, wgRef ? wgRef.nextSibling : null);
 
 	function sizeCanvas() { cvs.width = window.innerWidth; cvs.height = window.innerHeight; }
 	sizeCanvas();
-	window.addEventListener('resize', function () { sizeCanvas(); if (gl) gl.viewport(0, 0, cvs.width, cvs.height); });
+	window.addEventListener('resize', function () { sizeCanvas(); if (gl) { gl.viewport(0, 0, cvs.width, cvs.height); makeTargets(); } });
 	setTimeout(function () { cvs.style.opacity = '1'; }, 1000);
 
 	var gl = cvs.getContext('webgl2');
@@ -292,16 +283,10 @@
 	];
 
 	var NEON_CORE = [
-		buildNeonEdges(1.62, 0.15, 0.15,  0.005, 128),
-		buildNeonEdges(1.33, 0.13, 0.13,  0.005, 108),
-		buildNeonEdges(1.08, 0.11, 0.11,  0.005,  80),
+		buildNeonEdges(1.62, 0.15, 0.15,  0.0035, 128),
+		buildNeonEdges(1.33, 0.13, 0.13,  0.0035, 108),
+		buildNeonEdges(1.08, 0.11, 0.11,  0.0035, 80),
 	];
-	var NEON_HALO = [
-		buildNeonEdges(1.62, 0.15, 0.15,  0.024,  64),
-		buildNeonEdges(1.33, 0.13, 0.13,  0.024,  54),
-		buildNeonEdges(1.08, 0.11, 0.11,  0.024,  40),
-	];
-
 	/* ── globe: Fibonacci sphere, 480 points ── */
 	var GLOBE_N = 480;
 	(function(){
@@ -374,17 +359,96 @@
 		[0.13, 1.00, 0.13, 1.0],
 		[0.26, 1.00, 0.22, 1.0],
 	];
-	// Glow colors: lighter/warmer, used with additive blending
-	var DARK_GLOW = [
-		[1.0, 0.88, 0.42, 0.22],
-		[1.0, 0.88, 0.42, 0.22],
-		[1.0, 0.95, 0.62, 0.22],
-	];
-	var LITE_GLOW = [
-		[0.68, 0.44, 0.12, 0.14],
-		[0.68, 0.44, 0.12, 0.14],
-		[0.72, 0.50, 0.18, 0.14],
-	];
+	/* ── bloom post-process: blur the scene offscreen, add it back as glow ── */
+	function mkProg(vsSrc, fsSrc, tag) {
+		var p = gl.createProgram();
+		var v = mkShader(gl.VERTEX_SHADER, vsSrc), f = mkShader(gl.FRAGMENT_SHADER, fsSrc);
+		if (!v || !f) return null;
+		gl.attachShader(p, v); gl.attachShader(p, f); gl.linkProgram(p);
+		if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { console.error('[cardan ' + tag + ']', gl.getProgramInfoLog(p)); return null; }
+		return p;
+	}
+	var VS_Q = [
+		'#version 300 es', 'precision highp float;',
+		'layout(location=0) in vec2 aPos;',
+		'out vec2 vUv;',
+		'void main(){ vUv = aPos*0.5+0.5; gl_Position = vec4(aPos,0.0,1.0); }',
+	].join('\n');
+	var FS_BLUR = [
+		'#version 300 es', 'precision highp float;',
+		'in vec2 vUv;',
+		'uniform sampler2D uTex;',
+		'uniform vec2 uDir;',
+		'out vec4 o;',
+		'void main(){',
+		'  float w0=0.227027,w1=0.194595,w2=0.121622,w3=0.054054,w4=0.016216;',
+		'  vec4 c = texture(uTex,vUv)*w0;',
+		'  c += (texture(uTex,vUv+uDir)+texture(uTex,vUv-uDir))*w1;',
+		'  c += (texture(uTex,vUv+uDir*2.0)+texture(uTex,vUv-uDir*2.0))*w2;',
+		'  c += (texture(uTex,vUv+uDir*3.0)+texture(uTex,vUv-uDir*3.0))*w3;',
+		'  c += (texture(uTex,vUv+uDir*4.0)+texture(uTex,vUv-uDir*4.0))*w4;',
+		'  o = c;',
+		'}',
+	].join('\n');
+	var FS_TEX = [
+		'#version 300 es', 'precision highp float;',
+		'in vec2 vUv;',
+		'uniform sampler2D uTex;',
+		'uniform float uStr;',
+		'out vec4 o;',
+		'void main(){ o = texture(uTex,vUv)*uStr; }',
+	].join('\n');
+	var blurProg = mkProg(VS_Q, FS_BLUR, 'blur');
+	var texProg  = mkProg(VS_Q, FS_TEX,  'tex');
+	var LOC_B = { uTex: gl.getUniformLocation(blurProg, 'uTex'), uDir: gl.getUniformLocation(blurProg, 'uDir') };
+	var LOC_T = { uTex: gl.getUniformLocation(texProg,  'uTex'), uStr: gl.getUniformLocation(texProg,  'uStr') };
+
+	var Q_VAO = (function () {
+		var vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+		var b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+		gl.enableVertexAttribArray(0);
+		gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+		gl.bindVertexArray(null);
+		return vao;
+	}());
+
+	function mkTex(w, h) {
+		var tx = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tx);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+		return tx;
+	}
+	function fboWith(tx) {
+		var f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tx, 0);
+		return f;
+	}
+	var TARGETS = null;
+	function makeTargets() {
+		if (TARGETS) {
+			gl.deleteTexture(TARGETS.sceneTex); gl.deleteRenderbuffer(TARGETS.depthRB); gl.deleteFramebuffer(TARGETS.sceneFBO);
+			gl.deleteTexture(TARGETS.blurTexA); gl.deleteFramebuffer(TARGETS.blurFBOA);
+			gl.deleteTexture(TARGETS.blurTexB); gl.deleteFramebuffer(TARGETS.blurFBOB);
+		}
+		var W = cvs.width, H = cvs.height;
+		var bw = Math.max(1, W >> 2), bh = Math.max(1, H >> 2);   // quarter-res blur buffers
+		var sceneTex = mkTex(W, H), sceneFBO = fboWith(sceneTex);
+		var depthRB = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, depthRB);
+		gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, W, H);
+		gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthRB);
+		var blurTexA = mkTex(bw, bh), blurFBOA = fboWith(blurTexA);
+		var blurTexB = mkTex(bw, bh), blurFBOB = fboWith(blurTexB);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.bindTexture(gl.TEXTURE_2D, null); gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+		TARGETS = {
+			sceneTex: sceneTex, sceneFBO: sceneFBO, depthRB: depthRB, bw: bw, bh: bh,
+			blurTexA: blurTexA, blurFBOA: blurFBOA, blurTexB: blurTexB, blurFBOB: blurFBOB,
+		};
+	}
+	makeTargets();
 
 	var t0 = performance.now();
 	var BASE_SPEED     = 0.125;
@@ -405,6 +469,7 @@
 	function frame(now) {
 		var t = (now - t0) * 0.001;
 		var W = cvs.width, H = cvs.height;
+		gl.bindFramebuffer(gl.FRAMEBUFFER, TARGETS.sceneFBO);
 		gl.viewport(0, 0, W, H);
 		gl.clearColor(0, 0, 0, 0);
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -415,7 +480,6 @@
 		var isLite  = document.documentElement.classList.contains('light');
 		var isViper = document.documentElement.classList.contains('viper');
 		var COLS   = isViper ? VIPER : isLite ? LITE : DARK;
-		var GCOLS  = isLite ? LITE_GLOW : DARK_GLOW;
 		var offset = txy(1.55, 1.15);
 
 		gl.useProgram(prog);
@@ -465,14 +529,13 @@
 			gl.uniformMatrix4fv(LOC.uMVP,  false, mul(pv, model));
 			gl.uniformMatrix3fv(LOC.uNorm, false, mat3of(model));
 			var c = COLS[i];
-			var tubeA = isLite ? 0.60 : 0.45;
-			gl.uniform4fv(LOC.uCol, new Float32Array([c[0], c[1], c[2], tubeA * flicker[i]]));
+			var tubeA = isLite ? 0.92 : 0.90;
+			var coreBoost = isLite ? 1.15 : 1.35;   // push thin line toward a hot core
+			gl.uniform4fv(LOC.uCol, new Float32Array([c[0] * coreBoost, c[1] * coreBoost, c[2] * coreBoost, tubeA * flicker[i]]));
 			gl.bindVertexArray(neon.vao);
 			gl.drawElements(gl.TRIANGLES, neon.count, gl.UNSIGNED_INT, 0);
 			gl.bindVertexArray(null);
 		});
-
-		gl.depthMask(true);
 
 		/* globe pass — inside frame(), depth-tested against ring depth */
 		if (progG && window._cardanGlobeVBO) {
@@ -496,6 +559,45 @@
 			gl.depthMask(true);
 			gl.bindBuffer(gl.ARRAY_BUFFER, null);
 		}
+
+		// ── bloom: blur the scene target (separable gaussian, 2 iterations at
+		// quarter res), then composite glow additively + crisp scene on top ──
+		gl.disable(gl.DEPTH_TEST);
+		gl.disable(gl.BLEND);
+		gl.bindVertexArray(Q_VAO);
+		gl.useProgram(blurProg);
+		gl.activeTexture(gl.TEXTURE0);
+		gl.uniform1i(LOC_B.uTex, 0);
+		var bw = TARGETS.bw, bh = TARGETS.bh, SPREAD = 1.5;
+		var sx = SPREAD / bw, sy = SPREAD / bh;
+		function blurPass(srcTex, dstFBO, dx, dy) {
+			gl.bindFramebuffer(gl.FRAMEBUFFER, dstFBO);
+			gl.viewport(0, 0, bw, bh);
+			gl.bindTexture(gl.TEXTURE_2D, srcTex);
+			gl.uniform2f(LOC_B.uDir, dx, dy);
+			gl.drawArrays(gl.TRIANGLES, 0, 3);
+		}
+		blurPass(TARGETS.sceneTex, TARGETS.blurFBOA, sx, 0);
+		blurPass(TARGETS.blurTexA, TARGETS.blurFBOB, 0, sy);
+		blurPass(TARGETS.blurTexB, TARGETS.blurFBOA, sx, 0);
+		blurPass(TARGETS.blurTexA, TARGETS.blurFBOB, 0, sy);
+
+		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+		gl.viewport(0, 0, W, H);
+		gl.clearColor(0, 0, 0, 0);
+		gl.clear(gl.COLOR_BUFFER_BIT);
+		gl.enable(gl.BLEND);
+		gl.useProgram(texProg);
+		gl.uniform1i(LOC_T.uTex, 0);
+		gl.blendFunc(gl.ONE, gl.ONE);                       // glow: additive, premultiplied
+		gl.uniform1f(LOC_T.uStr, isLite ? 0.55 : 1.0);
+		gl.bindTexture(gl.TEXTURE_2D, TARGETS.blurTexB);
+		gl.drawArrays(gl.TRIANGLES, 0, 3);
+		gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);       // crisp scene over glow
+		gl.uniform1f(LOC_T.uStr, 1.0);
+		gl.bindTexture(gl.TEXTURE_2D, TARGETS.sceneTex);
+		gl.drawArrays(gl.TRIANGLES, 0, 3);
+		gl.bindVertexArray(null);
 
 		if (document.hidden) return;
 		requestAnimationFrame(frame);
