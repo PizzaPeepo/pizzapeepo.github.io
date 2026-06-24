@@ -89,7 +89,7 @@ const ditheringTexture = createNoiseTexture(gl, 256);
 // Ramp ordered sparse→dense; cell luminance indexes a glyph. Rendered to an
 // offscreen 2D canvas (one GP×GP cell per char) and uploaded as a NEAREST texture.
 const ASCII_GP = 8;   // glyph cell size in texels
-const ASCII_RAMP = " .,:;-~=+iltfrcvunxz23578XYUJCLAHSGZO0QMW#B%8&@$";
+const ASCII_RAMP = " .,:;-~=+*/|\iltfrcvunxz23578XYUJCLAHSGZO0QMW#B%8&@$";
 
 function createGlyphAtlas() {
 	const n = ASCII_RAMP.length;
