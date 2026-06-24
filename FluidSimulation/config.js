@@ -14,7 +14,7 @@ export const config = {
 	SHADING: true,
 	COLORFUL: true,
 	COLOR_UPDATE_SPEED: 5.0,
-	COLOR_MODE: 'velocity',      // rainbow | single | gradient | velocity
+	COLOR_MODE: 'velocity',      // rainbow | single | gradient | velocity | heat
 	PAUSED: false,
 	BACK_COLOR: { r: 13, g: 11, b: 20 },
 	TRANSPARENT: true,

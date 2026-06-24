@@ -193,6 +193,7 @@ function updateKeywords() {
 	if (config.SHADING) kw.push('SHADING');
 	if (config.BLOOM) kw.push('BLOOM');
 	if (config.SUNRAYS) kw.push('SUNRAYS');
+	if (config.COLOR_MODE === 'heat') kw.push('HEATMAP');
 	displayMaterial.setKeywords(kw);
 }
 
@@ -213,6 +214,8 @@ function HSVtoRGB(h, s, v) {
 }
 let baseHue = Math.random();
 function generateColor() {
+	// Heat mode colours by density at display time; inject neutral grey dye.
+	if (config.COLOR_MODE === 'heat') return { r: 0.15, g: 0.15, b: 0.15 };
 	let h;
 	if (config.COLOR_MODE === 'single') h = baseHue;
 	else if (config.COLOR_MODE === 'gradient') h = (baseHue + Math.random() * 0.12) % 1;
@@ -692,6 +695,48 @@ function setSliderValue(id, val) {
 	sl.dispatchEvent(new Event('input'));
 }
 
+// Set a checkbox and fire its 'change' handler (updates config + keywords).
+function setCheckboxValue(id, val) {
+	const cb = document.getElementById(id);
+	if (!cb) return;
+	cb.checked = val;
+	cb.dispatchEvent(new Event('change'));
+}
+// Select a radio in a group and fire its 'change' handler.
+function setRadioValue(name, value) {
+	const r = document.querySelector('input[name="' + name + '"][value="' + value + '"]');
+	if (r) { r.checked = true; r.dispatchEvent(new Event('change')); }
+}
+
+// Tuned ASCII-mode preset: a full slider/toggle set so the grid reads crisp
+// regardless of prior settings. Applied whenever ASCII mode is switched on.
+function applyAsciiPreset() {
+	setSliderValue('simResSlider', 128);
+	setSliderValue('dyeResSlider', 2048);
+	setSliderValue('velDissSlider', 1.00);
+	setSliderValue('denDissSlider', 2.55);
+	setSliderValue('pressureSlider', 0.40);
+	setSliderValue('iterSlider', 10);
+	setSliderValue('curlSlider', 14);
+	setSliderValue('splatRadiusSlider', 0.15);
+	setSliderValue('splatForceSlider', 12000);
+	setSliderValue('brushSlider', 0.010);
+	setSliderValue('bloomIntensitySlider', 0.10);
+	setSliderValue('bloomThresholdSlider', 0.80);
+	setSliderValue('sunraysWeightSlider', 0.15);
+	setSliderValue('colorSpeedSlider', 5.0);
+	setSliderValue('asciiColsSlider', 100);
+	setRadioValue('colorMode', 'velocity');
+	setMode('fluid');
+	setCheckboxValue('shadingToggle', true);
+	setCheckboxValue('colorfulToggle', true);
+	setCheckboxValue('transparentToggle', true);
+	setCheckboxValue('emitterToggle', false);
+	setCheckboxValue('bloomToggle', false);     // ASCII has its own glow; keep phosphors crisp
+	setCheckboxValue('sunraysToggle', false);
+	updateKeywords();
+}
+
 function snapSimRes(v) { return [64, 128, 256].reduce((a, b) => Math.abs(b - v) < Math.abs(a - v) ? b : a); }
 
 function wireUI() {
@@ -719,20 +764,12 @@ function wireUI() {
 	bindCheckbox('asciiToggle', v => {
 		config.ASCII = v;
 		resetAsciiView();
-		if (v) {                                  // ASCII has its own glow; drop bloom + sunrays to keep the phosphors crisp
-			config.BLOOM = false;
-			const bt = document.getElementById('bloomToggle'); if (bt) bt.checked = false;
-			config.SUNRAYS = false;
-			const st = document.getElementById('sunraysToggle'); if (st) st.checked = false;
-			updateKeywords();
-			setSliderValue('denDissSlider', 1.45);   // tuned for the ASCII look
-			setSliderValue('splatRadiusSlider', 0.45);
-		}
+		if (v) applyAsciiPreset();
 	});
 	bindSlider('asciiColsSlider', 'asciiColsValue', v => parseInt(v), v => { config.ASCII_COLS = v; initAsciiTargets(); });
 
 	document.querySelectorAll('input[name="colorMode"]').forEach(el => {
-		el.addEventListener('change', () => { if (el.checked) config.COLOR_MODE = el.value; });
+		el.addEventListener('change', () => { if (el.checked) { config.COLOR_MODE = el.value; updateKeywords(); } });
 	});
 	document.querySelectorAll('input[name="toolMode"]').forEach(el => {
 		el.addEventListener('change', () => { if (el.checked) mode = el.value; });
@@ -764,13 +801,7 @@ function wireUI() {
 		else if (e.code === 'KeyA') {
 			config.ASCII = !config.ASCII; resetAsciiView();
 			const cb = document.getElementById('asciiToggle'); if (cb) cb.checked = config.ASCII;
-			if (config.ASCII) {
-				config.BLOOM = false;
-				const bt = document.getElementById('bloomToggle'); if (bt) bt.checked = false;
-				config.SUNRAYS = false;
-				const st = document.getElementById('sunraysToggle'); if (st) st.checked = false;
-				updateKeywords();
-			}
+			if (config.ASCII) applyAsciiPreset();
 		}
 	});
 	window.addEventListener('keydown', e => { if (e.key === 'Shift') shiftHeld = true; });

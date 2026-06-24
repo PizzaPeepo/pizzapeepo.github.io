@@ -394,6 +394,19 @@ uniform vec2 texelSize;
 uniform sampler2D uObstacle;
 uniform vec3 uObstacleColor;
 
+// Thermal palette (density -> colour): black -> blue -> cyan -> green -> yellow -> red.
+vec3 heatRamp (float t) {
+	t = clamp(t, 0.0, 1.0);
+	vec3 c = mix(vec3(0.0),            vec3(0.0, 0.12, 0.70), smoothstep(0.00, 0.16, t));
+	c = mix(c, vec3(0.0, 0.55, 1.0),  smoothstep(0.16, 0.32, t));
+	c = mix(c, vec3(0.0, 1.0, 1.0),   smoothstep(0.32, 0.46, t));
+	c = mix(c, vec3(0.10, 1.0, 0.20), smoothstep(0.46, 0.57, t));
+	c = mix(c, vec3(1.0, 1.0, 0.0),   smoothstep(0.57, 0.71, t));
+	c = mix(c, vec3(1.0, 0.45, 0.0),  smoothstep(0.71, 0.85, t));
+	c = mix(c, vec3(1.0, 0.0, 0.0),   smoothstep(0.85, 1.00, t));
+	return c;
+}
+
 vec3 linearToGamma (vec3 c) {
 	c = max(c, vec3(0.0));
 	return max(1.055 * pow(c, vec3(0.416666667)) - 0.055, vec3(0.0));
@@ -401,6 +414,7 @@ vec3 linearToGamma (vec3 c) {
 
 void main () {
 	vec3 c = texture2D(uTexture, vUv).rgb;
+	float dens = max(c.r, max(c.g, c.b));   // raw dye density, before shading/bloom
 #ifdef SHADING
 	vec3 lc = texture2D(uTexture, vL).rgb;
 	vec3 rc = texture2D(uTexture, vR).rgb;
@@ -429,6 +443,9 @@ void main () {
 	bloom += noise / 255.0;
 	bloom = linearToGamma(bloom);
 	c += bloom;
+#endif
+#ifdef HEATMAP
+	c = heatRamp(pow(clamp(dens * 3.0, 0.0, 1.0), 0.75));   // density -> thermal palette
 #endif
 	float ob = texture2D(uObstacle, vUv).x;
 	float edge = smoothstep(0.35, 0.65, ob);
@@ -500,7 +517,7 @@ void main () {
 	float m0 = texture2D(uGlyphs, vec2((idx + cuv.x) / uGlyphCount, cuv.y)).r;
 	float m1 = texture2D(uGlyphs, vec2((idx1 + cuv.x) / uGlyphCount, cuv.y)).r;
 	float mask = mix(m0, m1, fblend);              // smooth glyph->glyph (no instant pops)
-	gl_FragColor = vec4(neon * (0.16 + 0.84 * mask), 1.0);   // faint cell-colour tile under glyph
+	gl_FragColor = vec4(neon * (0.08 + 0.8 * mask), 1.0);   // crisp glyph, no dim cell tile
 }
 `;
 
