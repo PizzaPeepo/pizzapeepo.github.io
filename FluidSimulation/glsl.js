@@ -523,17 +523,16 @@ void main () {
 	vec3 base = texture2D(uAscii, uv).rgb;
 	float mag = uZoom * (uScreen.x / uAsciiSize.x);   // screen px per source texel
 	float t = smoothstep(2.0, 4.0, mag);
-	float sx = fract(uv.x * uAsciiSize.x);
+	float sx = fract(uv.x * uAsciiSize.x);   // 0..1 across one source texel
 	float sy = fract(uv.y * uAsciiSize.y);
-	vec3 stripe = vec3(
-		smoothstep(0.5, 0.0, abs(sx - 1.0 / 6.0)),
-		smoothstep(0.5, 0.0, abs(sx - 0.5)),
-		smoothstep(0.5, 0.0, abs(sx - 5.0 / 6.0))
-	);
-	stripe /= max(max(stripe.r, stripe.g), stripe.b);
-	float gap = smoothstep(0.0, 0.15, sy) * smoothstep(1.0, 0.85, sy);
-	gap = mix(1.0, gap, 0.6);
-	vec3 crt = base * stripe * gap * 1.4;
+	float col3 = sx * 3.0;                    // three subpixel columns per texel
+	float ci = floor(col3);                   // 0,1,2 -> R,G,B
+	float fx = fract(col3);                   // position within the subpixel
+	vec3 chan = vec3(ci == 0.0 ? 1.0 : 0.0, ci == 1.0 ? 1.0 : 0.0, ci == 2.0 ? 1.0 : 0.0);
+	// fat phosphor bar with hard-ish black gaps on each side (rounded ends)
+	float barX = smoothstep(0.0, 0.16, fx) * smoothstep(1.0, 0.84, fx);
+	float barY = smoothstep(0.0, 0.12, sy) * smoothstep(1.0, 0.88, sy);
+	vec3 crt = base * chan * (barX * barY) * 3.0;   // single channel per column, boost for the gaps
 	gl_FragColor = vec4(mix(base, crt, t), 1.0);
 }
 `;
