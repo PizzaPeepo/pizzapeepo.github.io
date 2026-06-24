@@ -493,9 +493,13 @@ void main () {
 	vec3 hue = col / max(mx, 0.0001);              // unit-peak hue (full saturation)
 	vec3 neon = hue * clamp(pow(lum, 0.5) * 2.4, 0.0, 1.2);  // density → vivid neon brightness
 	float lr = pow(lum, 0.7);                      // lift mids so more glyphs show
-	float idx = floor(min(lr, 0.9999) * uGlyphCount);
-	vec2 auv = vec2((idx + cuv.x) / uGlyphCount, cuv.y);
-	float mask = texture2D(uGlyphs, auv).r;
+	float fidx = min(lr, 0.9999) * uGlyphCount;    // continuous ramp position
+	float idx = floor(fidx);
+	float fblend = fract(fidx);                    // blend toward the next glyph
+	float idx1 = min(idx + 1.0, uGlyphCount - 1.0);
+	float m0 = texture2D(uGlyphs, vec2((idx + cuv.x) / uGlyphCount, cuv.y)).r;
+	float m1 = texture2D(uGlyphs, vec2((idx1 + cuv.x) / uGlyphCount, cuv.y)).r;
+	float mask = mix(m0, m1, fblend);              // smooth glyph->glyph (no instant pops)
 	gl_FragColor = vec4(neon * (0.16 + 0.84 * mask), 1.0);   // faint cell-colour tile under glyph
 }
 `;
@@ -525,27 +529,37 @@ void main () {
 	vec3 base = texture2D(uAscii, uv).rgb;
 	float mag = uZoom * (uScreen.x / uAsciiSize.x);   // screen px per source texel
 	float t = smoothstep(2.0, 4.0, mag);
-	float sx = fract(uv.x * uAsciiSize.x);   // 0..1 across one source texel
-	float sy = fract(uv.y * uAsciiSize.y);
-	float col3 = sx * 3.0;                    // three subpixel columns per texel
-	float ci = floor(col3);                   // 0,1,2 -> R,G,B
-	float fx = fract(col3);                   // position within the subpixel
-	vec3 chan = vec3(ci == 0.0 ? 1.0 : 0.0, ci == 1.0 ? 1.0 : 0.0, ci == 2.0 ? 1.0 : 0.0);
-	// rounded-rect phosphor dot via signed distance, centred in its subpixel cell
-	vec2 q = vec2(fx, sy) - 0.5;
-	vec2 hs = vec2(0.30, 0.40);                       // half-width / half-height (leaves the gaps)
-	float rad = 0.17;                                 // corner radius
-	vec2 dd = abs(q) - hs + rad;
-	float dist = length(max(dd, 0.0)) + min(max(dd.x, dd.y), 0.0) - rad;
-	float core = smoothstep(0.045, -0.03, dist);      // soft rounded body
-	float glow = exp(-max(dist, 0.0) * 6.5);          // colored halo bleeding into the gaps
-	vec3 lit = base * chan;                           // single channel per column
-	vec3 crt = lit * (core * 3.0 + glow * 1.4);
-	vec2 cellId = floor(uv * uAsciiSize);             // per-phosphor flicker + global mains hum
-	float h = hash(cellId);
-	float flick = 0.82 + 0.18 * sin(uTime * (1.6 + h * 3.0) + h * 6.2831);
-	float hum = 0.95 + 0.05 * sin(uTime * 24.0);
-	crt *= flick * hum;
+	float spx = uv.x * uAsciiSize.x * 3.0;    // subpixel-column space (3 per source texel)
+	float spy = uv.y * uAsciiSize.y;          // texel-row space
+	float baseSub = floor(spx);
+	float baseRow = floor(spy);
+	vec2 hs = vec2(0.30, 0.40);               // half-width / half-height (leaves the gaps)
+	float rad = 0.17;                         // corner radius
+	vec3 crt = vec3(0.0);
+	if (t > 0.0) {                            // only build the triad when zoomed in
+		// Sum the current phosphor plus its neighbours so their halos overlap and
+		// the glow blends across the gaps instead of cutting off at hard edges.
+		for (int dxn = -1; dxn <= 1; dxn++) {
+			for (int dyn = -1; dyn <= 1; dyn++) {
+				float j = baseSub + float(dxn);
+				float k = baseRow + float(dyn);
+				if (j < 0.0 || k < 0.0) continue;
+				vec2 dq = vec2(spx - (j + 0.5), spy - (k + 0.5));
+				vec2 dd = abs(dq) - hs + rad;
+				float dist = length(max(dd, 0.0)) + min(max(dd.x, dd.y), 0.0) - rad;
+				float core = smoothstep(0.045, -0.03, dist);   // soft rounded body
+				float glow = exp(-max(dist, 0.0) * 5.0);        // wider halo bleeds into the gaps
+				float ci = mod(j, 3.0);                          // 0,1,2 -> R,G,B
+				vec3 chan = vec3(ci == 0.0 ? 1.0 : 0.0, ci == 1.0 ? 1.0 : 0.0, ci == 2.0 ? 1.0 : 0.0);
+				vec2 texel = vec2(floor(j / 3.0), k);
+				vec3 c = texture2D(uAscii, (texel + 0.5) / uAsciiSize).rgb;
+				float h = hash(vec2(j, k));                      // per-phosphor flicker
+				float flick = 0.82 + 0.18 * sin(uTime * (1.6 + h * 3.0) + h * 6.2831);
+				crt += c * chan * (core * 3.0 + glow * 1.4) * flick;
+			}
+		}
+		crt *= 0.95 + 0.05 * sin(uTime * 24.0);   // global mains hum
+	}
 	gl_FragColor = vec4(mix(base, crt, t), 1.0);
 }
 `;
