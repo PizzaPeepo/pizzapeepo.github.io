@@ -590,6 +590,7 @@ function renderAscii() {
 	gl.uniform2f(asciiPresentProgram.uniforms.uPan, asciiPanX, asciiPanY);
 	const bg = normalizeColor(config.BACK_COLOR);
 	gl.uniform3f(asciiPresentProgram.uniforms.uBack, bg.r, bg.g, bg.b);
+	gl.uniform1f(asciiPresentProgram.uniforms.uTime, performance.now() / 1000.0);
 	blit(null);                                      // → screen
 }
 

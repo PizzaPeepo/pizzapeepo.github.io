@@ -514,6 +514,8 @@ uniform vec2 uScreen;         // drawing-buffer size in px
 uniform float uZoom;
 uniform vec2 uPan;            // ascii-uv shown at screen centre
 uniform vec3 uBack;           // background colour outside the view
+uniform float uTime;          // seconds, drives the CRT flicker
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 void main () {
 	vec2 uv = (vUv - 0.5) / uZoom + uPan;
 	if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
@@ -529,10 +531,21 @@ void main () {
 	float ci = floor(col3);                   // 0,1,2 -> R,G,B
 	float fx = fract(col3);                   // position within the subpixel
 	vec3 chan = vec3(ci == 0.0 ? 1.0 : 0.0, ci == 1.0 ? 1.0 : 0.0, ci == 2.0 ? 1.0 : 0.0);
-	// fat phosphor bar with hard-ish black gaps on each side (rounded ends)
-	float barX = smoothstep(0.0, 0.16, fx) * smoothstep(1.0, 0.84, fx);
-	float barY = smoothstep(0.0, 0.12, sy) * smoothstep(1.0, 0.88, sy);
-	vec3 crt = base * chan * (barX * barY) * 3.0;   // single channel per column, boost for the gaps
+	// rounded-rect phosphor dot via signed distance, centred in its subpixel cell
+	vec2 q = vec2(fx, sy) - 0.5;
+	vec2 hs = vec2(0.30, 0.40);                       // half-width / half-height (leaves the gaps)
+	float rad = 0.17;                                 // corner radius
+	vec2 dd = abs(q) - hs + rad;
+	float dist = length(max(dd, 0.0)) + min(max(dd.x, dd.y), 0.0) - rad;
+	float core = smoothstep(0.045, -0.03, dist);      // soft rounded body
+	float glow = exp(-max(dist, 0.0) * 6.5);          // colored halo bleeding into the gaps
+	vec3 lit = base * chan;                           // single channel per column
+	vec3 crt = lit * (core * 3.0 + glow * 1.4);
+	vec2 cellId = floor(uv * uAsciiSize);             // per-phosphor flicker + global mains hum
+	float h = hash(cellId);
+	float flick = 0.82 + 0.18 * sin(uTime * (5.0 + h * 9.0) + h * 6.2831);
+	float hum = 0.95 + 0.05 * sin(uTime * 90.0);
+	crt *= flick * hum;
 	gl_FragColor = vec4(mix(base, crt, t), 1.0);
 }
 `;
