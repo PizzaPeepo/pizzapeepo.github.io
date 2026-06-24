@@ -550,7 +550,7 @@ void main () {
 	float spy = uv.y * uAsciiSize.y;          // texel-row space
 	float baseSub = floor(spx);
 	float baseRow = floor(spy);
-	vec2 hs = vec2(0.30, 0.40);               // half-width / half-height (leaves the gaps)
+	vec2 hs = vec2(0.40, 0.425);              // half-width / half-height (leaves the gaps)
 	float rad = 0.17;                         // corner radius
 	vec3 crt = vec3(0.0);
 	if (t > 0.0) {                            // only build the triad when zoomed in
