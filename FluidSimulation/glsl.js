@@ -470,3 +470,70 @@ void main () {
 	gl_FragColor = vec4(result, 0.0, 0.0, 1.0);
 }
 `;
+
+// ── ASCII mode ──
+// Stage A: turn the LDR fluid image into a colored glyph bitmap. For each output
+// texel: find its grid cell, sample the fluid colour at the cell centre, pick a
+// glyph from the ramp atlas by luminance, and mask the cell colour by that glyph.
+export const asciiArt = `
+precision highp float;
+precision highp sampler2D;
+varying vec2 vUv;
+uniform sampler2D uScene;     // low-res LDR fluid (one texel per cell)
+uniform sampler2D uGlyphs;    // glyph atlas, uGlyphCount chars left-to-right
+uniform vec2 uGrid;           // cols, rows
+uniform float uGlyphCount;
+void main () {
+	vec2 g = vUv * uGrid;
+	vec2 cell = floor(g);
+	vec2 cuv = fract(g);
+	vec3 col = texture2D(uScene, (cell + 0.5) / uGrid).rgb;
+	float lum = clamp(dot(col, vec3(0.299, 0.587, 0.114)), 0.0, 1.0);
+	float mx = max(col.r, max(col.g, col.b));
+	vec3 hue = col / max(mx, 0.0001);              // unit-peak hue (full saturation)
+	vec3 neon = hue * clamp(pow(lum, 0.5) * 2.4, 0.0, 1.2);  // density → vivid neon brightness
+	float lr = pow(lum, 0.7);                      // lift mids so more glyphs show
+	float idx = floor(min(lr, 0.9999) * uGlyphCount);
+	vec2 auv = vec2((idx + cuv.x) / uGlyphCount, cuv.y);
+	float mask = texture2D(uGlyphs, auv).r;
+	gl_FragColor = vec4(neon * (0.16 + 0.84 * mask), 1.0);   // faint cell-colour tile under glyph
+}
+`;
+
+// Stage B: present the glyph bitmap to screen with zoom/pan. When zoomed in far
+// enough that one source texel covers several screen pixels, split each texel into
+// an R/G/B aperture-grille triad with a horizontal scanline gap (the "RGB pixels"
+// reveal). The triad fades out (t) at low magnification so the far view stays clean.
+export const asciiPresent = `
+precision highp float;
+precision highp sampler2D;
+varying vec2 vUv;
+uniform sampler2D uAscii;
+uniform vec2 uAsciiSize;      // glyph-bitmap size in texels (cols*GP, rows*GP)
+uniform vec2 uScreen;         // drawing-buffer size in px
+uniform float uZoom;
+uniform vec2 uPan;            // ascii-uv shown at screen centre
+uniform vec3 uBack;           // background colour outside the view
+void main () {
+	vec2 uv = (vUv - 0.5) / uZoom + uPan;
+	if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+		gl_FragColor = vec4(uBack, 1.0);
+		return;
+	}
+	vec3 base = texture2D(uAscii, uv).rgb;
+	float mag = uZoom * (uScreen.x / uAsciiSize.x);   // screen px per source texel
+	float t = smoothstep(2.0, 4.0, mag);
+	float sx = fract(uv.x * uAsciiSize.x);
+	float sy = fract(uv.y * uAsciiSize.y);
+	vec3 stripe = vec3(
+		smoothstep(0.5, 0.0, abs(sx - 1.0 / 6.0)),
+		smoothstep(0.5, 0.0, abs(sx - 0.5)),
+		smoothstep(0.5, 0.0, abs(sx - 5.0 / 6.0))
+	);
+	stripe /= max(max(stripe.r, stripe.g), stripe.b);
+	float gap = smoothstep(0.0, 0.15, sy) * smoothstep(1.0, 0.85, sy);
+	gap = mix(1.0, gap, 0.6);
+	vec3 crt = base * stripe * gap * 1.4;
+	gl_FragColor = vec4(mix(base, crt, t), 1.0);
+}
+`;

@@ -78,15 +78,64 @@ const bloomFinalProgram = new Program(gl, baseVS, fs(S.bloomFinal));
 const sunraysMaskProgram = new Program(gl, baseVS, fs(S.sunraysMask));
 const sunraysProgram = new Program(gl, baseVS, fs(S.sunrays));
 const obstacleStampProgram = new Program(gl, baseVS, fs(S.obstacleStamp));
+const asciiArtProgram = new Program(gl, baseVS, fs(S.asciiArt));
+const asciiPresentProgram = new Program(gl, baseVS, fs(S.asciiPresent));
 const displayMaterial = new Material(gl, baseVS, S.display);
 
 const blit = createBlit(gl);
 const ditheringTexture = createNoiseTexture(gl, 256);
 
+// ── ASCII glyph atlas ──
+// Ramp ordered sparse→dense; cell luminance indexes a glyph. Rendered to an
+// offscreen 2D canvas (one GP×GP cell per char) and uploaded as a NEAREST texture.
+const ASCII_GP = 8;   // glyph cell size in texels
+const ASCII_RAMP = " .,:;-~=+iltfrcvunxz23578XYUJCLAHSGZO0QMW#B%8&@$";
+
+function createGlyphAtlas() {
+	const n = ASCII_RAMP.length;
+	const c = document.createElement('canvas');
+	c.width = n * ASCII_GP; c.height = ASCII_GP;
+	const ctx = c.getContext('2d');
+	ctx.fillStyle = '#000'; ctx.fillRect(0, 0, c.width, c.height);
+	ctx.fillStyle = '#fff';
+	ctx.font = 'bold ' + ASCII_GP + 'px monospace';
+	ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+	for (let i = 0; i < n; i++) ctx.fillText(ASCII_RAMP[i], i * ASCII_GP + ASCII_GP / 2, ASCII_GP / 2 + 0.5);
+
+	const tex = gl.createTexture();
+	gl.bindTexture(gl.TEXTURE_2D, tex);
+	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	return {
+		texture: tex, count: n,
+		attach(id) { gl.activeTexture(gl.TEXTURE0 + id); gl.bindTexture(gl.TEXTURE_2D, tex); return id; },
+	};
+}
+const glyphAtlas = createGlyphAtlas();
+
 // ── framebuffers ──
 let dye, velocity, divergenceFBO, curlFBO, pressure, obstacleMask;
 let bloomFBO, sunrays, sunraysTemp;
 const bloomFramebuffers = [];
+
+// ASCII targets: asciiScene = one LDR texel per cell; asciiBitmap = the glyph image.
+let asciiScene, asciiBitmap, asciiCols = 0, asciiRows = 0;
+function initAsciiTargets() {
+	const cols = Math.max(8, Math.round(config.ASCII_COLS));
+	const rows = Math.max(8, Math.round(cols * canvas.height / canvas.width));
+	if (cols === asciiCols && rows === asciiRows && asciiScene) return;
+	asciiCols = cols; asciiRows = rows;
+	asciiScene = createFBO(gl, cols, rows, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR);
+	asciiBitmap = createFBO(gl, cols * ASCII_GP, rows * ASCII_GP, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
+	// soften minification (zoomed-out) without blurring zoomed-in fat pixels
+	gl.bindTexture(gl.TEXTURE_2D, asciiBitmap.texture);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+}
 
 function getResolution(resolution) {
 	let aspect = gl.drawingBufferWidth / gl.drawingBufferHeight;
@@ -117,6 +166,7 @@ function initFramebuffers() {
 
 	initBloomFramebuffers();
 	initSunraysFramebuffers();
+	initAsciiTargets();
 }
 
 function initBloomFramebuffers() {
@@ -181,6 +231,17 @@ let mode = 'fluid';      // fluid | obstacle | erase
 let shiftHeld = false;
 let obColor = [0.80, 0.80, 0.86];
 
+// ASCII zoom/pan: zoom magnifies toward the cursor; pan (middle-drag) shifts the
+// ascii-uv shown at screen centre. RGB-triad subpixels reveal at high magnification.
+let asciiZoom = 1, asciiPanX = 0.5, asciiPanY = 0.5;
+const ASCII_ZOOM_MAX = 60;
+function clampAsciiPan() {
+	if (asciiZoom <= 1) { asciiPanX = 0.5; asciiPanY = 0.5; return; }
+	const half = 0.5 / asciiZoom;
+	asciiPanX = Math.min(Math.max(asciiPanX, half), 1 - half);
+	asciiPanY = Math.min(Math.max(asciiPanY, half), 1 - half);
+}
+
 function aspect() { return canvas.width / canvas.height; }
 function correctRadius(radius) { const a = aspect(); return a > 1 ? radius * a : radius; }
 
@@ -190,6 +251,7 @@ function pos(e) {
 }
 
 canvas.addEventListener('mousedown', e => {
+	if (e.button === 1) { e.preventDefault(); if (config.ASCII) startAsciiPan(e); return; }  // middle = pan
 	const { x, y, w, h } = pos(e);
 	const p = pointers[0];
 	p.forceErase = e.button === 2;
@@ -204,6 +266,37 @@ canvas.addEventListener('mousemove', e => {
 });
 window.addEventListener('mouseup', () => { pointers[0].down = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// ── ASCII zoom (wheel toward cursor) + pan (middle-drag) ──
+function screenUv(e) {
+	const rect = canvas.getBoundingClientRect();
+	return { x: (e.clientX - rect.left) / rect.width, y: 1.0 - (e.clientY - rect.top) / rect.height, rect };
+}
+canvas.addEventListener('wheel', e => {
+	if (!config.ASCII) return;
+	e.preventDefault();
+	const m = screenUv(e);
+	const ax = (m.x - 0.5) / asciiZoom + asciiPanX;   // ascii-uv under the cursor (fixed point)
+	const ay = (m.y - 0.5) / asciiZoom + asciiPanY;
+	asciiZoom = Math.min(Math.max(asciiZoom * Math.exp(-e.deltaY * 0.0015), 1), ASCII_ZOOM_MAX);
+	asciiPanX = ax - (m.x - 0.5) / asciiZoom;
+	asciiPanY = ay - (m.y - 0.5) / asciiZoom;
+	clampAsciiPan();
+}, { passive: false });
+
+let asciiPanning = false, lastPan = null;
+function startAsciiPan(e) { asciiPanning = true; lastPan = { x: e.clientX, y: e.clientY }; }
+window.addEventListener('mousemove', e => {
+	if (!asciiPanning) return;
+	const rect = canvas.getBoundingClientRect();
+	asciiPanX -= (e.clientX - lastPan.x) / rect.width / asciiZoom;
+	asciiPanY += (e.clientY - lastPan.y) / rect.height / asciiZoom;
+	lastPan = { x: e.clientX, y: e.clientY };
+	clampAsciiPan();
+});
+window.addEventListener('mouseup', e => { if (e.button === 1) asciiPanning = false; });
+function resetAsciiView() { asciiZoom = 1; asciiPanX = 0.5; asciiPanY = 0.5; }
+canvas.addEventListener('dblclick', () => { if (config.ASCII) resetAsciiView(); });
 
 canvas.addEventListener('touchstart', e => {
 	e.preventDefault();
@@ -477,12 +570,36 @@ function drawDisplay(target) {
 	blit(target);
 }
 
+// Render the fluid as a colored ASCII grid, then present it with zoom/pan + CRT triad.
+function renderAscii() {
+	gl.disable(gl.BLEND);
+	drawDisplay(asciiScene);                         // fluid → one LDR texel per cell
+
+	asciiArtProgram.bind();
+	gl.uniform1i(asciiArtProgram.uniforms.uScene, asciiScene.attach(0));
+	gl.uniform1i(asciiArtProgram.uniforms.uGlyphs, glyphAtlas.attach(1));
+	gl.uniform2f(asciiArtProgram.uniforms.uGrid, asciiCols, asciiRows);
+	gl.uniform1f(asciiArtProgram.uniforms.uGlyphCount, glyphAtlas.count);
+	blit(asciiBitmap);                               // → crisp glyph bitmap
+
+	asciiPresentProgram.bind();
+	gl.uniform1i(asciiPresentProgram.uniforms.uAscii, asciiBitmap.attach(0));
+	gl.uniform2f(asciiPresentProgram.uniforms.uAsciiSize, asciiBitmap.width, asciiBitmap.height);
+	gl.uniform2f(asciiPresentProgram.uniforms.uScreen, gl.drawingBufferWidth, gl.drawingBufferHeight);
+	gl.uniform1f(asciiPresentProgram.uniforms.uZoom, asciiZoom);
+	gl.uniform2f(asciiPresentProgram.uniforms.uPan, asciiPanX, asciiPanY);
+	const bg = normalizeColor(config.BACK_COLOR);
+	gl.uniform3f(asciiPresentProgram.uniforms.uBack, bg.r, bg.g, bg.b);
+	blit(null);                                      // → screen
+}
+
 function render(target) {
 	if (config.BLOOM) applyBloom(dye.read, bloomFBO);
 	if (config.SUNRAYS) {
 		applySunrays(dye.read, dye.write, sunrays);
 		blur(sunrays, sunraysTemp, 1);
 	}
+	if (config.ASCII) { renderAscii(); return; }
 	if (!config.TRANSPARENT) {
 		gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 		gl.enable(gl.BLEND);
@@ -591,6 +708,8 @@ function wireUI() {
 	bindCheckbox('colorfulToggle', v => config.COLORFUL = v);
 	bindCheckbox('emitterToggle', v => config.EMITTER = v);
 	bindCheckbox('transparentToggle', v => config.TRANSPARENT = v);
+	bindCheckbox('asciiToggle', v => { config.ASCII = v; resetAsciiView(); });
+	bindSlider('asciiColsSlider', 'asciiColsValue', v => parseInt(v), v => { config.ASCII_COLS = v; initAsciiTargets(); });
 
 	document.querySelectorAll('input[name="colorMode"]').forEach(el => {
 		el.addEventListener('change', () => { if (el.checked) config.COLOR_MODE = el.value; });
@@ -622,6 +741,10 @@ function wireUI() {
 		else if (e.code === 'KeyD') setMode('fluid');
 		else if (e.code === 'KeyO') setMode('obstacle');
 		else if (e.code === 'KeyE') setMode('erase');
+		else if (e.code === 'KeyA') {
+			config.ASCII = !config.ASCII; resetAsciiView();
+			const cb = document.getElementById('asciiToggle'); if (cb) cb.checked = config.ASCII;
+		}
 	});
 	window.addEventListener('keydown', e => { if (e.key === 'Shift') shiftHeld = true; });
 	window.addEventListener('keyup', e => { if (e.key === 'Shift') shiftHeld = false; });
