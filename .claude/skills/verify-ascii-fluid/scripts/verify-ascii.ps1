@@ -25,6 +25,7 @@ param(
 	# live knobs
 	[int]$Cols,
 	[int]$Splats = 14,
+	[double]$Zoom,
 	# test (asciiTest.html) knobs
 	[int]$Gpx,
 	[int]$Scale,
@@ -61,6 +62,7 @@ if ($Target -eq 'test') {
 } else {
 	$qs = @('ascii=1')
 	if ($PSBoundParameters.ContainsKey('Cols')) { $qs += "cols=$Cols" }
+	if ($PSBoundParameters.ContainsKey('Zoom')) { $qs += "zoom=$Zoom" }
 	$qs += "splats=$Splats"
 	$path = '/FluidSimulation/FluidSimulation.html?' + ($qs -join '&')
 	if (-not $Wait) { $Wait = 7000 }   # let the splats advect into visible dye before the grab

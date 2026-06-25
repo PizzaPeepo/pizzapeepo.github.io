@@ -50,7 +50,7 @@ const filtering = gl.LINEAR; // half-float linear filtering is core in WebGL2
 
 if (rgba == null) {
 	// No float render targets: degrade gracefully.
-	config.SHADING = false; config.BLOOM = false; config.SUNRAYS = false;
+	config.SHADING = false; config.SUNRAYS = false;
 	config.DYE_RESOLUTION = 512;
 	rgba = { internalFormat: gl.RGBA, format: gl.RGBA };
 	rg = rgba; r = rgba;
@@ -72,9 +72,6 @@ const curlProgram = new Program(gl, baseVS, fs(S.curl));
 const vorticityProgram = new Program(gl, baseVS, fs(S.vorticity));
 const pressureProgram = new Program(gl, baseVS, fs(S.pressure));
 const gradientSubtractProgram = new Program(gl, baseVS, fs(S.gradientSubtract));
-const bloomPrefilterProgram = new Program(gl, baseVS, fs(S.bloomPrefilter));
-const bloomBlurProgram = new Program(gl, baseVS, fs(S.bloomBlur));
-const bloomFinalProgram = new Program(gl, baseVS, fs(S.bloomFinal));
 const sunraysMaskProgram = new Program(gl, baseVS, fs(S.sunraysMask));
 const sunraysProgram = new Program(gl, baseVS, fs(S.sunrays));
 const obstacleStampProgram = new Program(gl, baseVS, fs(S.obstacleStamp));
@@ -166,8 +163,7 @@ asciiFontFace.load()
 
 // ── framebuffers ──
 let dye, velocity, divergenceFBO, curlFBO, pressure, obstacleMask;
-let bloomFBO, sunrays, sunraysTemp;
-const bloomFramebuffers = [];
+let sunrays, sunraysTemp;
 
 // ASCII targets: asciiScene = one LDR texel per cell; asciiBitmap = the glyph image.
 let asciiScene, asciiBitmap, asciiTrail, asciiCols = 0, asciiRows = 0;
@@ -210,21 +206,8 @@ function initFramebuffers() {
 	curlFBO = createFBO(gl, simRes.width, simRes.height, r.internalFormat, r.format, texType, gl.NEAREST);
 	pressure = createDoubleFBO(gl, simRes.width, simRes.height, r.internalFormat, r.format, texType, gl.NEAREST);
 
-	initBloomFramebuffers();
 	initSunraysFramebuffers();
 	initAsciiTargets();
-}
-
-function initBloomFramebuffers() {
-	const res = getResolution(config.BLOOM_RESOLUTION);
-	bloomFBO = createFBO(gl, res.width, res.height, rgba.internalFormat, rgba.format, texType, filtering);
-	bloomFramebuffers.length = 0;
-	for (let i = 0; i < config.BLOOM_ITERATIONS; i++) {
-		const width = res.width >> (i + 1);
-		const height = res.height >> (i + 1);
-		if (width < 2 || height < 2) break;
-		bloomFramebuffers.push(createFBO(gl, width, height, rgba.internalFormat, rgba.format, texType, filtering));
-	}
 }
 
 function initSunraysFramebuffers() {
@@ -237,7 +220,6 @@ function initSunraysFramebuffers() {
 function updateKeywords() {
 	const kw = [];
 	if (config.SHADING) kw.push('SHADING');
-	if (config.BLOOM) kw.push('BLOOM');
 	if (config.SUNRAYS) kw.push('SUNRAYS');
 	if (config.COLOR_MODE === 'heat') kw.push('HEATMAP');
 	displayMaterial.setKeywords(kw);
@@ -530,44 +512,6 @@ function step(dt) {
 }
 
 // ── post + display ──
-function applyBloom(source, destination) {
-	if (bloomFramebuffers.length < 2) return;
-	let last = destination;
-	gl.disable(gl.BLEND);
-	bloomPrefilterProgram.bind();
-	const knee = config.BLOOM_THRESHOLD * config.BLOOM_SOFT_KNEE + 0.0001;
-	gl.uniform3f(bloomPrefilterProgram.uniforms.curve, config.BLOOM_THRESHOLD - knee, knee * 2, 0.25 / knee);
-	gl.uniform1f(bloomPrefilterProgram.uniforms.threshold, config.BLOOM_THRESHOLD);
-	gl.uniform1i(bloomPrefilterProgram.uniforms.uTexture, source.attach(0));
-	blit(last);
-
-	bloomBlurProgram.bind();
-	for (let i = 0; i < bloomFramebuffers.length; i++) {
-		const dest = bloomFramebuffers[i];
-		gl.uniform2f(bloomBlurProgram.uniforms.texelSize, last.texelSizeX, last.texelSizeY);
-		gl.uniform1i(bloomBlurProgram.uniforms.uTexture, last.attach(0));
-		blit(dest);
-		last = dest;
-	}
-
-	gl.blendFunc(gl.ONE, gl.ONE);
-	gl.enable(gl.BLEND);
-	for (let i = bloomFramebuffers.length - 2; i >= 0; i--) {
-		const base = bloomFramebuffers[i];
-		gl.uniform2f(bloomBlurProgram.uniforms.texelSize, last.texelSizeX, last.texelSizeY);
-		gl.uniform1i(bloomBlurProgram.uniforms.uTexture, last.attach(0));
-		blit(base);
-		last = base;
-	}
-	gl.disable(gl.BLEND);
-
-	bloomFinalProgram.bind();
-	gl.uniform2f(bloomFinalProgram.uniforms.texelSize, last.texelSizeX, last.texelSizeY);
-	gl.uniform1i(bloomFinalProgram.uniforms.uTexture, last.attach(0));
-	gl.uniform1f(bloomFinalProgram.uniforms.intensity, config.BLOOM_INTENSITY);
-	blit(destination);
-}
-
 function applySunrays(source, mask, destination) {
 	gl.disable(gl.BLEND);
 	sunraysMaskProgram.bind();
@@ -607,12 +551,6 @@ function drawDisplay(target) {
 	displayMaterial.bind();
 	if (config.SHADING) gl.uniform2f(displayMaterial.uniforms.texelSize, 1 / width, 1 / height);
 	gl.uniform1i(displayMaterial.uniforms.uTexture, dye.read.attach(0));
-	if (config.BLOOM) {
-		gl.uniform1i(displayMaterial.uniforms.uBloom, bloomFBO.attach(1));
-		gl.uniform1i(displayMaterial.uniforms.uDithering, ditheringTexture.attach(2));
-		const scale = getTextureScale(ditheringTexture, width, height);
-		gl.uniform2f(displayMaterial.uniforms.ditherScale, scale.x, scale.y);
-	}
 	if (config.SUNRAYS) gl.uniform1i(displayMaterial.uniforms.uSunrays, sunrays.attach(3));
 	gl.uniform1i(displayMaterial.uniforms.uObstacle, obstacleMask.read.attach(4));
 	gl.uniform3f(displayMaterial.uniforms.uObstacleColor, obColor[0], obColor[1], obColor[2]);
@@ -659,7 +597,6 @@ function renderAscii() {
 }
 
 function render(target) {
-	if (config.BLOOM) applyBloom(dye.read, bloomFBO);
 	if (config.SUNRAYS) {
 		applySunrays(dye.read, dye.write, sunrays);
 		blur(sunrays, sunraysTemp, 1);
@@ -783,8 +720,6 @@ function applyAsciiPreset() {
 	setSliderValue('splatRadiusSlider', 0.15);
 	setSliderValue('splatForceSlider', 12000);
 	setSliderValue('brushSlider', 0.010);
-	setSliderValue('bloomIntensitySlider', 0.10);
-	setSliderValue('bloomThresholdSlider', 0.80);
 	setSliderValue('sunraysWeightSlider', 0.15);
 	setSliderValue('colorSpeedSlider', 5.0);
 	setSliderValue('asciiColsSlider', 60);   // ~17px glyphs on a desktop canvas — readable; 100 was ~10px (mush)
@@ -797,7 +732,6 @@ function applyAsciiPreset() {
 	setCheckboxValue('colorfulToggle', true);
 	setCheckboxValue('transparentToggle', true);
 	setCheckboxValue('emitterToggle', false);
-	setCheckboxValue('bloomToggle', false);     // ASCII has its own glow; keep phosphors crisp
 	setCheckboxValue('sunraysToggle', false);
 	updateKeywords();
 }
@@ -815,13 +749,10 @@ function wireUI() {
 	bindSlider('splatRadiusSlider', 'splatRadiusValue', parseFloat, v => config.SPLAT_RADIUS = v, v => v.toFixed(2));
 	bindSlider('splatForceSlider', 'splatForceValue', v => parseInt(v), v => config.SPLAT_FORCE = v);
 	bindSlider('brushSlider', 'brushValue', parseFloat, v => config.OBSTACLE_BRUSH = v, v => v.toFixed(3));
-	bindSlider('bloomIntensitySlider', 'bloomIntensityValue', parseFloat, v => config.BLOOM_INTENSITY = v, v => v.toFixed(2));
-	bindSlider('bloomThresholdSlider', 'bloomThresholdValue', parseFloat, v => config.BLOOM_THRESHOLD = v, v => v.toFixed(2));
 	bindSlider('sunraysWeightSlider', 'sunraysWeightValue', parseFloat, v => config.SUNRAYS_WEIGHT = v, v => v.toFixed(2));
 	bindSlider('colorSpeedSlider', 'colorSpeedValue', parseFloat, v => config.COLOR_UPDATE_SPEED = v, v => v.toFixed(1));
 
 	bindCheckbox('shadingToggle', v => { config.SHADING = v; updateKeywords(); });
-	bindCheckbox('bloomToggle', v => { config.BLOOM = v; updateKeywords(); });
 	bindCheckbox('sunraysToggle', v => { config.SUNRAYS = v; updateKeywords(); });
 	bindCheckbox('colorfulToggle', v => config.COLORFUL = v);
 	bindCheckbox('emitterToggle', v => config.EMITTER = v);
@@ -903,12 +834,14 @@ splatStack.push(parseInt(Math.random() * 6) + 8);
 //   &cols=N                      → override glyph columns (glyph size) to inspect spacing.
 //   &splats=N                    → push N extra dye splats so the grid has visible content.
 //   &glow=0                      → force the phosphor glow OFF (A/B the glyph-level bloom).
+//   &zoom=N                      → set initial ASCII zoom (reveals the RGB subpixel triad; ~>3).
 (function applyBootParams() {
 	const q = new URLSearchParams(location.search);
 	if (q.get('ascii') === '1') {
 		setCheckboxValue('asciiToggle', true);
 		if (q.has('cols')) setSliderValue('asciiColsSlider', parseInt(q.get('cols')));
 		if (q.get('glow') === '0') setCheckboxValue('asciiGlowToggle', false);
+		if (q.has('zoom')) asciiZoom = Math.min(Math.max(parseFloat(q.get('zoom')), 1), ASCII_ZOOM_MAX);
 	}
 	const ns = parseInt(q.get('splats')) || 0;
 	for (let i = 0; i < ns; i++) splatStack.push(parseInt(Math.random() * 8) + 8);

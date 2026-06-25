@@ -282,62 +282,6 @@ void main () {
 }
 `;
 
-export const bloomPrefilter = `
-precision mediump float;
-precision mediump sampler2D;
-varying vec2 vUv;
-uniform sampler2D uTexture;
-uniform vec3 curve;
-uniform float threshold;
-void main () {
-	vec3 c = texture2D(uTexture, vUv).rgb;
-	float br = max(c.r, max(c.g, c.b));
-	float rq = clamp(br - curve.x, 0.0, curve.y);
-	rq = curve.z * rq * rq;
-	c *= max(rq, br - threshold) / max(br, 0.0001);
-	gl_FragColor = vec4(c, 0.0);
-}
-`;
-
-export const bloomBlur = `
-precision mediump float;
-precision mediump sampler2D;
-varying vec2 vL;
-varying vec2 vR;
-varying vec2 vT;
-varying vec2 vB;
-uniform sampler2D uTexture;
-void main () {
-	vec4 sum = vec4(0.0);
-	sum += texture2D(uTexture, vL);
-	sum += texture2D(uTexture, vR);
-	sum += texture2D(uTexture, vT);
-	sum += texture2D(uTexture, vB);
-	sum *= 0.25;
-	gl_FragColor = sum;
-}
-`;
-
-export const bloomFinal = `
-precision mediump float;
-precision mediump sampler2D;
-varying vec2 vL;
-varying vec2 vR;
-varying vec2 vT;
-varying vec2 vB;
-uniform sampler2D uTexture;
-uniform float intensity;
-void main () {
-	vec4 sum = vec4(0.0);
-	sum += texture2D(uTexture, vL);
-	sum += texture2D(uTexture, vR);
-	sum += texture2D(uTexture, vT);
-	sum += texture2D(uTexture, vB);
-	sum *= 0.25;
-	gl_FragColor = sum * intensity;
-}
-`;
-
 export const sunraysMask = `
 precision highp float;
 precision highp sampler2D;
@@ -386,7 +330,6 @@ varying vec2 vR;
 varying vec2 vT;
 varying vec2 vB;
 uniform sampler2D uTexture;
-uniform sampler2D uBloom;
 uniform sampler2D uSunrays;
 uniform sampler2D uDithering;
 uniform vec2 ditherScale;
@@ -414,7 +357,7 @@ vec3 linearToGamma (vec3 c) {
 
 void main () {
 	vec3 c = texture2D(uTexture, vUv).rgb;
-	float dens = max(c.r, max(c.g, c.b));   // raw dye density, before shading/bloom
+	float dens = max(c.r, max(c.g, c.b));   // raw dye density, before shading
 #ifdef SHADING
 	vec3 lc = texture2D(uTexture, vL).rgb;
 	vec3 rc = texture2D(uTexture, vR).rgb;
@@ -427,22 +370,9 @@ void main () {
 	float diffuse = clamp(dot(n, l) + 0.7, 0.7, 1.0);
 	c *= diffuse;
 #endif
-#ifdef BLOOM
-	vec3 bloom = texture2D(uBloom, vUv).rgb;
-#endif
 #ifdef SUNRAYS
 	float sunrays = texture2D(uSunrays, vUv).r;
 	c *= sunrays;
-#ifdef BLOOM
-	bloom *= sunrays;
-#endif
-#endif
-#ifdef BLOOM
-	float noise = texture2D(uDithering, vUv * ditherScale).r;
-	noise = noise * 2.0 - 1.0;
-	bloom += noise / 255.0;
-	bloom = linearToGamma(bloom);
-	c += bloom;
 #endif
 #ifdef HEATMAP
 	c = heatRamp(pow(clamp(dens * 3.0, 0.0, 1.0), 0.75));   // density -> thermal palette
@@ -597,10 +527,11 @@ void main () {
 	float rad = 0.12;                         // corner radius
 	vec3 crt = vec3(0.0);
 	if (t > 0.0) {                            // only build the triad when zoomed in
+		float glowAtten = mix(1.0, 0.25, smoothstep(6.0, 24.0, mag));   // ease the halo down as we zoom all the way in → crisp phosphors, less wash
 		// Sum the current phosphor plus its neighbours so their halos overlap and
 		// the glow blends across the gaps instead of cutting off at hard edges.
-		for (int dxn = -1; dxn <= 1; dxn++) {
-			for (int dyn = -1; dyn <= 1; dyn++) {
+		for (int dxn = -3; dxn <= 3; dxn++) {
+			for (int dyn = -2; dyn <= 2; dyn++) {
 				float j = baseSub + float(dxn);
 				float k = baseRow + float(dyn);
 				if (j < 0.0 || k < 0.0) continue;
@@ -608,12 +539,12 @@ void main () {
 				vec2 dd = abs(dq) - hs + rad;
 				float dist = length(max(dd, 0.0)) + min(max(dd.x, dd.y), 0.0) - rad;
 				float core = smoothstep(0.045, -0.03, dist);   // soft rounded body
-				float glow = exp(-max(dist, 0.0) * 2.5);        // wide halo bleeds across the gaps (strong bloom)
+				float glow = exp(-max(dist, 0.0) * 1.5);        // softer, wider halo → bleeds smoothly across the gaps, tapers to ~0 before the loop edge (no hard cutoff)
 				float ci = mod(j, 3.0);                          // 0,1,2 -> R,G,B
 				vec3 chan = vec3(ci == 0.0 ? 1.0 : 0.0, ci == 1.0 ? 1.0 : 0.0, ci == 2.0 ? 1.0 : 0.0);
 				vec2 texel = vec2(floor(j / 3.0), k);
 				vec3 c = texture2D(uAscii, (texel + 0.5) / uAsciiSize).rgb;
-				crt += c * chan * (core * 3.0 + glow * 3.0 * uGlow);   // slim bright core + (toggleable) fat glow halo; only the global hum below modulates
+				crt += c * chan * (core * 3.0 + glow * 1.4 * uGlow * glowAtten);   // slim bright core + (toggleable) fat glow halo, halo fades with zoom; only the global hum below modulates
 			}
 		}
 		crt *= 0.95 + 0.05 * sin(uTime * 24.0);   // global mains hum
