@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASCII glyph-spacing test — FluidSimulation</title>
+<style>
+	html, body { margin: 0; background: #0d0b14; color: #cde; font: 13px/1.5 monospace; }
+	header { padding: 12px 16px; }
+	header h1 { font-size: 15px; margin: 0 0 4px; color: #9fe; }
+	header code { color: #fb7; }
+	.panel { padding: 4px 16px 18px; }
+	.panel h2 { font-size: 13px; margin: 12px 0 6px; color: #8cf; font-weight: normal; }
+	.panel h2 b { color: #fff; }
+	canvas { display: block; image-rendering: pixelated; background: #000; border: 1px solid #243; }
+	a { color: #7df; }
+</style>
+</head>
+<body>
+<header>
+	<h1>ASCII glyph horizontal-spacing test</h1>
+	Mirrors <code>createGlyphAtlas()</code> cell geometry. Glyph CELL is <code>ASCII_GP_X</code> wide ×
+	<code>ASCII_GP</code> tall (units); ink ≈ 9 wide. Gap between glyphs = cell&nbsp;−&nbsp;ink.<br>
+	Query: <code>?gpx=11&gp=16&scale=18&rows=2</code> — sweep cell width to inspect spacing.
+	Back to <a href="FluidSimulation.html?ascii=1&amp;splats=14">live ASCII mode</a>.
+</header>
+<div id="panels"></div>
+
+<script>
+// Standalone visual check for the horizontal glyph pitch. No WebGL: draws the ramp on a
+// grid whose CELL WIDTH = gpx units and CELL HEIGHT = gp units, glyph centred per cell —
+// the exact spacing the real atlas bakes in. The point is the GAP between glyphs, which is
+// pure geometry (gpx vs ink width) and independent of SwiftShader AA, so canvas2D is fine.
+const RAMP = " .,:;-~=+*/|\\iltfrcvunxz23578XYUJCLAHSGZO0QMW#B%8&$@";
+const q = new URLSearchParams(location.search);
+const GP    = parseInt(q.get('gp'))    || 16;   // cell height (units) — matches ASCII_GP
+const SCALE = parseInt(q.get('scale')) || 7;    // screen px per unit
+const ROWS  = parseInt(q.get('rows'))  || 4;
+// When ?gpx is given, show just that width; otherwise compare before (square 16) vs after (11).
+const WIDTHS = q.has('gpx') ? [parseInt(q.get('gpx'))] : [16, 11];
+
+function drawPanel(gpx, label) {
+	const wrap = document.createElement('div'); wrap.className = 'panel';
+	const h = document.createElement('h2'); h.innerHTML = label; wrap.appendChild(h);
+	const cv = document.createElement('canvas');
+	const cellW = gpx * SCALE, cellH = GP * SCALE;
+	cv.width = RAMP.length * cellW; cv.height = ROWS * cellH;
+	wrap.appendChild(cv);
+	document.getElementById('panels').appendChild(wrap);
+
+	const ctx = cv.getContext('2d');
+	ctx.fillStyle = '#000'; ctx.fillRect(0, 0, cv.width, cv.height);
+	ctx.font = cellH + "px 'Web437_ATI_9x16', monospace";
+	ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+	ctx.fillStyle = '#7CFF9A';
+	// centre each glyph in its cell exactly like createGlyphAtlas (by 'M' advance, monospace)
+	const offX = (cellW - ctx.measureText('M').width) / 2;
+	const ink = ctx.measureText('M').width / SCALE;   // ink width in units (≈9 for Web437)
+	for (let r = 0; r < ROWS; r++)
+		for (let i = 0; i < RAMP.length; i++)
+			ctx.fillText(RAMP[i], i * cellW + offX, r * cellH);
+
+	// cell guides + gap callout so the spacing reduction is legible
+	ctx.strokeStyle = 'rgba(120,180,255,0.18)';
+	for (let i = 0; i <= RAMP.length; i++) { ctx.beginPath(); ctx.moveTo(i*cellW, 0); ctx.lineTo(i*cellW, cv.height); ctx.stroke(); }
+	const gap = (gpx - ink).toFixed(1);
+	h.innerHTML = label + ` — cell width <b>${gpx}u</b>, ink ≈ ${ink.toFixed(1)}u, horizontal gap ≈ <b>${gap}u</b>`;
+}
+
+const fontReady = new FontFace('Web437_ATI_9x16', "url('Web437_ATI_9x16.woff')").load()
+	.then(f => document.fonts.add(f)).catch(() => {});
+fontReady.then(() => {
+	if (WIDTHS.length === 1) drawPanel(WIDTHS[0], `cell width = ${WIDTHS[0]}u`);
+	else {
+		drawPanel(16, 'BEFORE (square 16-wide cell)');
+		drawPanel(11, 'AFTER  (11-wide cell, ~70% less gap)');
+	}
+});
+</script>
+</body>
+</html>

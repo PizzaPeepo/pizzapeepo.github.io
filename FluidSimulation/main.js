@@ -89,7 +89,8 @@ const ditheringTexture = createNoiseTexture(gl, 256);
 // ── ASCII glyph atlas ──
 // Ramp ordered sparse→dense; cell luminance indexes a glyph. Rendered to an
 // offscreen 2D canvas (one GP×GP cell per char) and uploaded as a NEAREST texture.
-const ASCII_GP = 16;   // glyph cell = native font grid (16); exact 1 font-pixel → 1 texel
+const ASCII_GP = 16;   // glyph CELL HEIGHT = native font grid (16); exact 1 font-pixel → 1 texel
+const ASCII_GP_X = 11;   // glyph CELL WIDTH (units). Web437 ink is ~9 wide; a square-16 cell leaves a ~7-unit horizontal gap. 11 leaves ~2 → ~70% less space between glyphs (cols inflate to keep glyph size/aspect)
 const ASCII_NATIVE = 16;   // Web437_ATI_9x16 TRUE native glyph grid (px). Must match the font or pixels misalign → ragged glyphs
 const ASCII_RAMP = " .,:;-~=+*/|\iltfrcvunxz23578XYUJCLAHSGZO0QMW#B%8&$@";
 
@@ -102,23 +103,23 @@ const ASCII_RAMP = " .,:;-~=+*/|\iltfrcvunxz23578XYUJCLAHSGZO0QMW#B%8&$@";
 const ASCII_SS = 8;
 function createGlyphAtlas() {
 	const n = ASCII_RAMP.length;
-	const cell = ASCII_GP * ASCII_SS;
+	const cellW = ASCII_GP_X * ASCII_SS, cellH = ASCII_GP * ASCII_SS;
 	const c = document.createElement('canvas');
-	c.width = n * cell; c.height = cell;
+	c.width = n * cellW; c.height = cellH;
 	const ctx = c.getContext('2d');
 	ctx.fillStyle = '#000'; ctx.fillRect(0, 0, c.width, c.height);
 	ctx.fillStyle = '#fff';
 	const fpx = ASCII_GP * ASCII_SS;   // = cell: native 16-grid font at SS× → 1 font-pixel = SS source px = 1 output texel after the coverage downsample
 	ctx.font = fpx + "px 'Web437_ATI_9x16', monospace";   // bitmap web-font (VileR, CC BY-SA 4.0); monospace fallback before it loads
 	ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-	const offX = Math.round((cell - ctx.measureText('M').width) / 2 / ASCII_SS) * ASCII_SS;   // centre the glyph but snap to the SS grid so font pixels stay block-aligned
-	for (let i = 0; i < n; i++) ctx.fillText(ASCII_RAMP[i], i * cell + offX, 0);   // top-left, integer-aligned → exact native pixels
+	const offX = Math.round((cellW - ctx.measureText('M').width) / 2 / ASCII_SS) * ASCII_SS;   // centre the glyph but snap to the SS grid so font pixels stay block-aligned
+	for (let i = 0; i < n; i++) ctx.fillText(ASCII_RAMP[i], i * cellW + offX, 0);   // top-left, integer-aligned → exact native pixels
 
 	// Coverage-threshold the supersampled render down to one GP grid per glyph: each output
 	// texel is ON only if ≥50% of its SS×SS source block is inked. Kills the fillText AA
 	// fringe (which the present-stage core*3.0 boost would otherwise show as a solid pixel).
 	const src = ctx.getImageData(0, 0, c.width, c.height).data;
-	const outW = n * ASCII_GP, outH = ASCII_GP;
+	const outW = n * ASCII_GP_X, outH = ASCII_GP;
 	const out = document.createElement('canvas');
 	out.width = outW; out.height = outH;
 	const oimg = out.getContext('2d').createImageData(outW, outH);
@@ -169,14 +170,15 @@ const bloomFramebuffers = [];
 // ASCII targets: asciiScene = one LDR texel per cell; asciiBitmap = the glyph image.
 let asciiScene, asciiBitmap, asciiTrail, asciiCols = 0, asciiRows = 0;
 function initAsciiTargets() {
-	const cols = Math.max(8, Math.round(config.ASCII_COLS));
-	const rows = Math.max(8, Math.round(cols * canvas.height / canvas.width));
+	const visualCols = Math.max(8, Math.round(config.ASCII_COLS));   // slider value = glyph size on screen
+	const cols = Math.round(visualCols * ASCII_GP / ASCII_GP_X);     // inflate horizontal cell count so glyphs pack ~70% tighter at the same on-screen size/aspect
+	const rows = Math.max(8, Math.round(visualCols * canvas.height / canvas.width));
 	if (cols === asciiCols && rows === asciiRows && asciiScene) return;
 	asciiCols = cols; asciiRows = rows;
 	asciiScene = createFBO(gl, cols, rows, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR);
-	asciiBitmap = createFBO(gl, cols * ASCII_GP, rows * ASCII_GP, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
+	asciiBitmap = createFBO(gl, cols * ASCII_GP_X, rows * ASCII_GP, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
 	// phosphor-persistence accumulator: ping-pong, same size/filter as the bitmap (all NEAREST → crisp pixels, no minification blur)
-	asciiTrail = createDoubleFBO(gl, cols * ASCII_GP, rows * ASCII_GP, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
+	asciiTrail = createDoubleFBO(gl, cols * ASCII_GP_X, rows * ASCII_GP, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
 }
 
 function getResolution(resolution) {
@@ -892,4 +894,20 @@ updateKeywords();
 wireUI();
 loadPreset('cylinder');
 splatStack.push(parseInt(Math.random() * 6) + 8);
+
+// ── boot params (verify/debug) ──
+// FluidSimulation.html?ascii=1   → enable ASCII at load (no 'A' keypress; lets a headless
+//                                  screenshot capture the glyph grid). Same path as the toggle.
+//   &cols=N                      → override glyph columns (glyph size) to inspect spacing.
+//   &splats=N                    → push N extra dye splats so the grid has visible content.
+(function applyBootParams() {
+	const q = new URLSearchParams(location.search);
+	if (q.get('ascii') === '1') {
+		setCheckboxValue('asciiToggle', true);
+		if (q.has('cols')) setSliderValue('asciiColsSlider', parseInt(q.get('cols')));
+	}
+	const ns = parseInt(q.get('splats')) || 0;
+	for (let i = 0; i < ns; i++) splatStack.push(parseInt(Math.random() * 8) + 8);
+})();
+
 update();
