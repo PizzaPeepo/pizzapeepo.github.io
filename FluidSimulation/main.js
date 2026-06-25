@@ -91,7 +91,7 @@ const ditheringTexture = createNoiseTexture(gl, 256);
 // offscreen 2D canvas (one GP×GP cell per char) and uploaded as a NEAREST texture.
 const ASCII_GP = 16;   // glyph cell = native font grid (16); exact 1 font-pixel → 1 texel
 const ASCII_NATIVE = 16;   // Web437_ATI_9x16 TRUE native glyph grid (px). Must match the font or pixels misalign → ragged glyphs
-const ASCII_RAMP = " .,:;-~=+*/|\iltfrcvunxz23578XYUJCLAHSGZO0QMW#B%8&@$";
+const ASCII_RAMP = " .,:;-~=+*/|\iltfrcvunxz23578XYUJCLAHSGZO0QMW#B%8&$@";
 
 // Web437 is a bitmap (pixel) face. To reproduce its pixels EXACTLY: render the font at an
 // integer multiple of its native grid (fpx = GP*SS) with the pen integer-aligned to that grid
