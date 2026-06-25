@@ -430,6 +430,7 @@ uniform sampler2D uScene;     // low-res LDR fluid (one texel per cell)
 uniform sampler2D uGlyphs;    // glyph atlas, uGlyphCount chars left-to-right
 uniform sampler2D uDye;       // raw dye field (pre-colormap) — drives the glyph ramp
 uniform sampler2D uObstacle;  // obstacle mask — force a solid glyph so walls aren't blank
+uniform vec3 uObsColor;       // fixed obstacle glyph colour — independent of the fluid hue
 uniform vec2 uGrid;           // cols, rows
 uniform float uGlyphCount;
 void main () {
@@ -452,7 +453,10 @@ void main () {
 	float m0 = texture2D(uGlyphs, vec2((idx + cuv.x) / uGlyphCount, cuv.y)).r;
 	float m1 = texture2D(uGlyphs, vec2((idx1 + cuv.x) / uGlyphCount, cuv.y)).r;
 	float mask = mix(m0, m1, fblend);              // smooth glyph->glyph (no instant pops)
-	gl_FragColor = vec4(neon * (0.8 * mask), 1.0);   // crisp glyph, no dim cell tile
+	float sat = (mx - min(col.r, min(col.g, col.b))) / max(mx, 0.0001);
+	vec3 tint = mix(vec3(1.0, 0.92, 0.5), vec3(1.0), sat);   // desaturated/white glyphs → faint yellow; saturated hues unchanged
+	vec3 gcol = mix(neon * tint, uObsColor, ob);            // obstacle cells take the fixed colour, fluid cells keep their hue
+	gl_FragColor = vec4(gcol * (0.8 * mask), 1.0);   // crisp glyph, no dim cell tile
 }
 `;
 

@@ -90,7 +90,8 @@ const ASCII_GP = 16;   // glyph CELL HEIGHT = native font grid (16); exact 1 fon
 const ASCII_GP_X = 9;   // glyph CELL WIDTH (units). Web437 ink is ~9 wide; a square-16 cell leaves a ~7-unit horizontal gap. 10 leaves ~1 (9 = ink, the floor before glyphs touch) — cols inflate to keep glyph size/aspect
 const ASCII_GP_Y = 16;   // glyph CELL HEIGHT (units). Glyph ink is 16 tall; >16 adds a VERTICAL gap between rows (22 → 6-unit gap), independent of the horizontal pitch. rows shrink to keep glyph size/aspect
 const ASCII_NATIVE = 16;   // Web437_ATI_9x16 TRUE native glyph grid (px). Must match the font or pixels misalign → ragged glyphs
-const ASCII_RAMP = " .,:;-~=+*/|\iltfrcvunxz23578XYUJCLAHSGZO0QMW#B%8&$@";
+// const ASCII_RAMP = " .,:;-~=+*/|\iltfrcvunxz23578XYUJCLAHSGZO0QMW#B%8&$/\-@";
+const ASCII_RAMP = " ,:;-~=+*i-X-rs/\-h235A/-\SGBMH#B%8-/\$89@";
 
 // Web437 is a bitmap (pixel) face. To reproduce its pixels EXACTLY: render the font at an
 // integer multiple of its native grid (fpx = GP*SS) with the pen integer-aligned to that grid
@@ -261,6 +262,8 @@ const splatStack = [];
 let mode = 'fluid';      // fluid | obstacle | erase
 let shiftHeld = false;
 let obColor = [0.80, 0.80, 0.86];
+// ASCII-mode obstacle glyph colour — fixed, independent of the fluid hue so walls read distinct.
+let asciiObsColor = [1.0, 1.0, 1.0];   // plain white
 
 // ASCII zoom/pan: zoom magnifies toward the cursor; pan (middle-drag) shifts the
 // ascii-uv shown at screen centre. RGB-triad subpixels reveal at high magnification.
@@ -579,6 +582,7 @@ function renderAscii() {
 	gl.uniform1i(asciiArtProgram.uniforms.uGlyphs, glyphAtlas.attach(1));
 	gl.uniform1i(asciiArtProgram.uniforms.uDye, dye.read.attach(2));
 	gl.uniform1i(asciiArtProgram.uniforms.uObstacle, obstacleMask.read.attach(3));
+	gl.uniform3f(asciiArtProgram.uniforms.uObsColor, asciiObsColor[0], asciiObsColor[1], asciiObsColor[2]);
 	gl.uniform2f(asciiArtProgram.uniforms.uGrid, asciiCols, asciiRows);
 	gl.uniform1f(asciiArtProgram.uniforms.uGlyphCount, glyphAtlas.count);
 	blit(asciiBitmap);                               // → crisp glyph bitmap
