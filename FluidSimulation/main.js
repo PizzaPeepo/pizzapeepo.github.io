@@ -89,19 +89,27 @@ const ditheringTexture = createNoiseTexture(gl, 256);
 // ── ASCII glyph atlas ──
 // Ramp ordered sparse→dense; cell luminance indexes a glyph. Rendered to an
 // offscreen 2D canvas (one GP×GP cell per char) and uploaded as a NEAREST texture.
-const ASCII_GP = 12;   // glyph cell size in texels (cap height ~9px, advance ~7px)
+const ASCII_GP = 16;   // glyph cell = native font height (1:1 → crisp pixels, no downscale)
+const ASCII_NATIVE = 16;   // Web437_ATI_9x16 native glyph height (px); render at integer multiples to keep bitmap glyphs crisp
 const ASCII_RAMP = " .,:;-~=+*/|\iltfrcvunxz23578XYUJCLAHSGZO0QMW#B%8&@$";
 
+// Web437 is a bitmap (pixel) face: render each glyph at its native size into a cell of
+// the same size (SS=1) and sample NEAREST end-to-end → crisp fat pixels, zero AA. The
+// old SS=4 + LINEAR existed only to downscale a vector-ish font without blob artifacts;
+// that downscale was itself the anti-aliasing.
+const ASCII_SS = 1;
 function createGlyphAtlas() {
 	const n = ASCII_RAMP.length;
+	const cell = ASCII_GP * ASCII_SS;
 	const c = document.createElement('canvas');
-	c.width = n * ASCII_GP; c.height = ASCII_GP;
+	c.width = n * cell; c.height = cell;
 	const ctx = c.getContext('2d');
 	ctx.fillStyle = '#000'; ctx.fillRect(0, 0, c.width, c.height);
 	ctx.fillStyle = '#fff';
-	ctx.font = 'bold ' + ASCII_GP + 'px monospace';
+	const fpx = Math.max(ASCII_NATIVE, Math.floor(cell * 0.85 / ASCII_NATIVE) * ASCII_NATIVE);   // largest exact multiple of native px ≤85% of cell → crisp bitmap glyphs + slight padding
+	ctx.font = fpx + "px 'Web437_ATI_9x16', monospace";   // bitmap web-font (VileR, CC BY-SA 4.0); monospace fallback before it loads
 	ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-	for (let i = 0; i < n; i++) ctx.fillText(ASCII_RAMP[i], i * ASCII_GP + ASCII_GP / 2, ASCII_GP / 2 + 0.5);
+	for (let i = 0; i < n; i++) ctx.fillText(ASCII_RAMP[i], i * cell + cell / 2, cell / 2);   // integer baseline → glyph rows land on pixel grid
 
 	const tex = gl.createTexture();
 	gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -117,7 +125,13 @@ function createGlyphAtlas() {
 		attach(id) { gl.activeTexture(gl.TEXTURE0 + id); gl.bindTexture(gl.TEXTURE_2D, tex); return id; },
 	};
 }
-const glyphAtlas = createGlyphAtlas();
+// Built once now with the monospace fallback (so ASCII mode never breaks if the
+// font is missing), then rebuilt once the bitmap web-font loads.
+let glyphAtlas = createGlyphAtlas();
+const asciiFontFace = new FontFace('Web437_ATI_9x16', "url('Web437_ATI_9x16.woff')");
+asciiFontFace.load()
+	.then(f => { document.fonts.add(f); gl.deleteTexture(glyphAtlas.texture); glyphAtlas = createGlyphAtlas(); })
+	.catch(() => {});
 
 // ── framebuffers ──
 let dye, velocity, divergenceFBO, curlFBO, pressure, obstacleMask;
@@ -133,15 +147,8 @@ function initAsciiTargets() {
 	asciiCols = cols; asciiRows = rows;
 	asciiScene = createFBO(gl, cols, rows, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR);
 	asciiBitmap = createFBO(gl, cols * ASCII_GP, rows * ASCII_GP, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
-	// soften minification (zoomed-out) without blurring zoomed-in fat pixels
-	gl.bindTexture(gl.TEXTURE_2D, asciiBitmap.texture);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-	// phosphor-persistence accumulator: ping-pong, same size/filtering as the bitmap
+	// phosphor-persistence accumulator: ping-pong, same size/filter as the bitmap (all NEAREST → crisp pixels, no minification blur)
 	asciiTrail = createDoubleFBO(gl, cols * ASCII_GP, rows * ASCII_GP, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
-	for (const f of [asciiTrail.read, asciiTrail.write]) {
-		gl.bindTexture(gl.TEXTURE_2D, f.texture);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-	}
 }
 
 function getResolution(resolution) {
@@ -588,6 +595,7 @@ function renderAscii() {
 	asciiArtProgram.bind();
 	gl.uniform1i(asciiArtProgram.uniforms.uScene, asciiScene.attach(0));
 	gl.uniform1i(asciiArtProgram.uniforms.uGlyphs, glyphAtlas.attach(1));
+	gl.uniform1i(asciiArtProgram.uniforms.uDye, dye.read.attach(2));
 	gl.uniform2f(asciiArtProgram.uniforms.uGrid, asciiCols, asciiRows);
 	gl.uniform1f(asciiArtProgram.uniforms.uGlyphCount, glyphAtlas.count);
 	blit(asciiBitmap);                               // → crisp glyph bitmap
@@ -745,7 +753,7 @@ function applyAsciiPreset() {
 	setSliderValue('bloomThresholdSlider', 0.80);
 	setSliderValue('sunraysWeightSlider', 0.15);
 	setSliderValue('colorSpeedSlider', 5.0);
-	setSliderValue('asciiColsSlider', 100);
+	setSliderValue('asciiColsSlider', 60);   // ~17px glyphs on a desktop canvas — readable; 100 was ~10px (mush)
 	setSliderValue('asciiPersistSlider', 0.85);
 	setRadioValue('asciiPersistMode', 'max');
 	setRadioValue('colorMode', 'velocity');

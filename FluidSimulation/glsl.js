@@ -498,6 +498,7 @@ precision highp sampler2D;
 varying vec2 vUv;
 uniform sampler2D uScene;     // low-res LDR fluid (one texel per cell)
 uniform sampler2D uGlyphs;    // glyph atlas, uGlyphCount chars left-to-right
+uniform sampler2D uDye;       // raw dye field (pre-colormap) — drives the glyph ramp
 uniform vec2 uGrid;           // cols, rows
 uniform float uGlyphCount;
 void main () {
@@ -505,11 +506,13 @@ void main () {
 	vec2 cell = floor(g);
 	vec2 cuv = fract(g);
 	vec3 col = texture2D(uScene, (cell + 0.5) / uGrid).rgb;
+	vec3 dye = texture2D(uDye, (cell + 0.5) / uGrid).rgb;
+	float dens = max(dye.r, max(dye.g, dye.b));    // raw dye amount, carries the detail the palette flattens
 	float lum = clamp(dot(col, vec3(0.299, 0.587, 0.114)), 0.0, 1.0);
 	float mx = max(col.r, max(col.g, col.b));
 	vec3 hue = col / max(mx, 0.0001);              // unit-peak hue (full saturation)
 	vec3 neon = hue * clamp(pow(lum, 0.5) * 2.4, 0.0, 1.2);  // density → vivid neon brightness
-	float lr = pow(lum, 0.7);                      // lift mids so more glyphs show
+	float lr = pow(clamp(dens, 0.0, 1.0), 0.6);    // ramp by dye density, not colour — every hue sweeps the full glyph set (flat-red heat zone stops pinning to one char)
 	float fidx = min(lr, 0.9999) * uGlyphCount;    // continuous ramp position
 	float idx = floor(fidx);
 	float fblend = fract(fidx);                    // blend toward the next glyph
@@ -556,8 +559,7 @@ uniform vec2 uScreen;         // drawing-buffer size in px
 uniform float uZoom;
 uniform vec2 uPan;            // ascii-uv shown at screen centre
 uniform vec3 uBack;           // background colour outside the view
-uniform float uTime;          // seconds, drives the CRT flicker
-float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+uniform float uTime;          // seconds, drives the uniform CRT mains hum
 void main () {
 	vec2 uv = (vUv - 0.5) / uZoom + uPan;
 	if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
@@ -591,9 +593,7 @@ void main () {
 				vec3 chan = vec3(ci == 0.0 ? 1.0 : 0.0, ci == 1.0 ? 1.0 : 0.0, ci == 2.0 ? 1.0 : 0.0);
 				vec2 texel = vec2(floor(j / 3.0), k);
 				vec3 c = texture2D(uAscii, (texel + 0.5) / uAsciiSize).rgb;
-				float h = hash(vec2(j, k));                      // per-phosphor flicker
-				float flick = 0.82 + 0.18 * sin(uTime * (1.6 + h * 3.0) + h * 6.2831);
-				crt += c * chan * (core * 3.0 + glow * 1.4) * flick;
+				crt += c * chan * (core * 3.0 + glow * 1.4);   // all sub-pixels of a glyph glow together; only the global hum below modulates
 			}
 		}
 		crt *= 0.95 + 0.05 * sin(uTime * 24.0);   // global mains hum

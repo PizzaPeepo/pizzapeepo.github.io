@@ -1,0 +1,23 @@
+Font attribution — FluidSimulation ASCII mode
+=============================================
+
+Font:       Web437_ATI_9x16
+            (web/woff edition of the "Bm437_ATI_9x16" bitmap font)
+From:       The Ultimate Oldschool PC Font Pack, v2.2
+Author:     VileR
+Copyright:  (c) 2016-2020 VileR
+Source:     https://int10h.org/oldschool-pc-fonts/
+License:    Creative Commons Attribution-ShareAlike 4.0 International
+            (CC BY-SA 4.0)
+            https://creativecommons.org/licenses/by-sa/4.0/
+
+Modifications
+-------------
+None to the glyph data. The bundled file (Web437_ATI_9x16.woff) is the
+project's own unmodified web-font (.woff) edition of the original font.
+It is used here only to render text into a glyph atlas; the surrounding
+simulation code is NOT a derivative of the font.
+
+Full license text
+-----------------
+See CC-BY-SA-4.0.txt in this folder.

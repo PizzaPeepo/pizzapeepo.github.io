@@ -601,6 +601,18 @@ label {
   gap: 6px;
 }
 
+.hud-panel a {
+  color: var(--gold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, var(--gold) 45%, transparent);
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+.hud-panel a:hover {
+  color: var(--gold-hi);
+  text-decoration-color: var(--gold-hi);
+}
+
 .hud-divider {
   height: 1px;
   background: color-mix(in srgb, var(--tx-4) 40%, transparent);
