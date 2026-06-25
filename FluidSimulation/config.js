@@ -29,4 +29,5 @@ export const config = {
 	ASCII_PERSIST: 0.85,       // glyph trail keep-fraction per frame (0 = off)
 	ASCII_GLOW: true,          // CRT phosphor glow halo on the zoomed RGB-triad reveal
 	ASCII_GLOW_AMOUNT: 1.8,    // zoomed-out glyph-bloom halo strength
+	ASCII_JITTER: 0.03,        // per-cell glyph-ramp jitter → grainy (non-uniform) dissipation
 };
