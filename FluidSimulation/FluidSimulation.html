@@ -21,6 +21,46 @@
     #webglError h2 { margin: 0 0 0.6rem; font-weight: 600; }
     #webglError p { margin: 0.4rem 0; line-height: 1.5; opacity: 0.85; }
     #webglError a { color: #6ab7ff; }
+
+    /* ASCII mode skins the HUD with the same Web437 bitmap font as the glyph grid (added to
+       document.fonts once the .woff loads; falls back to monospace before then / if missing). */
+    body.ascii-font .hud,
+    body.ascii-font .hud button,
+    body.ascii-font .hud input,
+    body.ascii-font .hud .fps-badge,
+    body.ascii-font .hud .theme-toggle,
+    body.ascii-font .hud .demo-title,
+    body.ascii-font .hud .back-link { font-family: 'Web437_ATI_9x16', 'Courier New', monospace; letter-spacing: 0.02em; -webkit-font-smoothing: none; }
+    /* Web437 is a pixel face → crisp only at integer multiples of its 16px native grid.
+       Force every HUD label/text to 16px (1:1 native), overriding the inline em sizes. */
+    body.ascii-font .hud, body.ascii-font .hud * { font-size: 16px !important; font-weight: normal !important; }
+    /* Uppercase only the section captions (plain-text ctrl-labels); slider labels (nested value
+       span) and hint lines (inline style) keep their natural case. */
+    body.ascii-font .hud .ctrl-label { text-transform: none !important; }
+    body.ascii-font .hud .ctrl-label:not([style]):not(:has(span)):not(:has(a)) { text-transform: uppercase !important; }
+
+    /* ── Local HUD polish (this demo only): wider panel, calmer rhythm, terminal accents ── */
+    /* Wider panel + more padding so dense rows breathe. Desktop only — the ≤700px media
+       query in theme.css keeps the panel full-width on mobile. */
+    @media (min-width: 701px) {
+      .hud-panel { width: 348px; padding: 24px 24px 40px; gap: 20px; }
+    }
+    .hud-section { gap: 9px; }
+    /* Separate name from number: value readouts in gold, tabular figures so they don't jitter. */
+    .hud-panel span[id$="Value"] { color: var(--gold); font-variant-numeric: tabular-nums; }
+    /* Hairline fading dividers instead of a hard bar — less visual weight. */
+    .hud-divider { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tx-4) 55%, transparent) 50%, transparent); }
+    /* Preset button grid + clear button: looser gaps. */
+    .hud-section > div[style*="grid"] { gap: 8px !important; }
+
+    /* ASCII mode → CRT terminal panel: faint scanline texture behind the controls. */
+    body.ascii-font .hud-panel {
+      background-image: repeating-linear-gradient(0deg, transparent 0 3px, color-mix(in srgb, var(--bg) 14%, transparent) 3px 4px);
+    }
+    /* Shell-prompt mark before each section caption (CP437-safe '>', no blur). */
+    body.ascii-font .hud .ctrl-label:not([style]):not(:has(span)):not(:has(a))::before {
+      content: ">"; color: var(--gold); margin-right: 9px; opacity: 0.8;
+    }
   </style>
 </head>
 <body>
@@ -169,7 +209,7 @@
       <span class="ctrl-label" style="font-size:0.8em;">Glyph ramp (sparse→dense):</span>
       <input type="text" id="asciiRampInput" spellcheck="false" autocomplete="off" value=" ,:;-~=+*ix-/-X-\A2-rs/-h235A/-\SGBMH-/\-#B%$89@" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:0.8em;padding:4px 6px;background:rgba(0,0,0,0.25);color:inherit;border:1px solid rgba(255,255,255,0.2);border-radius:4px;">
       <span class="ctrl-label" style="font-size:0.72em;opacity:0.6;">Scroll = zoom · middle-drag = pan · double-click = reset. Zoom in to reveal RGB pixels.</span>
-      <span class="ctrl-label" style="font-size:0.68em;opacity:0.5;">Font: <a href="https://int10h.org/oldschool-pc-fonts/" target="_blank" rel="noopener">Web437 ATI 9x16</a> by VileR · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a></span>
+      <span class="ctrl-label" style="font-size:0.68em;opacity:0.5;">Glyphs &amp; HUD font (ASCII mode): <a href="https://int10h.org/oldschool-pc-fonts/" target="_blank" rel="noopener">Web437 ATI 9x16</a> by VileR · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a></span>
     </div>
 
     <div class="hud-divider"></div>

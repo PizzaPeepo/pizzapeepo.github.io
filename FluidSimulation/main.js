@@ -91,7 +91,7 @@ const ASCII_GP_X = 9;   // glyph CELL WIDTH (units). Web437 ink is ~9 wide; a sq
 const ASCII_GP_Y = 16;   // glyph CELL HEIGHT (units). Glyph ink is 16 tall; >16 adds a VERTICAL gap between rows (22 → 6-unit gap), independent of the horizontal pitch. rows shrink to keep glyph size/aspect
 const ASCII_NATIVE = 16;   // Web437_ATI_9x16 TRUE native glyph grid (px). Must match the font or pixels misalign → ragged glyphs
 // const ASCII_RAMP = " .,:;-~=+*/|\iltfrcvunxz23578XYUJCLAHSGZO0QMW#B%8&$/\-@";
-let ASCII_RAMP = " ,:;-~=+*ix-/-X-\\A2-rs/\-h235A/-\\SGBMH-/\\-#B%$89@";
+let ASCII_RAMP = " ,:;-~=+*ix-/-X-\\A2-rs/\\-h235A/-\\SGBMH-/\\-#B%$89@";
 
 // Web437 is a bitmap (pixel) face. To reproduce its pixels EXACTLY: render the font at an
 // integer multiple of its native grid (fpx = GP*SS) with the pen integer-aligned to that grid
@@ -762,6 +762,9 @@ function applyAsciiPreset() {
 	updateKeywords();
 }
 
+// Skin the whole HUD with the Web437 bitmap font while ASCII mode is on (CSS: body.ascii-font .hud).
+function applyAsciiHudFont(on) { document.body.classList.toggle('ascii-font', on); }
+
 function snapSimRes(v) { return [64, 128, 256].reduce((a, b) => Math.abs(b - v) < Math.abs(a - v) ? b : a); }
 
 function wireUI() {
@@ -786,6 +789,7 @@ function wireUI() {
 	bindCheckbox('asciiToggle', v => {
 		config.ASCII = v;
 		resetAsciiView();
+		applyAsciiHudFont(v);
 		if (v) applyAsciiPreset();
 	});
 	bindSlider('asciiColsSlider', 'asciiColsValue', v => parseInt(v), v => { config.ASCII_COLS = v; initAsciiTargets(); });
@@ -831,6 +835,7 @@ function wireUI() {
 		else if (e.code === 'KeyA') {
 			config.ASCII = !config.ASCII; resetAsciiView();
 			const cb = document.getElementById('asciiToggle'); if (cb) cb.checked = config.ASCII;
+			applyAsciiHudFont(config.ASCII);
 			if (config.ASCII) applyAsciiPreset();
 		}
 	});
