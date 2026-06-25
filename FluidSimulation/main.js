@@ -281,6 +281,15 @@ function pos(e) {
 	return { x: e.clientX - rect.left, y: e.clientY - rect.top, w: rect.width, h: rect.height };
 }
 
+// The ASCII view can be zoomed/panned, showing only a sub-window of the fluid (the present
+// shader maps screen uv → fluid uv as (uv-0.5)/zoom + pan). Map a screen-space [0,1] pointer
+// coord the same way so splats/obstacles land under the cursor. Identity when ASCII is off
+// (and a no-op at zoom 1, since pan is then 0.5).
+function asciiViewCoord(tx, ty) {
+	if (!config.ASCII) return [tx, ty];
+	return [(tx - 0.5) / asciiZoom + asciiPanX, (ty - 0.5) / asciiZoom + asciiPanY];
+}
+
 canvas.addEventListener('mousedown', e => {
 	if (e.button === 1) { e.preventDefault(); if (config.ASCII) startAsciiPan(e); return; }  // middle = pan
 	const { x, y, w, h } = pos(e);
@@ -387,7 +396,8 @@ function splatPointer(p) {
 		const c = HSVtoRGB(hue, 1, 1);
 		color = { r: c.r * 0.15, g: c.g * 0.15, b: c.b * 0.15 };
 	} else color = colorObj(p.color);
-	splat(p.texcoordX, p.texcoordY, dx, dy, color);
+	const [sx, sy] = asciiViewCoord(p.texcoordX, p.texcoordY);
+	splat(sx, sy, dx, dy, color);
 }
 
 function clickSplat(p) {
@@ -395,7 +405,8 @@ function clickSplat(p) {
 	const color = { r: c.r * 10, g: c.g * 10, b: c.b * 10 };
 	const dx = 10 * (Math.random() - 0.5);
 	const dy = 30 * (Math.random() - 0.5);
-	splat(p.texcoordX, p.texcoordY, dx, dy, shiftHeld ? { r: 0, g: 0, b: 0 } : color);
+	const [sx, sy] = asciiViewCoord(p.texcoordX, p.texcoordY);
+	splat(sx, sy, dx, dy, shiftHeld ? { r: 0, g: 0, b: 0 } : color);
 }
 
 function multipleSplats(amount) {
@@ -425,8 +436,9 @@ function applyInputs() {
 	for (const p of pointers) {
 		if (p.down && (mode === 'obstacle' || mode === 'erase' || p.forceErase)) {
 			const erase = mode === 'erase' || p.forceErase;
+			const [bx, by] = asciiViewCoord(p.texcoordX, p.texcoordY);
 			paintBrush(gl, obstacleStampProgram, blit, obstacleMask, aspect(),
-				p.texcoordX, p.texcoordY, config.OBSTACLE_BRUSH, erase);
+				bx, by, config.OBSTACLE_BRUSH, erase);
 		}
 		if (p.moved) {
 			p.moved = false;
