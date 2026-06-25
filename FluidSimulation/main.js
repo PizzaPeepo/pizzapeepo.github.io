@@ -578,7 +578,6 @@ function renderAscii() {
 		gl.uniform1i(asciiFadeProgram.uniforms.uNew, asciiBitmap.attach(0));
 		gl.uniform1i(asciiFadeProgram.uniforms.uPrev, asciiTrail.read.attach(1));
 		gl.uniform1f(asciiFadeProgram.uniforms.uFade, config.ASCII_PERSIST);
-		gl.uniform1f(asciiFadeProgram.uniforms.uMode, config.ASCII_PERSIST_MODE === 'add' ? 1.0 : 0.0);
 		blit(asciiTrail.write);
 		asciiTrail.swap();
 	}
@@ -593,6 +592,7 @@ function renderAscii() {
 	gl.uniform3f(asciiPresentProgram.uniforms.uBack, bg.r, bg.g, bg.b);
 	gl.uniform1f(asciiPresentProgram.uniforms.uTime, performance.now() / 1000.0);
 	gl.uniform1f(asciiPresentProgram.uniforms.uGlow, config.ASCII_GLOW ? 1.0 : 0.0);
+	gl.uniform1f(asciiPresentProgram.uniforms.uGlowAmount, config.ASCII_GLOW_AMOUNT);
 	blit(null);                                      // → screen
 }
 
@@ -724,8 +724,8 @@ function applyAsciiPreset() {
 	setSliderValue('colorSpeedSlider', 5.0);
 	setSliderValue('asciiColsSlider', 60);   // ~17px glyphs on a desktop canvas — readable; 100 was ~10px (mush)
 	setSliderValue('asciiPersistSlider', 0.85);
-	setRadioValue('asciiPersistMode', 'max');
 	setCheckboxValue('asciiGlowToggle', true);
+	setSliderValue('asciiGlowAmountSlider', 1.8);
 	setRadioValue('colorMode', 'heat');
 	setMode('fluid');
 	setCheckboxValue('shadingToggle', true);
@@ -765,10 +765,7 @@ function wireUI() {
 	bindSlider('asciiColsSlider', 'asciiColsValue', v => parseInt(v), v => { config.ASCII_COLS = v; initAsciiTargets(); });
 	bindSlider('asciiPersistSlider', 'asciiPersistValue', parseFloat, v => config.ASCII_PERSIST = v, v => v.toFixed(2));
 	bindCheckbox('asciiGlowToggle', v => config.ASCII_GLOW = v);
-	document.querySelectorAll('input[name="asciiPersistMode"]').forEach(el => {
-		el.addEventListener('change', () => { if (el.checked) config.ASCII_PERSIST_MODE = el.value; });
-	});
-
+	bindSlider('asciiGlowAmountSlider', 'asciiGlowAmountValue', parseFloat, v => config.ASCII_GLOW_AMOUNT = v, v => v.toFixed(1));
 	document.querySelectorAll('input[name="colorMode"]').forEach(el => {
 		el.addEventListener('change', () => { if (el.checked) { config.COLOR_MODE = el.value; updateKeywords(); } });
 	});

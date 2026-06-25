@@ -27,6 +27,6 @@ export const config = {
 	ASCII: false,              // render the fluid as a colored ASCII grid
 	ASCII_COLS: 120,           // glyph columns (rows derived from canvas aspect)
 	ASCII_PERSIST: 0.85,       // glyph trail keep-fraction per frame (0 = off)
-	ASCII_PERSIST_MODE: 'max', // 'max' phosphor (new over fading old) | 'add' additive glow
 	ASCII_GLOW: true,          // CRT phosphor glow halo on the zoomed RGB-triad reveal
+	ASCII_GLOW_AMOUNT: 1.8,    // zoomed-out glyph-bloom halo strength
 };

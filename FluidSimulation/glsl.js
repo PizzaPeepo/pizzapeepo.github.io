@@ -458,9 +458,8 @@ void main () {
 
 // Stage A2: phosphor persistence. Combine the fresh glyph bitmap with a decaying
 // accumulator so a moving cell leaves a trail of fading chars while the new glyph is
-// drawn on top. Two looks via uMode: 0 = phosphor max (new on top, old fades under),
-// 1 = additive glow (trails pile up brightness). The "- 1/255" guarantees the 8-bit
-// accumulator reaches true 0 instead of sticking on a rounded ghost floor.
+// drawn on top (phosphor max: new on top, old fades under). The "- 1/255" guarantees
+// the 8-bit accumulator reaches true 0 instead of sticking on a rounded ghost floor.
 export const asciiFade = `
 precision highp float;
 precision highp sampler2D;
@@ -468,11 +467,10 @@ varying vec2 vUv;
 uniform sampler2D uNew;    // fresh glyph bitmap (this frame)
 uniform sampler2D uPrev;   // decaying accumulator (last frame)
 uniform float uFade;       // keep-fraction per frame (0 = no trail)
-uniform float uMode;       // 0 = phosphor max, 1 = additive glow
 void main () {
 	vec3 cur = texture2D(uNew, vUv).rgb;
 	vec3 decayed = max(texture2D(uPrev, vUv).rgb * uFade - 1.0 / 255.0, 0.0);
-	vec3 outc = uMode < 0.5 ? max(cur, decayed) : cur + decayed;
+	vec3 outc = max(cur, decayed);
 	gl_FragColor = vec4(outc, 1.0);
 }
 `;
@@ -493,6 +491,7 @@ uniform vec2 uPan;            // ascii-uv shown at screen centre
 uniform vec3 uBack;           // background colour outside the view
 uniform float uTime;          // seconds, drives the uniform CRT mains hum
 uniform float uGlow;          // 1 = phosphor glow halo on, 0 = crisp bars only
+uniform float uGlowAmount;    // zoomed-out glyph-bloom halo strength (HUD slider)
 void main () {
 	vec2 uv = (vUv - 0.5) / uZoom + uPan;
 	if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
@@ -517,7 +516,7 @@ void main () {
 				wsum += w;
 			}
 		}
-		base += (bloom / wsum) * 1.8;   // additive halo → glyphs emit light into the gaps
+		base += (bloom / wsum) * uGlowAmount;   // additive halo → glyphs emit light into the gaps (HUD-controlled)
 	}
 	float spx = uv.x * uAsciiSize.x * 3.0;    // subpixel-column space (3 per source texel)
 	float spy = uv.y * uAsciiSize.y;          // texel-row space
