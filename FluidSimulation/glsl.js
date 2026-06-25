@@ -499,6 +499,7 @@ varying vec2 vUv;
 uniform sampler2D uScene;     // low-res LDR fluid (one texel per cell)
 uniform sampler2D uGlyphs;    // glyph atlas, uGlyphCount chars left-to-right
 uniform sampler2D uDye;       // raw dye field (pre-colormap) — drives the glyph ramp
+uniform sampler2D uObstacle;  // obstacle mask — force a solid glyph so walls aren't blank
 uniform vec2 uGrid;           // cols, rows
 uniform float uGlyphCount;
 void main () {
@@ -507,12 +508,13 @@ void main () {
 	vec2 cuv = fract(g);
 	vec3 col = texture2D(uScene, (cell + 0.5) / uGrid).rgb;
 	vec3 dye = texture2D(uDye, (cell + 0.5) / uGrid).rgb;
+	float ob = step(0.5, texture2D(uObstacle, (cell + 0.5) / uGrid).x);   // 1 inside a wall
 	float dens = max(dye.r, max(dye.g, dye.b));    // raw dye amount, carries the detail the palette flattens
 	float lum = clamp(dot(col, vec3(0.299, 0.587, 0.114)), 0.0, 1.0);
 	float mx = max(col.r, max(col.g, col.b));
 	vec3 hue = col / max(mx, 0.0001);              // unit-peak hue (full saturation)
 	vec3 neon = hue * clamp(pow(lum, 0.5) * 2.4, 0.0, 1.2);  // density → vivid neon brightness
-	float lr = pow(clamp(dens, 0.0, 1.0), 0.6);    // ramp by dye density, not colour — every hue sweeps the full glyph set (flat-red heat zone stops pinning to one char)
+	float lr = pow(clamp(max(dens, ob), 0.0, 1.0), 0.6);   // ramp by dye density (obstacle forced solid) — every hue sweeps the full glyph set (flat-red heat zone stops pinning to one char)
 	float fidx = min(lr, 0.9999) * uGlyphCount;    // continuous ramp position
 	float idx = floor(fidx);
 	float fblend = fract(fidx);                    // blend toward the next glyph
@@ -560,6 +562,7 @@ uniform float uZoom;
 uniform vec2 uPan;            // ascii-uv shown at screen centre
 uniform vec3 uBack;           // background colour outside the view
 uniform float uTime;          // seconds, drives the uniform CRT mains hum
+uniform float uGlow;          // 1 = phosphor glow halo on, 0 = crisp bars only
 void main () {
 	vec2 uv = (vUv - 0.5) / uZoom + uPan;
 	if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
@@ -573,8 +576,8 @@ void main () {
 	float spy = uv.y * uAsciiSize.y;          // texel-row space
 	float baseSub = floor(spx);
 	float baseRow = floor(spy);
-	vec2 hs = vec2(0.40, 0.425);              // half-width / half-height (leaves the gaps)
-	float rad = 0.17;                         // corner radius
+	vec2 hs = vec2(0.26, 0.44);               // slim tall phosphor strip (narrow width, leaves wide RGB gaps)
+	float rad = 0.12;                         // corner radius
 	vec3 crt = vec3(0.0);
 	if (t > 0.0) {                            // only build the triad when zoomed in
 		// Sum the current phosphor plus its neighbours so their halos overlap and
@@ -588,12 +591,12 @@ void main () {
 				vec2 dd = abs(dq) - hs + rad;
 				float dist = length(max(dd, 0.0)) + min(max(dd.x, dd.y), 0.0) - rad;
 				float core = smoothstep(0.045, -0.03, dist);   // soft rounded body
-				float glow = exp(-max(dist, 0.0) * 5.0);        // wider halo bleeds into the gaps
+				float glow = exp(-max(dist, 0.0) * 2.5);        // wide halo bleeds across the gaps (strong bloom)
 				float ci = mod(j, 3.0);                          // 0,1,2 -> R,G,B
 				vec3 chan = vec3(ci == 0.0 ? 1.0 : 0.0, ci == 1.0 ? 1.0 : 0.0, ci == 2.0 ? 1.0 : 0.0);
 				vec2 texel = vec2(floor(j / 3.0), k);
 				vec3 c = texture2D(uAscii, (texel + 0.5) / uAsciiSize).rgb;
-				crt += c * chan * (core * 3.0 + glow * 1.4);   // all sub-pixels of a glyph glow together; only the global hum below modulates
+				crt += c * chan * (core * 3.0 + glow * 3.0 * uGlow);   // slim bright core + (toggleable) fat glow halo; only the global hum below modulates
 			}
 		}
 		crt *= 0.95 + 0.05 * sin(uTime * 24.0);   // global mains hum

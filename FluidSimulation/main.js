@@ -89,15 +89,17 @@ const ditheringTexture = createNoiseTexture(gl, 256);
 // ── ASCII glyph atlas ──
 // Ramp ordered sparse→dense; cell luminance indexes a glyph. Rendered to an
 // offscreen 2D canvas (one GP×GP cell per char) and uploaded as a NEAREST texture.
-const ASCII_GP = 16;   // glyph cell = native font height (1:1 → crisp pixels, no downscale)
-const ASCII_NATIVE = 16;   // Web437_ATI_9x16 native glyph height (px); render at integer multiples to keep bitmap glyphs crisp
+const ASCII_GP = 16;   // glyph cell = native font grid (16); exact 1 font-pixel → 1 texel
+const ASCII_NATIVE = 16;   // Web437_ATI_9x16 TRUE native glyph grid (px). Must match the font or pixels misalign → ragged glyphs
 const ASCII_RAMP = " .,:;-~=+*/|\iltfrcvunxz23578XYUJCLAHSGZO0QMW#B%8&@$";
 
-// Web437 is a bitmap (pixel) face: render each glyph at its native size into a cell of
-// the same size (SS=1) and sample NEAREST end-to-end → crisp fat pixels, zero AA. The
-// old SS=4 + LINEAR existed only to downscale a vector-ish font without blob artifacts;
-// that downscale was itself the anti-aliasing.
-const ASCII_SS = 1;
+// Web437 is a bitmap (pixel) face. To reproduce its pixels EXACTLY: render the font at an
+// integer multiple of its native grid (fpx = GP*SS) with the pen integer-aligned to that grid
+// (textBaseline 'top', textAlign 'left', x/y snapped to SS), so every font-pixel lands on a
+// whole SS×SS source block. Then coverage-threshold each block down to one texel (ON iff ≥50%
+// inked). Fractional baselines (the old 'middle'/'center') or a wrong native grid straddle the
+// blocks → ragged diagonals; this avoids both. Sampled NEAREST end-to-end.
+const ASCII_SS = 8;
 function createGlyphAtlas() {
 	const n = ASCII_RAMP.length;
 	const cell = ASCII_GP * ASCII_SS;
@@ -106,15 +108,41 @@ function createGlyphAtlas() {
 	const ctx = c.getContext('2d');
 	ctx.fillStyle = '#000'; ctx.fillRect(0, 0, c.width, c.height);
 	ctx.fillStyle = '#fff';
-	const fpx = Math.max(ASCII_NATIVE, Math.floor(cell * 0.85 / ASCII_NATIVE) * ASCII_NATIVE);   // largest exact multiple of native px ≤85% of cell → crisp bitmap glyphs + slight padding
+	const fpx = ASCII_GP * ASCII_SS;   // = cell: native 16-grid font at SS× → 1 font-pixel = SS source px = 1 output texel after the coverage downsample
 	ctx.font = fpx + "px 'Web437_ATI_9x16', monospace";   // bitmap web-font (VileR, CC BY-SA 4.0); monospace fallback before it loads
-	ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-	for (let i = 0; i < n; i++) ctx.fillText(ASCII_RAMP[i], i * cell + cell / 2, cell / 2);   // integer baseline → glyph rows land on pixel grid
+	ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+	const offX = Math.round((cell - ctx.measureText('M').width) / 2 / ASCII_SS) * ASCII_SS;   // centre the glyph but snap to the SS grid so font pixels stay block-aligned
+	for (let i = 0; i < n; i++) ctx.fillText(ASCII_RAMP[i], i * cell + offX, 0);   // top-left, integer-aligned → exact native pixels
+
+	// Coverage-threshold the supersampled render down to one GP grid per glyph: each output
+	// texel is ON only if ≥50% of its SS×SS source block is inked. Kills the fillText AA
+	// fringe (which the present-stage core*3.0 boost would otherwise show as a solid pixel).
+	const src = ctx.getImageData(0, 0, c.width, c.height).data;
+	const outW = n * ASCII_GP, outH = ASCII_GP;
+	const out = document.createElement('canvas');
+	out.width = outW; out.height = outH;
+	const oimg = out.getContext('2d').createImageData(outW, outH);
+	const half = (ASCII_SS * ASCII_SS) / 2;
+	for (let oy = 0; oy < outH; oy++) {
+		for (let ox = 0; ox < outW; ox++) {
+			let litCount = 0;
+			for (let sy = 0; sy < ASCII_SS; sy++) {
+				for (let sx = 0; sx < ASCII_SS; sx++) {
+					if (src[((oy * ASCII_SS + sy) * c.width + (ox * ASCII_SS + sx)) * 4] > 127) litCount++;
+				}
+			}
+			const v = litCount >= half ? 255 : 0;
+			const o = (oy * outW + ox) * 4;
+			oimg.data[o] = oimg.data[o + 1] = oimg.data[o + 2] = v;
+			oimg.data[o + 3] = 255;
+		}
+	}
+	out.getContext('2d').putImageData(oimg, 0, 0);
 
 	const tex = gl.createTexture();
 	gl.bindTexture(gl.TEXTURE_2D, tex);
 	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, out);
 	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -596,6 +624,7 @@ function renderAscii() {
 	gl.uniform1i(asciiArtProgram.uniforms.uScene, asciiScene.attach(0));
 	gl.uniform1i(asciiArtProgram.uniforms.uGlyphs, glyphAtlas.attach(1));
 	gl.uniform1i(asciiArtProgram.uniforms.uDye, dye.read.attach(2));
+	gl.uniform1i(asciiArtProgram.uniforms.uObstacle, obstacleMask.read.attach(3));
 	gl.uniform2f(asciiArtProgram.uniforms.uGrid, asciiCols, asciiRows);
 	gl.uniform1f(asciiArtProgram.uniforms.uGlyphCount, glyphAtlas.count);
 	blit(asciiBitmap);                               // → crisp glyph bitmap
@@ -621,6 +650,7 @@ function renderAscii() {
 	const bg = normalizeColor(config.BACK_COLOR);
 	gl.uniform3f(asciiPresentProgram.uniforms.uBack, bg.r, bg.g, bg.b);
 	gl.uniform1f(asciiPresentProgram.uniforms.uTime, performance.now() / 1000.0);
+	gl.uniform1f(asciiPresentProgram.uniforms.uGlow, config.ASCII_GLOW ? 1.0 : 0.0);
 	blit(null);                                      // → screen
 }
 
@@ -756,7 +786,8 @@ function applyAsciiPreset() {
 	setSliderValue('asciiColsSlider', 60);   // ~17px glyphs on a desktop canvas — readable; 100 was ~10px (mush)
 	setSliderValue('asciiPersistSlider', 0.85);
 	setRadioValue('asciiPersistMode', 'max');
-	setRadioValue('colorMode', 'velocity');
+	setCheckboxValue('asciiGlowToggle', true);
+	setRadioValue('colorMode', 'heat');
 	setMode('fluid');
 	setCheckboxValue('shadingToggle', true);
 	setCheckboxValue('colorfulToggle', true);
@@ -798,6 +829,7 @@ function wireUI() {
 	});
 	bindSlider('asciiColsSlider', 'asciiColsValue', v => parseInt(v), v => { config.ASCII_COLS = v; initAsciiTargets(); });
 	bindSlider('asciiPersistSlider', 'asciiPersistValue', parseFloat, v => config.ASCII_PERSIST = v, v => v.toFixed(2));
+	bindCheckbox('asciiGlowToggle', v => config.ASCII_GLOW = v);
 	document.querySelectorAll('input[name="asciiPersistMode"]').forEach(el => {
 		el.addEventListener('change', () => { if (el.checked) config.ASCII_PERSIST_MODE = el.value; });
 	});
