@@ -902,11 +902,13 @@ splatStack.push(parseInt(Math.random() * 6) + 8);
 //                                  screenshot capture the glyph grid). Same path as the toggle.
 //   &cols=N                      → override glyph columns (glyph size) to inspect spacing.
 //   &splats=N                    → push N extra dye splats so the grid has visible content.
+//   &glow=0                      → force the phosphor glow OFF (A/B the glyph-level bloom).
 (function applyBootParams() {
 	const q = new URLSearchParams(location.search);
 	if (q.get('ascii') === '1') {
 		setCheckboxValue('asciiToggle', true);
 		if (q.has('cols')) setSliderValue('asciiColsSlider', parseInt(q.get('cols')));
+		if (q.get('glow') === '0') setCheckboxValue('asciiGlowToggle', false);
 	}
 	const ns = parseInt(q.get('splats')) || 0;
 	for (let i = 0; i < ns; i++) splatStack.push(parseInt(Math.random() * 8) + 8);

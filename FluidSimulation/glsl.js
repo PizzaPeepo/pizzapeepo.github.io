@@ -572,6 +572,23 @@ void main () {
 	vec3 base = texture2D(uAscii, uv).rgb;
 	float mag = uZoom * (uScreen.x / uAsciiSize.x);   // screen px per source texel
 	float t = smoothstep(2.0, 4.0, mag);
+	// Glyph-level bloom: blur the glyph bitmap so lit glyphs bleed a soft halo into the
+	// surrounding gaps. Without this the zoomed-out view had crisp glyphs but no glow —
+	// the phosphor halo only existed in the subpixel-triad path below (visible when zoomed in).
+	if (uGlow > 0.5 && t < 1.0) {
+		vec2 px = 1.0 / uAsciiSize;
+		vec3 bloom = vec3(0.0);
+		float wsum = 0.0;
+		for (int bx = -3; bx <= 3; bx++) {
+			for (int by = -3; by <= 3; by++) {
+				vec2 o = vec2(float(bx), float(by)) * 1.5;   // spread (texels) → halo reach (~4.5 texels, ~half a glyph cell)
+				float w = exp(-dot(o, o) * 0.10);
+				bloom += texture2D(uAscii, uv + o * px).rgb * w;
+				wsum += w;
+			}
+		}
+		base += (bloom / wsum) * 1.8;   // additive halo → glyphs emit light into the gaps
+	}
 	float spx = uv.x * uAsciiSize.x * 3.0;    // subpixel-column space (3 per source texel)
 	float spy = uv.y * uAsciiSize.y;          // texel-row space
 	float baseSub = floor(spx);
