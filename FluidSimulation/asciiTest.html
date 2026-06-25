@@ -18,64 +18,72 @@
 </head>
 <body>
 <header>
-	<h1>ASCII glyph horizontal-spacing test</h1>
+	<h1>ASCII glyph spacing test — independent H / V pitch</h1>
 	Mirrors <code>createGlyphAtlas()</code> cell geometry. Glyph CELL is <code>ASCII_GP_X</code> wide ×
-	<code>ASCII_GP</code> tall (units); ink ≈ 9 wide. Gap between glyphs = cell&nbsp;−&nbsp;ink.<br>
-	Query: <code>?gpx=11&gp=16&scale=18&rows=2</code> — sweep cell width to inspect spacing.
+	<code>ASCII_GP_Y</code> tall (units); ink ≈ 9 wide × <code>ASCII_GP</code>(16) tall, centred.<br>
+	Horizontal gap = <code>gpx − 9</code>, vertical gap = <code>gpy − 16</code> — tune them separately.<br>
+	Query: <code>?gpx=11&gpy=28&scale=7&rows=4</code> — give gpx/gpy to inspect one cell; omit for BEFORE/AFTER.
 	Back to <a href="FluidSimulation.html?ascii=1&amp;splats=14">live ASCII mode</a>.
 </header>
 <div id="panels"></div>
 
 <script>
-// Standalone visual check for the horizontal glyph pitch. No WebGL: draws the ramp on a
-// grid whose CELL WIDTH = gpx units and CELL HEIGHT = gp units, glyph centred per cell —
-// the exact spacing the real atlas bakes in. The point is the GAP between glyphs, which is
-// pure geometry (gpx vs ink width) and independent of SwiftShader AA, so canvas2D is fine.
+// Standalone visual check for the glyph pitch. No WebGL: draws the ramp on a grid whose CELL
+// is gpx units wide × gpy units tall, with the glyph rendered at its native size (ink ≈ 9 × GP)
+// and centred — the exact spacing the real atlas bakes in. Both gaps are pure geometry
+// (cell minus ink), independent of SwiftShader AA, so canvas2D is faithful here.
 const RAMP = " .,:;-~=+*/|\\iltfrcvunxz23578XYUJCLAHSGZO0QMW#B%8&$@";
 const q = new URLSearchParams(location.search);
-const GP    = parseInt(q.get('gp'))    || 16;   // cell height (units) — matches ASCII_GP
+const GP    = parseInt(q.get('gp'))    || 16;   // glyph native height (units) — matches ASCII_GP
 const SCALE = parseInt(q.get('scale')) || 7;    // screen px per unit
 const ROWS  = parseInt(q.get('rows'))  || 4;
-// When ?gpx is given, show just that width; otherwise compare before (square 16) vs after (11).
-const WIDTHS = q.has('gpx') ? [parseInt(q.get('gpx'))] : [16, 11];
+// Give ?gpx and/or ?gpy to render a single cell config; otherwise compare BEFORE vs AFTER.
+const SINGLE = q.has('gpx') || q.has('gpy');
 
-function drawPanel(gpx, label) {
+// gpx = cell width units, gpy = cell height units.
+function drawPanel(gpx, gpy, label) {
 	const wrap = document.createElement('div'); wrap.className = 'panel';
 	const h = document.createElement('h2'); h.innerHTML = label; wrap.appendChild(h);
 	const cv = document.createElement('canvas');
-	const cellW = gpx * SCALE, cellH = GP * SCALE;
+	const cellW = gpx * SCALE, cellH = gpy * SCALE, glyphPx = GP * SCALE;
 	cv.width = RAMP.length * cellW; cv.height = ROWS * cellH;
 	wrap.appendChild(cv);
 	document.getElementById('panels').appendChild(wrap);
 
 	const ctx = cv.getContext('2d');
 	ctx.fillStyle = '#000'; ctx.fillRect(0, 0, cv.width, cv.height);
-	ctx.font = cellH + "px 'Web437_ATI_9x16', monospace";
+	ctx.font = glyphPx + "px 'Web437_ATI_9x16', monospace";   // render at NATIVE height, not the cell height
 	ctx.textAlign = 'left'; ctx.textBaseline = 'top';
 	ctx.fillStyle = '#7CFF9A';
-	// centre each glyph in its cell exactly like createGlyphAtlas (by 'M' advance, monospace)
+	// centre each glyph in its cell exactly like createGlyphAtlas (H by 'M' advance, V by native height)
+	const ink = ctx.measureText('M').width / SCALE;     // ink width in units (≈9 for Web437)
 	const offX = (cellW - ctx.measureText('M').width) / 2;
-	const ink = ctx.measureText('M').width / SCALE;   // ink width in units (≈9 for Web437)
+	const offY = (cellH - glyphPx) / 2;
 	for (let r = 0; r < ROWS; r++)
 		for (let i = 0; i < RAMP.length; i++)
-			ctx.fillText(RAMP[i], i * cellW + offX, r * cellH);
+			ctx.fillText(RAMP[i], i * cellW + offX, r * cellH + offY);
 
-	// cell guides + gap callout so the spacing reduction is legible
+	// cell guides (vertical + horizontal) so both gaps are legible
 	ctx.strokeStyle = 'rgba(120,180,255,0.18)';
 	for (let i = 0; i <= RAMP.length; i++) { ctx.beginPath(); ctx.moveTo(i*cellW, 0); ctx.lineTo(i*cellW, cv.height); ctx.stroke(); }
-	const gap = (gpx - ink).toFixed(1);
-	h.innerHTML = label + ` — cell width <b>${gpx}u</b>, ink ≈ ${ink.toFixed(1)}u, horizontal gap ≈ <b>${gap}u</b>`;
+	for (let r = 0; r <= ROWS; r++) { ctx.beginPath(); ctx.moveTo(0, r*cellH); ctx.lineTo(cv.width, r*cellH); ctx.stroke(); }
+
+	const gapX = (gpx - ink).toFixed(1), gapY = (gpy - GP).toFixed(1);
+	h.innerHTML = label + ` — cell <b>${gpx}×${gpy}u</b>, ink ≈ ${ink.toFixed(1)}×${GP}u, ` +
+		`gap H ≈ <b>${gapX}u</b>, V ≈ <b>${gapY}u</b>`;
 }
 
-const fontReady = new FontFace('Web437_ATI_9x16', "url('Web437_ATI_9x16.woff')").load()
-	.then(f => document.fonts.add(f)).catch(() => {});
-fontReady.then(() => {
-	if (WIDTHS.length === 1) drawPanel(WIDTHS[0], `cell width = ${WIDTHS[0]}u`);
-	else {
-		drawPanel(16, 'BEFORE (square 16-wide cell)');
-		drawPanel(11, 'AFTER  (11-wide cell, ~70% less gap)');
-	}
-});
+new FontFace('Web437_ATI_9x16', "url('Web437_ATI_9x16.woff')").load()
+	.then(f => document.fonts.add(f)).catch(() => {})
+	.then(() => {
+		if (SINGLE) {
+			const gpx = parseInt(q.get('gpx')) || 11, gpy = parseInt(q.get('gpy')) || 28;
+			drawPanel(gpx, gpy, `cell = ${gpx}×${gpy}u`);
+		} else {
+			drawPanel(16, 16, 'BEFORE (square 16×16 cell — no gaps)');
+			drawPanel(11, 28, 'AFTER  (11 wide × 28 tall — tight H, wide V)');
+		}
+	});
 </script>
 </body>
 </html>

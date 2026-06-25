@@ -60,16 +60,18 @@ If `capture.mjs` isn't found, pass `-CaptureMjs <path>` or set `$env:WEB_SCREENS
 Boot params on the live page (also usable by hand in a browser):
 - `?ascii=1` — enable ASCII at load · `&cols=N` — glyph size (lower = bigger) · `&splats=N` — extra dye seeds.
 
-asciiTest.html query knobs:
-- `?gpx=N` — glyph cell WIDTH in units (the real constant is `ASCII_GP_X`, default 11; 16 = old square) ·
-  `&scale=N` — screen px per unit · `&rows=N` — ramp rows drawn.
+asciiTest.html query knobs (give gpx/gpy to inspect one cell; omit for the BEFORE/AFTER compare):
+- `?gpx=N` — cell WIDTH units (`ASCII_GP_X`, default 10; 9 = ink floor, 16 = old square) · horizontal gap = gpx − 9.
+- `&gpy=N` — cell HEIGHT units (`ASCII_GP_Y`, default 22; 16 = no vertical gap) · vertical gap = gpy − 16.
+- `&scale=N` — screen px per unit · `&rows=N` — ramp rows drawn.
 
 ## Reading the result
 
 - **Spacing (test target):** each panel prints `horizontal gap ≈ Nu`. Native ink ≈ 9u, so a
   16-wide cell gives ~7u gap and an 11-wide cell ~2u → ~70% tighter. `gap = gpx − ink`.
-  To actually change the live gap, edit `ASCII_GP_X` in [main.js](../../../FluidSimulation/main.js);
-  `cols` auto-inflates so glyph size/aspect stay fixed — only spacing moves.
+  Horizontal and vertical pitch are independent: `ASCII_GP_X` (cell width, gap = GP_X−9) and
+  `ASCII_GP_Y` (cell height, gap = GP_Y−16) in [main.js](../../../FluidSimulation/main.js).
+  Editing either auto-adjusts `cols`/`rows` so glyph size/aspect stay fixed — only spacing moves.
 - **Render (live target):** expect a dense colored glyph grid. Black screen or `ERRORS > 0`
   means a shader/JS failure — read the console dump capture.mjs prints.
 - **SwiftShader caveat:** headless canvas2D AA differs from real Chrome, so trust the geometry

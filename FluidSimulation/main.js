@@ -90,7 +90,8 @@ const ditheringTexture = createNoiseTexture(gl, 256);
 // Ramp ordered sparse→dense; cell luminance indexes a glyph. Rendered to an
 // offscreen 2D canvas (one GP×GP cell per char) and uploaded as a NEAREST texture.
 const ASCII_GP = 16;   // glyph CELL HEIGHT = native font grid (16); exact 1 font-pixel → 1 texel
-const ASCII_GP_X = 11;   // glyph CELL WIDTH (units). Web437 ink is ~9 wide; a square-16 cell leaves a ~7-unit horizontal gap. 11 leaves ~2 → ~70% less space between glyphs (cols inflate to keep glyph size/aspect)
+const ASCII_GP_X = 9;   // glyph CELL WIDTH (units). Web437 ink is ~9 wide; a square-16 cell leaves a ~7-unit horizontal gap. 10 leaves ~1 (9 = ink, the floor before glyphs touch) — cols inflate to keep glyph size/aspect
+const ASCII_GP_Y = 16;   // glyph CELL HEIGHT (units). Glyph ink is 16 tall; >16 adds a VERTICAL gap between rows (22 → 6-unit gap), independent of the horizontal pitch. rows shrink to keep glyph size/aspect
 const ASCII_NATIVE = 16;   // Web437_ATI_9x16 TRUE native glyph grid (px). Must match the font or pixels misalign → ragged glyphs
 const ASCII_RAMP = " .,:;-~=+*/|\iltfrcvunxz23578XYUJCLAHSGZO0QMW#B%8&$@";
 
@@ -103,7 +104,7 @@ const ASCII_RAMP = " .,:;-~=+*/|\iltfrcvunxz23578XYUJCLAHSGZO0QMW#B%8&$@";
 const ASCII_SS = 8;
 function createGlyphAtlas() {
 	const n = ASCII_RAMP.length;
-	const cellW = ASCII_GP_X * ASCII_SS, cellH = ASCII_GP * ASCII_SS;
+	const cellW = ASCII_GP_X * ASCII_SS, cellH = ASCII_GP_Y * ASCII_SS;
 	const c = document.createElement('canvas');
 	c.width = n * cellW; c.height = cellH;
 	const ctx = c.getContext('2d');
@@ -113,13 +114,14 @@ function createGlyphAtlas() {
 	ctx.font = fpx + "px 'Web437_ATI_9x16', monospace";   // bitmap web-font (VileR, CC BY-SA 4.0); monospace fallback before it loads
 	ctx.textAlign = 'left'; ctx.textBaseline = 'top';
 	const offX = Math.round((cellW - ctx.measureText('M').width) / 2 / ASCII_SS) * ASCII_SS;   // centre the glyph but snap to the SS grid so font pixels stay block-aligned
-	for (let i = 0; i < n; i++) ctx.fillText(ASCII_RAMP[i], i * cellW + offX, 0);   // top-left, integer-aligned → exact native pixels
+	const offY = Math.round((ASCII_GP_Y - ASCII_GP) / 2) * ASCII_SS;   // vertical centre in the taller cell, SS-snapped → the extra height becomes a clean top/bottom gap
+	for (let i = 0; i < n; i++) ctx.fillText(ASCII_RAMP[i], i * cellW + offX, offY);   // integer-aligned → exact native pixels, glyph centred in its cell
 
 	// Coverage-threshold the supersampled render down to one GP grid per glyph: each output
 	// texel is ON only if ≥50% of its SS×SS source block is inked. Kills the fillText AA
 	// fringe (which the present-stage core*3.0 boost would otherwise show as a solid pixel).
 	const src = ctx.getImageData(0, 0, c.width, c.height).data;
-	const outW = n * ASCII_GP_X, outH = ASCII_GP;
+	const outW = n * ASCII_GP_X, outH = ASCII_GP_Y;
 	const out = document.createElement('canvas');
 	out.width = outW; out.height = outH;
 	const oimg = out.getContext('2d').createImageData(outW, outH);
@@ -172,13 +174,13 @@ let asciiScene, asciiBitmap, asciiTrail, asciiCols = 0, asciiRows = 0;
 function initAsciiTargets() {
 	const visualCols = Math.max(8, Math.round(config.ASCII_COLS));   // slider value = glyph size on screen
 	const cols = Math.round(visualCols * ASCII_GP / ASCII_GP_X);     // inflate horizontal cell count so glyphs pack ~70% tighter at the same on-screen size/aspect
-	const rows = Math.max(8, Math.round(visualCols * canvas.height / canvas.width));
+	const rows = Math.max(8, Math.round(visualCols * canvas.height / canvas.width * ASCII_GP / ASCII_GP_Y));   // fewer rows for the taller cell → vertical gap, same on-screen glyph size
 	if (cols === asciiCols && rows === asciiRows && asciiScene) return;
 	asciiCols = cols; asciiRows = rows;
 	asciiScene = createFBO(gl, cols, rows, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR);
-	asciiBitmap = createFBO(gl, cols * ASCII_GP_X, rows * ASCII_GP, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
+	asciiBitmap = createFBO(gl, cols * ASCII_GP_X, rows * ASCII_GP_Y, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
 	// phosphor-persistence accumulator: ping-pong, same size/filter as the bitmap (all NEAREST → crisp pixels, no minification blur)
-	asciiTrail = createDoubleFBO(gl, cols * ASCII_GP_X, rows * ASCII_GP, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
+	asciiTrail = createDoubleFBO(gl, cols * ASCII_GP_X, rows * ASCII_GP_Y, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
 }
 
 function getResolution(resolution) {
