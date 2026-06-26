@@ -448,7 +448,7 @@ void main () {
 	vec3 hue = col / max(mx, 0.0001);              // unit-peak hue (full saturation)
 	vec3 neon = hue * clamp(pow(lum, 0.5) * 2.4, 0.0, 1.2);  // density → vivid neon brightness
 	float lr = pow(clamp(max(dens, ob), 0.0, 1.0), 0.6);   // ramp by dye density (obstacle forced solid) — every hue sweeps the full glyph set (flat-red heat zone stops pinning to one char)
-	lr = clamp(lr + (hash(cell) - 0.5) * uJitter * (1.0 - lr), 0.0, 0.9999);   // per-cell jitter, fades out toward solid cores/walls → grainy dissipation instead of uniform bands
+	lr = clamp(lr + (hash(cell) - 0.5) * uJitter * (1.0 - lr) * step(0.05, lr), 0.0, 0.9999);   // per-cell jitter, only above ramp step(0.05, lr) (empty cells stay clean), fades out toward solid cores/walls → grainy dissipation instead of uniform bands
 	float fidx = min(lr, 0.9999) * uGlyphCount;    // continuous ramp position
 	float idx = floor(fidx);
 	float fblend = fract(fidx);                    // blend toward the next glyph
