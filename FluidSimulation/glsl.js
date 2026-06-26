@@ -337,16 +337,16 @@ uniform vec2 texelSize;
 uniform sampler2D uObstacle;
 uniform vec3 uObstacleColor;
 
-// Thermal palette (density -> colour): black -> blue -> cyan -> near-white -> yellow -> red.
+// Thermal palette (density -> colour): black -> blue -> cyan -> near-white -> yellow -> orange -> red.
 vec3 heatRamp (float t) {
 	t = clamp(t, 0.0, 1.0);
-	vec3 c = mix(vec3(0.0),            vec3(0.0, 0.12, 0.70), smoothstep(0.00, 0.16, t));
+	vec3 c = mix(vec3(0.0), vec3(0.0, 0.12, 0.70), smoothstep(0.00, 0.16, t));
 	c = mix(c, vec3(0.0, 0.55, 1.0),  smoothstep(0.16, 0.32, t));
 	c = mix(c, vec3(0.0, 1.0, 1.0),   smoothstep(0.32, 0.46, t));
 	c = mix(c, vec3(0.85, 0.95, 1.0), smoothstep(0.46, 0.56, t));
 	c = mix(c, vec3(1.0, 1.0, 0.0),   smoothstep(0.56, 0.71, t));
-	c = mix(c, vec3(1.0, 0.45, 0.0),  smoothstep(0.71, 0.93, t));
-	c = mix(c, vec3(1.0, 0.0, 0.0),   smoothstep(0.93, 1.00, t));
+	c = mix(c, vec3(1.0, 0.45, 0.0),  smoothstep(0.71, 0.84, t));
+	c = mix(c, vec3(1.0, 0.0, 0.0),   smoothstep(0.84, 1.00, t));
 	return c;
 }
 
