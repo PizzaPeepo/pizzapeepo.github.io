@@ -751,7 +751,7 @@ function applyAsciiPreset() {
 	setSliderValue('asciiPersistSlider', 0.85);
 	setCheckboxValue('asciiGlowToggle', true);
 	setSliderValue('asciiGlowAmountSlider', 1.8);
-	setSliderValue('asciiJitterSlider', 0.03);
+	setSliderValue('asciiJitterSlider', 0.1);
 	setRadioValue('colorMode', 'heat');
 	setMode('fluid');
 	setCheckboxValue('shadingToggle', true);
