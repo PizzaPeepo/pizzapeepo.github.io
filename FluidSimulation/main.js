@@ -105,7 +105,7 @@ let ASCII_RAMP = " ,:;-~=+*ix-/x\\A2-rs/\\-h235A/-\\SGBMH-/\\-#B%$89@";
 // inked). Fractional baselines (the old 'middle'/'center') or a wrong native grid straddle the
 // blocks → ragged diagonals; this avoids both. Sampled NEAREST end-to-end.
 const ASCII_SS = 8;
-function buildAtlas(RAMP) {
+function buildAtlas(RAMP, fontFamily) {
 	const n = RAMP.length;
 	const cellW = ASCII_GP_X * ASCII_SS, cellH = ASCII_GP_Y * ASCII_SS;
 	const c = document.createElement('canvas');
@@ -114,7 +114,7 @@ function buildAtlas(RAMP) {
 	ctx.fillStyle = '#000'; ctx.fillRect(0, 0, c.width, c.height);
 	ctx.fillStyle = '#fff';
 	const fpx = ASCII_GP * ASCII_SS;   // = cell: native 16-grid font at SS× → 1 font-pixel = SS source px = 1 output texel after the coverage downsample
-	ctx.font = fpx + "px 'Web437_ATI_9x16', monospace";   // bitmap web-font (VileR, CC BY-SA 4.0); monospace fallback before it loads
+	ctx.font = fpx + "px " + (fontFamily || "'Web437_ATI_9x16', monospace");   // default = bitmap web-font (VileR, CC BY-SA 4.0); monospace fallback before it loads
 	ctx.textAlign = 'left'; ctx.textBaseline = 'top';
 	const offX = Math.round((cellW - ctx.measureText('M').width) / 2 / ASCII_SS) * ASCII_SS;   // centre the glyph but snap to the SS grid so font pixels stay block-aligned
 	const offY = Math.round((ASCII_GP_Y - ASCII_GP) / 2) * ASCII_SS;   // vertical centre in the taller cell, SS-snapped → the extra height becomes a clean top/bottom gap
@@ -209,9 +209,20 @@ function buildBrailleAtlas() {
 
 const DIR_RAMP = '-/|\\';   // orientation glyphs: 0°→'-', 45°→'/', 90°→'|', 135°→'\' (edge)
 const TEXT_RAMP = (() => { let s = ''; for (let i = 32; i <= 126; i++) s += String.fromCharCode(i); return s; })();   // printable ASCII (type-inject + particles)
+// Matrix-rain glyph set: digits 0-9 + half-width katakana (U+FF66..FF9D). Web437 has no
+// katakana, so this atlas is rendered with a CJK monospace face instead. Leading space → faint
+// cells stay blank; density maps the rest. Used by the Matrix scene (config.ASCII_GLYPH_SET).
+const MATRIX_RAMP = (() => {
+	let s = ' ';
+	for (let i = 0xFF66; i <= 0xFF9D; i++) s += String.fromCharCode(i);   // half-width katakana
+	s += '0123456789';
+	return s;
+})();
+const MATRIX_FONT = "'MS Gothic','Yu Gothic','MS PGothic','Noto Sans JP',monospace";
 let glyphAtlas = buildAtlas(ASCII_RAMP);
 let dirAtlas = buildAtlas(DIR_RAMP);
 let textAtlas = buildAtlas(TEXT_RAMP);
+const matrixAtlas = buildAtlas(MATRIX_RAMP, MATRIX_FONT);
 const brailleAtlas = buildBrailleAtlas();
 const asciiFontFace = new FontFace('Web437_ATI_9x16', "url('Web437_ATI_9x16.woff')");
 asciiFontFace.load()
@@ -672,15 +683,16 @@ function renderAscii() {
 	asciiMaterial.setKeywords(asciiKeywords());
 	asciiMaterial.bind();
 	const AU = asciiMaterial.uniforms;
+	const ga = config.ASCII_GLYPH_SET === 'matrix' ? matrixAtlas : glyphAtlas;
 	gl.uniform1i(AU.uScene, asciiScene.attach(0));
-	gl.uniform1i(AU.uGlyphs, glyphAtlas.attach(1));
+	gl.uniform1i(AU.uGlyphs, ga.attach(1));
 	gl.uniform1i(AU.uDye, dye.read.attach(2));
 	gl.uniform1i(AU.uObstacle, obstacleMask.read.attach(3));
 	gl.uniform1i(AU.uDirGlyphs, dirAtlas.attach(6));
 	gl.uniform1i(AU.uBraille, brailleAtlas.attach(7));
 	gl.uniform3f(AU.uObsColor, asciiObsColor[0], asciiObsColor[1], asciiObsColor[2]);
 	gl.uniform2f(AU.uGrid, asciiCols, asciiRows);
-	gl.uniform1f(AU.uGlyphCount, glyphAtlas.count);
+	gl.uniform1f(AU.uGlyphCount, ga.count);
 	gl.uniform1f(AU.uDirCount, dirAtlas.count);
 	gl.uniform1f(AU.uJitter, config.ASCII_JITTER);
 	gl.uniform1i(AU.uPhosphor, phosphorIndex());
@@ -915,6 +927,7 @@ function audioStep() {
 function sceneWindTunnel() {
 	setCheckboxValue('asciiToggle', true);
 	setRadioValue('glyphMode', 'edge');
+	config.ASCII_GLYPH_SET = 'default';
 	setRadioValue('colorMode', 'velocity');
 	setRadioValue('phosphorMode', 'color');
 	setCheckboxValue('emitterToggle', true);
@@ -927,6 +940,7 @@ function sceneMatrix() {
 	setCheckboxValue('asciiToggle', true);
 	setRadioValue('glyphMode', 'density');
 	setRadioValue('phosphorMode', 'green');
+	config.ASCII_GLYPH_SET = 'matrix';
 	setCheckboxValue('emitterToggle', false);
 	setSliderValue('asciiColsSlider', 60);
 	setSliderValue('asciiPersistSlider', 0.92);
@@ -995,6 +1009,7 @@ function applyAsciiPreset() {
 	setSliderValue('asciiJitterSlider', 0.1);
 	setRadioValue('colorMode', 'heat');
 	setRadioValue('glyphMode', 'density');
+	config.ASCII_GLYPH_SET = 'default';
 	setRadioValue('phosphorMode', 'color');
 	setCheckboxValue('particlesToggle', false);
 	setMode('fluid');
@@ -1063,6 +1078,7 @@ function wireUI() {
 	const injectInput = document.getElementById('injectTextInput');
 	bindButton('injectTextButton', () => injectText(injectInput ? injectInput.value : ''));
 	if (injectInput) injectInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); injectText(injectInput.value); } });
+	bindButton('sceneDefault', () => { applyAsciiPreset(); loadPreset('slit'); clearDye(); });
 	bindButton('sceneWindTunnel', sceneWindTunnel);
 	bindButton('sceneMatrix', sceneMatrix);
 	bindButton('audioButton', enableAudio);
@@ -1129,6 +1145,7 @@ splatStack.push(parseInt(Math.random() * 6) + 8);
 //   &splats=N                    → push N extra dye splats so the grid has visible content.
 //   &glow=0                      → force the phosphor glow OFF (A/B the glyph-level bloom).
 //   &zoom=N                      → set initial ASCII zoom (reveals the RGB subpixel triad; ~>3).
+//   &glyphset=matrix             → density-mode glyph atlas: digits + katakana (Matrix-rain look).
 (function applyBootParams() {
 	const q = new URLSearchParams(location.search);
 	if (q.get('ascii') === '1') {
@@ -1138,6 +1155,7 @@ splatStack.push(parseInt(Math.random() * 6) + 8);
 		if (q.has('zoom')) asciiZoom = Math.min(Math.max(parseFloat(q.get('zoom')), 1), ASCII_ZOOM_MAX);
 		if (q.has('mode')) setRadioValue('glyphMode', q.get('mode'));
 		if (q.has('phosphor')) setRadioValue('phosphorMode', q.get('phosphor'));
+		if (q.has('glyphset')) config.ASCII_GLYPH_SET = q.get('glyphset');   // default | matrix
 		if (q.get('particles') === '1') setCheckboxValue('particlesToggle', true);
 		if (q.has('inject')) injectText(q.get('inject'));
 	}
