@@ -14,7 +14,7 @@ export const config = {
 	SHADING: true,
 	COLORFUL: true,
 	COLOR_UPDATE_SPEED: 5.0,
-	COLOR_MODE: 'velocity',      // rainbow | single | gradient | velocity | heat
+	COLOR_MODE: 'velocity',      // rainbow | single | gradient | velocity | heat | neon
 	PAUSED: false,
 	BACK_COLOR: { r: 13, g: 11, b: 20 },
 	TRANSPARENT: true,
@@ -30,4 +30,7 @@ export const config = {
 	ASCII_GLOW: true,          // CRT phosphor glow halo on the zoomed RGB-triad reveal
 	ASCII_GLOW_AMOUNT: 1.8,    // zoomed-out glyph-bloom halo strength
 	ASCII_JITTER: 0.1,        // per-cell glyph-ramp jitter → grainy (non-uniform) dissipation
+	GLYPH_MODE: 'density',     // density | edge | braille — how a cell picks its glyph
+	ASCII_PHOSPHOR: 'color',   // color | green — mono terminal palette
+	ASCII_PARTICLES: false,    // advected glyph particles riding the streamlines (overlay)
 };

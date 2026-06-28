@@ -171,6 +171,7 @@
       <label><input type="radio" name="colorMode" value="gradient"> Gradient</label>
       <label><input type="radio" name="colorMode" value="velocity" checked> By velocity</label>
       <label><input type="radio" name="colorMode" value="heat"> Heatmap</label>
+      <label><input type="radio" name="colorMode" value="neon"> Neon</label>
     </div>
 
     <div class="hud-section">
@@ -210,6 +211,35 @@
       <input type="text" id="asciiRampInput" spellcheck="false" autocomplete="off" value=" ,:;-~=+*ix-/x\\A2-rs/\\-h235A/-\\SGBMH-/\\-#B%$89@" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:0.8em;padding:4px 6px;background:rgba(0,0,0,0.25);color:inherit;border:1px solid rgba(255,255,255,0.2);border-radius:4px;">
       <span class="ctrl-label" style="font-size:0.72em;opacity:0.6;">Scroll = zoom · middle-drag = pan · double-click = reset. Zoom in to reveal RGB pixels.</span>
       <span class="ctrl-label" style="font-size:0.68em;opacity:0.5;">Glyphs &amp; HUD font (ASCII mode): <a href="https://int10h.org/oldschool-pc-fonts/" target="_blank" rel="noopener">Web437 ATI 9x16</a> by VileR · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a></span>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Glyph mode</span>
+      <label><input type="radio" name="glyphMode" value="density" checked> Density ramp</label>
+      <label><input type="radio" name="glyphMode" value="edge"> Edge / contour</label>
+      <label><input type="radio" name="glyphMode" value="braille"> Braille (2×4 subpixel)</label>
+      <label><input type="checkbox" id="particlesToggle"> Glyph particles (ride streamlines)</label>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Phosphor palette</span>
+      <label><input type="radio" name="phosphorMode" value="color" checked> Full colour</label>
+      <label><input type="radio" name="phosphorMode" value="green"> P1 green</label>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Inject text</span>
+      <input type="text" id="injectTextInput" spellcheck="false" autocomplete="off" placeholder="type a word + Enter" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:0.8em;padding:4px 6px;background:rgba(0,0,0,0.25);color:inherit;border:1px solid rgba(255,255,255,0.2);border-radius:4px;">
+      <button id="injectTextButton">Stamp text into dye</button>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Scenes</span>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+        <button id="sceneWindTunnel">Wind tunnel</button>
+        <button id="sceneMatrix">Matrix</button>
+        <button id="audioButton">♪ Audio</button>
+      </div>
     </div>
 
     <div class="hud-divider"></div>

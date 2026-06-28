@@ -4,6 +4,7 @@
 
 import { config } from './config.js';
 import * as S from './glsl.js';
+import * as A from './asciiShaders.js';
 import { Program, Material, compileShader } from './gl-program.js';
 import {
 	getSupportedFormat, createFBO, createDoubleFBO, resizeDoubleFBO,
@@ -75,7 +76,11 @@ const gradientSubtractProgram = new Program(gl, baseVS, fs(S.gradientSubtract));
 const sunraysMaskProgram = new Program(gl, baseVS, fs(S.sunraysMask));
 const sunraysProgram = new Program(gl, baseVS, fs(S.sunrays));
 const obstacleStampProgram = new Program(gl, baseVS, fs(S.obstacleStamp));
-const asciiArtProgram = new Program(gl, baseVS, fs(S.asciiArt));
+const asciiMaterial = new Material(gl, baseVS, A.asciiArt);   // keyword variants: EDGE/BRAILLE
+const glyphDyeProgram = new Program(gl, baseVS, fs(A.glyphDye));
+const particleUpdateProgram = new Program(gl, baseVS, fs(A.particleUpdate));
+const particleVS = compileShader(gl, gl.VERTEX_SHADER, A.particleVertex);
+const particleRenderProgram = new Program(gl, particleVS, fs(A.particleRender));
 const asciiFadeProgram = new Program(gl, baseVS, fs(S.asciiFade));
 const asciiPresentProgram = new Program(gl, baseVS, fs(S.asciiPresent));
 const displayMaterial = new Material(gl, baseVS, S.display);
@@ -100,8 +105,8 @@ let ASCII_RAMP = " ,:;-~=+*ix-/x\\A2-rs/\\-h235A/-\\SGBMH-/\\-#B%$89@";
 // inked). Fractional baselines (the old 'middle'/'center') or a wrong native grid straddle the
 // blocks → ragged diagonals; this avoids both. Sampled NEAREST end-to-end.
 const ASCII_SS = 8;
-function createGlyphAtlas() {
-	const n = ASCII_RAMP.length;
+function buildAtlas(RAMP) {
+	const n = RAMP.length;
 	const cellW = ASCII_GP_X * ASCII_SS, cellH = ASCII_GP_Y * ASCII_SS;
 	const c = document.createElement('canvas');
 	c.width = n * cellW; c.height = cellH;
@@ -113,7 +118,7 @@ function createGlyphAtlas() {
 	ctx.textAlign = 'left'; ctx.textBaseline = 'top';
 	const offX = Math.round((cellW - ctx.measureText('M').width) / 2 / ASCII_SS) * ASCII_SS;   // centre the glyph but snap to the SS grid so font pixels stay block-aligned
 	const offY = Math.round((ASCII_GP_Y - ASCII_GP) / 2) * ASCII_SS;   // vertical centre in the taller cell, SS-snapped → the extra height becomes a clean top/bottom gap
-	for (let i = 0; i < n; i++) ctx.fillText(ASCII_RAMP[i], i * cellW + offX, offY);   // integer-aligned → exact native pixels, glyph centred in its cell
+	for (let i = 0; i < n; i++) ctx.fillText(RAMP[i], i * cellW + offX, offY);   // integer-aligned → exact native pixels, glyph centred in its cell
 
 	// Coverage-threshold the supersampled render down to one GP grid per glyph: each output
 	// texel is ON only if ≥50% of its SS×SS source block is inked. Kills the fillText AA
@@ -156,10 +161,66 @@ function createGlyphAtlas() {
 }
 // Built once now with the monospace fallback (so ASCII mode never breaks if the
 // font is missing), then rebuilt once the bitmap web-font loads.
-let glyphAtlas = createGlyphAtlas();
+// Procedural 256-glyph braille atlas (Web437 has no braille). Each value 0..255 lights an
+// 8-dot 2×4 sub-grid (bit = row*2 + col, row 0 top) → BRAILLE mode = 2×4 sub-cell resolution.
+function buildBrailleAtlas() {
+	const SS = 4;
+	const cellW = ASCII_GP_X * SS, cellH = ASCII_GP_Y * SS;
+	const c = document.createElement('canvas');
+	c.width = 256 * cellW; c.height = cellH;
+	const ctx = c.getContext('2d');
+	ctx.fillStyle = '#000'; ctx.fillRect(0, 0, c.width, c.height);
+	ctx.fillStyle = '#fff';
+	const rad = Math.min(cellW / 2, cellH / 4) * 0.34;
+	for (let v = 0; v < 256; v++) {
+		for (let b = 0; b < 8; b++) {
+			if (!(v & (1 << b))) continue;
+			const colb = b % 2, rowb = (b / 2) | 0;
+			const cx = v * cellW + (colb + 0.5) / 2 * cellW;
+			const cy = (rowb + 0.5) / 4 * cellH;
+			ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.fill();
+		}
+	}
+	const src = ctx.getImageData(0, 0, c.width, c.height).data;
+	const outW = 256 * ASCII_GP_X, outH = ASCII_GP_Y;
+	const out = document.createElement('canvas'); out.width = outW; out.height = outH;
+	const oimg = out.getContext('2d').createImageData(outW, outH);
+	const half = (SS * SS) / 2;
+	for (let oy = 0; oy < outH; oy++) for (let ox = 0; ox < outW; ox++) {
+		let lit = 0;
+		for (let sy = 0; sy < SS; sy++) for (let sx = 0; sx < SS; sx++)
+			if (src[((oy * SS + sy) * c.width + (ox * SS + sx)) * 4] > 127) lit++;
+		const val = lit >= half ? 255 : 0;
+		const o = (oy * outW + ox) * 4;
+		oimg.data[o] = oimg.data[o + 1] = oimg.data[o + 2] = val; oimg.data[o + 3] = 255;
+	}
+	out.getContext('2d').putImageData(oimg, 0, 0);
+	const tex = gl.createTexture();
+	gl.bindTexture(gl.TEXTURE_2D, tex);
+	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, out);
+	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	return { texture: tex, count: 256, attach(id) { gl.activeTexture(gl.TEXTURE0 + id); gl.bindTexture(gl.TEXTURE_2D, tex); return id; } };
+}
+
+const DIR_RAMP = '-/|\\';   // orientation glyphs: 0°→'-', 45°→'/', 90°→'|', 135°→'\' (edge)
+const TEXT_RAMP = (() => { let s = ''; for (let i = 32; i <= 126; i++) s += String.fromCharCode(i); return s; })();   // printable ASCII (type-inject + particles)
+let glyphAtlas = buildAtlas(ASCII_RAMP);
+let dirAtlas = buildAtlas(DIR_RAMP);
+let textAtlas = buildAtlas(TEXT_RAMP);
+const brailleAtlas = buildBrailleAtlas();
 const asciiFontFace = new FontFace('Web437_ATI_9x16', "url('Web437_ATI_9x16.woff')");
 asciiFontFace.load()
-	.then(f => { document.fonts.add(f); gl.deleteTexture(glyphAtlas.texture); glyphAtlas = createGlyphAtlas(); })
+	.then(f => {
+		document.fonts.add(f);
+		gl.deleteTexture(glyphAtlas.texture); glyphAtlas = buildAtlas(ASCII_RAMP);
+		gl.deleteTexture(dirAtlas.texture); dirAtlas = buildAtlas(DIR_RAMP);
+		gl.deleteTexture(textAtlas.texture); textAtlas = buildAtlas(TEXT_RAMP);
+	})
 	.catch(() => {});
 
 // Swap the glyph ramp at runtime (HUD text input). Rebuilds the atlas; ignores empty.
@@ -167,7 +228,7 @@ function setAsciiRamp(s) {
 	if (!s || !s.length) return;
 	ASCII_RAMP = s;
 	gl.deleteTexture(glyphAtlas.texture);
-	glyphAtlas = createGlyphAtlas();
+	glyphAtlas = buildAtlas(ASCII_RAMP);
 }
 
 // ── framebuffers ──
@@ -186,6 +247,27 @@ function initAsciiTargets() {
 	asciiBitmap = createFBO(gl, cols * ASCII_GP_X, rows * ASCII_GP_Y, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
 	// phosphor-persistence accumulator: ping-pong, same size/filter as the bitmap (all NEAREST → crisp pixels, no minification blur)
 	asciiTrail = createDoubleFBO(gl, cols * ASCII_GP_X, rows * ASCII_GP_Y, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
+}
+
+// ── advected glyph particles (overlay riding the streamlines) ──
+const PCOLS = 80, PROWS = 80, PCOUNT = PCOLS * PROWS;
+let particlePos = null, particleVAO = null;
+function initParticles() {
+	if (particlePos) return;
+	// pos texture: xy = pos[0,1], z = life, w = glyph seed. Cleared to 0 → all respawn frame 1.
+	particlePos = createDoubleFBO(gl, PCOLS, PROWS, rgba.internalFormat, rgba.format, texType, gl.NEAREST);
+	const idx = new Float32Array(PCOUNT);
+	for (let i = 0; i < PCOUNT; i++) idx[i] = i;
+	const buf = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+	gl.bufferData(gl.ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+	particleVAO = gl.createVertexArray();   // isolates the point attrib; bindVertexArray(null) restores the quad-blit state
+	gl.bindVertexArray(particleVAO);
+	gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+	gl.vertexAttribPointer(0, 1, gl.FLOAT, false, 0, 0);
+	gl.enableVertexAttribArray(0);
+	gl.bindVertexArray(null);
+	gl.bindBuffer(gl.ARRAY_BUFFER, null);
 }
 
 function getResolution(resolution) {
@@ -217,6 +299,7 @@ function initFramebuffers() {
 
 	initSunraysFramebuffers();
 	initAsciiTargets();
+	initParticles();
 }
 
 function initSunraysFramebuffers() {
@@ -231,6 +314,7 @@ function updateKeywords() {
 	if (config.SHADING) kw.push('SHADING');
 	if (config.SUNRAYS) kw.push('SUNRAYS');
 	if (config.COLOR_MODE === 'heat') kw.push('HEATMAP');
+	if (config.COLOR_MODE === 'neon') kw.push('NEONMAP');
 	displayMaterial.setKeywords(kw);
 }
 
@@ -252,7 +336,7 @@ function HSVtoRGB(h, s, v) {
 let baseHue = Math.random();
 function generateColor() {
 	// Heat mode colours by density at display time; inject neutral grey dye.
-	if (config.COLOR_MODE === 'heat') return { r: 0.15, g: 0.15, b: 0.15 };
+	if (config.COLOR_MODE === 'heat' || config.COLOR_MODE === 'neon') return { r: 0.15, g: 0.15, b: 0.15 };
 	let h;
 	if (config.COLOR_MODE === 'single') h = baseHue;
 	else if (config.COLOR_MODE === 'gradient') h = (baseHue + Math.random() * 0.12) % 1;
@@ -585,15 +669,21 @@ function renderAscii() {
 	gl.disable(gl.BLEND);
 	drawDisplay(asciiScene);                         // fluid → one LDR texel per cell
 
-	asciiArtProgram.bind();
-	gl.uniform1i(asciiArtProgram.uniforms.uScene, asciiScene.attach(0));
-	gl.uniform1i(asciiArtProgram.uniforms.uGlyphs, glyphAtlas.attach(1));
-	gl.uniform1i(asciiArtProgram.uniforms.uDye, dye.read.attach(2));
-	gl.uniform1i(asciiArtProgram.uniforms.uObstacle, obstacleMask.read.attach(3));
-	gl.uniform3f(asciiArtProgram.uniforms.uObsColor, asciiObsColor[0], asciiObsColor[1], asciiObsColor[2]);
-	gl.uniform2f(asciiArtProgram.uniforms.uGrid, asciiCols, asciiRows);
-	gl.uniform1f(asciiArtProgram.uniforms.uGlyphCount, glyphAtlas.count);
-	gl.uniform1f(asciiArtProgram.uniforms.uJitter, config.ASCII_JITTER);
+	asciiMaterial.setKeywords(asciiKeywords());
+	asciiMaterial.bind();
+	const AU = asciiMaterial.uniforms;
+	gl.uniform1i(AU.uScene, asciiScene.attach(0));
+	gl.uniform1i(AU.uGlyphs, glyphAtlas.attach(1));
+	gl.uniform1i(AU.uDye, dye.read.attach(2));
+	gl.uniform1i(AU.uObstacle, obstacleMask.read.attach(3));
+	gl.uniform1i(AU.uDirGlyphs, dirAtlas.attach(6));
+	gl.uniform1i(AU.uBraille, brailleAtlas.attach(7));
+	gl.uniform3f(AU.uObsColor, asciiObsColor[0], asciiObsColor[1], asciiObsColor[2]);
+	gl.uniform2f(AU.uGrid, asciiCols, asciiRows);
+	gl.uniform1f(AU.uGlyphCount, glyphAtlas.count);
+	gl.uniform1f(AU.uDirCount, dirAtlas.count);
+	gl.uniform1f(AU.uJitter, config.ASCII_JITTER);
+	gl.uniform1i(AU.uPhosphor, phosphorIndex());
 	blit(asciiBitmap);                               // → crisp glyph bitmap
 
 	// Stage A2: fold the fresh bitmap into the decaying trail accumulator.
@@ -619,6 +709,86 @@ function renderAscii() {
 	gl.uniform1f(asciiPresentProgram.uniforms.uGlow, config.ASCII_GLOW ? 1.0 : 0.0);
 	gl.uniform1f(asciiPresentProgram.uniforms.uGlowAmount, config.ASCII_GLOW_AMOUNT);
 	blit(null);                                      // → screen
+
+	if (config.ASCII_PARTICLES) renderParticles();
+}
+
+// Glyph-mode → shader keyword set (base density mode = no keyword).
+function asciiKeywords() {
+	if (config.GLYPH_MODE === 'edge') return ['EDGE'];
+	if (config.GLYPH_MODE === 'braille') return ['BRAILLE'];
+	return [];
+}
+function phosphorIndex() {
+	return { color: 0, green: 1 }[config.ASCII_PHOSPHOR] || 0;
+}
+
+// Advect the particle position texture by the velocity field (one ping-pong step).
+function updateParticles(dt) {
+	if (!particlePos) return;
+	gl.disable(gl.BLEND);
+	particleUpdateProgram.bind();
+	gl.uniform1i(particleUpdateProgram.uniforms.uPos, particlePos.read.attach(0));
+	gl.uniform1i(particleUpdateProgram.uniforms.uVelocity, velocity.read.attach(1));
+	gl.uniform2f(particleUpdateProgram.uniforms.uTexel, velocity.texelSizeX, velocity.texelSizeY);
+	gl.uniform1f(particleUpdateProgram.uniforms.uDt, dt);
+	gl.uniform1f(particleUpdateProgram.uniforms.uSpeed, 1.6);
+	gl.uniform1f(particleUpdateProgram.uniforms.uTime, performance.now() / 1000.0);
+	blit(particlePos.write); particlePos.swap();
+}
+
+// Draw the particles as additive glyph point-sprites over the presented ASCII frame.
+function renderParticles() {
+	if (!particlePos || !particleVAO) return;
+	gl.enable(gl.BLEND);
+	gl.blendFunc(gl.ONE, gl.ONE);
+	particleRenderProgram.bind();
+	gl.uniform1i(particleRenderProgram.uniforms.uPos, particlePos.read.attach(0));
+	gl.uniform1i(particleRenderProgram.uniforms.uGlyphs, textAtlas.attach(1));
+	gl.uniform1f(particleRenderProgram.uniforms.uGlyphCount, textAtlas.count);
+	gl.uniform1i(particleRenderProgram.uniforms.uDye, dye.read.attach(2));
+	gl.uniform2f(particleRenderProgram.uniforms.uDim, PCOLS, PROWS);
+	gl.uniform1f(particleRenderProgram.uniforms.uPointSize, Math.max(8, gl.drawingBufferWidth / 90));
+	gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+	gl.bindVertexArray(particleVAO);
+	gl.drawArrays(gl.POINTS, 0, PCOUNT);
+	gl.bindVertexArray(null);
+	gl.disable(gl.BLEND);
+}
+
+// Stamp a string into the dye field as glyphs (type-to-inject). Letters then advect/dissolve.
+function injectText(str) {
+	if (!str) return;
+	// ASCII mode re-glyphs the dye on a coarse grid, so small letters dissolve into noise.
+	// Stamp bigger (spans more glyph cells → legible silhouette) and at full density (solid blocks, clean gaps).
+	const hUv = config.ASCII ? 0.085 : 0.045;           // glyph half-height in uv
+	const wUv = hUv * (ASCII_GP_X / ASCII_GP_Y) / aspect();
+	const adv = 2 * wUv * 1.08;
+	let penX = 0.06 + wUv, penY = 0.5;
+	const d = config.ASCII ? 1.0 : 0.6;
+	const col = { r: d, g: d, b: d };                   // neutral density → reads in any colour mode
+	gl.disable(gl.BLEND);
+	for (const ch of str) {
+		if (ch === '\n') { penX = 0.06 + wUv; penY -= 2 * hUv * 1.4; continue; }
+		const code = ch.charCodeAt(0);
+		if (code > 32 && code <= 126) {
+			glyphDyeProgram.bind();
+			gl.uniform1i(glyphDyeProgram.uniforms.uTarget, dye.read.attach(0));
+			gl.uniform1i(glyphDyeProgram.uniforms.uGlyphs, textAtlas.attach(1));
+			gl.uniform1i(glyphDyeProgram.uniforms.uObstacle, obstacleMask.read.attach(2));
+			gl.uniform1f(glyphDyeProgram.uniforms.uGlyphCount, textAtlas.count);
+			gl.uniform1f(glyphDyeProgram.uniforms.uIndex, code - 32);
+			gl.uniform2f(glyphDyeProgram.uniforms.uCenter, penX, penY);
+			gl.uniform2f(glyphDyeProgram.uniforms.uHalf, wUv, hUv);
+			gl.uniform3f(glyphDyeProgram.uniforms.uColor, col.r, col.g, col.b);
+			blit(dye.write); dye.swap();
+			const push = config.ASCII ? 0.25 : 1.0;   // softer push in ASCII → letters hold shape long enough to read
+			splat(penX, penY, push * 25 * (Math.random() - 0.5), push * 45 * (Math.random() - 0.5), { r: 0, g: 0, b: 0 });   // gentle push → letters break up
+		}
+		penX += adv;
+		if (penX > 0.97) { penX = 0.06 + wUv; penY -= 2 * hUv * 1.4; }
+	}
 }
 
 function render(target) {
@@ -664,8 +834,10 @@ function update() {
 	if (resizeCanvas()) initFramebuffers();
 	updateColors(dt);
 	applyInputs();
+	if (audioOn && !config.PAUSED) audioStep();
 	if (config.EMITTER && !config.PAUSED) emitFlow();
 	if (!config.PAUSED) step(dt);
+	if (config.ASCII && config.ASCII_PARTICLES && !config.PAUSED) updateParticles(dt);
 	render(null);
 
 	frames++;
@@ -693,6 +865,75 @@ function reset() {
 	splatStack.push(parseInt(Math.random() * 8) + 8);
 }
 
+// ── audio reactivity (mic FFT → splat bursts + vorticity + jitter) ──
+let audioOn = false, analyser = null, freqData = null, baseCurl = config.CURL, audioCooldown = 0;
+async function enableAudio() {
+	const btn = document.getElementById('audioButton');
+	if (audioOn) {   // toggle off
+		audioOn = false; config.CURL = baseCurl;
+		if (btn) btn.textContent = '♪ Audio';
+		return;
+	}
+	try {
+		const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+		const ctx = new (window.AudioContext || window.webkitAudioContext)();
+		const srcNode = ctx.createMediaStreamSource(stream);
+		analyser = ctx.createAnalyser();
+		analyser.fftSize = 256;
+		analyser.smoothingTimeConstant = 0.7;
+		srcNode.connect(analyser);
+		freqData = new Uint8Array(analyser.frequencyBinCount);
+		baseCurl = config.CURL;
+		audioOn = true;
+		if (btn) btn.textContent = '♪ on';
+	} catch (e) {
+		if (btn) btn.textContent = 'mic denied';
+	}
+}
+function bandAvg(data, lo, hi) {
+	let s = 0; for (let i = lo; i < hi; i++) s += data[i];
+	return s / Math.max(1, hi - lo) / 255;   // 0..1
+}
+function audioStep() {
+	if (!analyser) return;
+	analyser.getByteFrequencyData(freqData);
+	const n = freqData.length;
+	const bass = bandAvg(freqData, 0, Math.max(2, n >> 4));
+	const mid = bandAvg(freqData, n >> 4, n >> 2);
+	const treble = bandAvg(freqData, n >> 2, n);
+	config.CURL = baseCurl + mid * 30;                   // mids → swirliness
+	config.ASCII_JITTER = Math.min(1, 0.05 + treble * 0.6);   // treble → grain
+	if (--audioCooldown <= 0 && bass > 0.55) {           // bass → splat burst
+		const c = generateColor(); c.r *= 10; c.g *= 10; c.b *= 10;
+		const f = 4000 + bass * 9000;
+		splat(Math.random(), Math.random(), f * (Math.random() - 0.5), f * (Math.random() - 0.5), c);
+		audioCooldown = 4;
+	}
+}
+
+// ── ASCII scene presets (compose the existing setters) ──
+function sceneWindTunnel() {
+	setCheckboxValue('asciiToggle', true);
+	setRadioValue('glyphMode', 'edge');
+	setRadioValue('colorMode', 'velocity');
+	setRadioValue('phosphorMode', 'color');
+	setCheckboxValue('emitterToggle', true);
+	setSliderValue('asciiColsSlider', 70);
+	setSliderValue('asciiPersistSlider', 0.60);
+	loadPreset('airfoil');
+	clearDye();
+}
+function sceneMatrix() {
+	setCheckboxValue('asciiToggle', true);
+	setRadioValue('glyphMode', 'density');
+	setRadioValue('phosphorMode', 'green');
+	setCheckboxValue('emitterToggle', false);
+	setSliderValue('asciiColsSlider', 60);
+	setSliderValue('asciiPersistSlider', 0.92);
+	setSliderValue('asciiJitterSlider', 0.15);
+	clearMask();
+	clearDye();
+}
 // ── HUD wiring ──
 function bindSlider(id, valId, parse, onChange, fmt) {
 	const sl = document.getElementById(id);
@@ -753,6 +994,9 @@ function applyAsciiPreset() {
 	setSliderValue('asciiGlowAmountSlider', 1.8);
 	setSliderValue('asciiJitterSlider', 0.1);
 	setRadioValue('colorMode', 'heat');
+	setRadioValue('glyphMode', 'density');
+	setRadioValue('phosphorMode', 'color');
+	setCheckboxValue('particlesToggle', false);
 	setMode('fluid');
 	setCheckboxValue('shadingToggle', true);
 	setCheckboxValue('colorfulToggle', true);
@@ -809,6 +1053,20 @@ function wireUI() {
 		el.addEventListener('change', () => { if (el.checked) mode = el.value; });
 	});
 
+	document.querySelectorAll('input[name="glyphMode"]').forEach(el => {
+		el.addEventListener('change', () => { if (el.checked) config.GLYPH_MODE = el.value; });
+	});
+	document.querySelectorAll('input[name="phosphorMode"]').forEach(el => {
+		el.addEventListener('change', () => { if (el.checked) config.ASCII_PHOSPHOR = el.value; });
+	});
+	bindCheckbox('particlesToggle', v => config.ASCII_PARTICLES = v);
+	const injectInput = document.getElementById('injectTextInput');
+	bindButton('injectTextButton', () => injectText(injectInput ? injectInput.value : ''));
+	if (injectInput) injectInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); injectText(injectInput.value); } });
+	bindButton('sceneWindTunnel', sceneWindTunnel);
+	bindButton('sceneMatrix', sceneMatrix);
+	bindButton('audioButton', enableAudio);
+
 	bindButton('presetCylinder', () => loadPreset('cylinder'));
 	bindButton('presetAirfoil', () => loadPreset('airfoil'));
 	bindButton('presetSlit', () => loadPreset('slit'));
@@ -825,6 +1083,8 @@ function wireUI() {
 	});
 
 	window.addEventListener('keydown', e => {
+		const t = e.target;
+		if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;   // don't fire hotkeys while typing
 		if (e.code === 'Space') { e.preventDefault(); if (pauseBtn) pauseBtn.click(); }
 		else if (e.code === 'KeyR') reset();
 		else if (e.code === 'KeyC') clearDye();
@@ -876,6 +1136,10 @@ splatStack.push(parseInt(Math.random() * 6) + 8);
 		if (q.has('cols')) setSliderValue('asciiColsSlider', parseInt(q.get('cols')));
 		if (q.get('glow') === '0') setCheckboxValue('asciiGlowToggle', false);
 		if (q.has('zoom')) asciiZoom = Math.min(Math.max(parseFloat(q.get('zoom')), 1), ASCII_ZOOM_MAX);
+		if (q.has('mode')) setRadioValue('glyphMode', q.get('mode'));
+		if (q.has('phosphor')) setRadioValue('phosphorMode', q.get('phosphor'));
+		if (q.get('particles') === '1') setCheckboxValue('particlesToggle', true);
+		if (q.has('inject')) injectText(q.get('inject'));
 	}
 	const ns = parseInt(q.get('splats')) || 0;
 	for (let i = 0; i < ns; i++) splatStack.push(parseInt(Math.random() * 8) + 8);

@@ -350,6 +350,16 @@ vec3 heatRamp (float t) {
 	return c;
 }
 
+// Synthwave palette (density -> colour): navy -> teal -> cyan -> pale -> hot pink.
+vec3 neonRamp (float t) {
+	t = clamp(t, 0.0, 1.0);
+	vec3 c = mix(vec3(0.004, 0.004, 0.169), vec3(0.0, 0.337, 0.471), smoothstep(0.00, 0.30, t));
+	c = mix(c, vec3(0.020, 0.851, 0.910), smoothstep(0.30, 0.55, t));
+	c = mix(c, vec3(0.820, 0.969, 1.0),   smoothstep(0.55, 0.78, t));
+	c = mix(c, vec3(1.0, 0.165, 0.427),   smoothstep(0.78, 1.00, t));
+	return c;
+}
+
 vec3 linearToGamma (vec3 c) {
 	c = max(c, vec3(0.0));
 	return max(1.055 * pow(c, vec3(0.416666667)) - 0.055, vec3(0.0));
@@ -376,6 +386,9 @@ void main () {
 #endif
 #ifdef HEATMAP
 	c = heatRamp(pow(clamp(dens * 3.0, 0.0, 1.0), 0.75));   // density -> thermal palette
+#endif
+#ifdef NEONMAP
+	c = neonRamp(pow(clamp(dens * 3.0, 0.0, 1.0), 0.75));   // density -> synthwave palette
 #endif
 	float ob = texture2D(uObstacle, vUv).x;
 	float edge = smoothstep(0.35, 0.65, ob);
