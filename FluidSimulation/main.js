@@ -924,18 +924,6 @@ function audioStep() {
 }
 
 // ── ASCII scene presets (compose the existing setters) ──
-function sceneWindTunnel() {
-	setCheckboxValue('asciiToggle', true);
-	setRadioValue('glyphMode', 'edge');
-	config.ASCII_GLYPH_SET = 'default';
-	setRadioValue('colorMode', 'velocity');
-	setRadioValue('phosphorMode', 'color');
-	setCheckboxValue('emitterToggle', true);
-	setSliderValue('asciiColsSlider', 70);
-	setSliderValue('asciiPersistSlider', 0.60);
-	loadPreset('airfoil');
-	clearDye();
-}
 function sceneMatrix() {
 	setCheckboxValue('asciiToggle', true);
 	setRadioValue('glyphMode', 'density');
@@ -1079,7 +1067,6 @@ function wireUI() {
 	bindButton('injectTextButton', () => injectText(injectInput ? injectInput.value : ''));
 	if (injectInput) injectInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); injectText(injectInput.value); } });
 	bindButton('sceneDefault', () => { applyAsciiPreset(); loadPreset('slit'); clearDye(); });
-	bindButton('sceneWindTunnel', sceneWindTunnel);
 	bindButton('sceneMatrix', sceneMatrix);
 	bindButton('audioButton', enableAudio);
 
