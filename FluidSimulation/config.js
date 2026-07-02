@@ -4,13 +4,13 @@
 export const config = {
 	SIM_RESOLUTION: 128,
 	DYE_RESOLUTION: 2048,
-	DENSITY_DISSIPATION: 0.25,  // dye fade rate
+	DENSITY_DISSIPATION: 1.50,  // dye fade rate
 	VELOCITY_DISSIPATION: 1.05,  // "friction"
 	PRESSURE: 0.4,
-	PRESSURE_ITERATIONS: 10,
-	CURL: 11,                    // vorticity / swirliness
-	SPLAT_RADIUS: 0.55,
-	SPLAT_FORCE: 10500,
+	PRESSURE_ITERATIONS: 40,
+	CURL: 17,                    // vorticity / swirliness
+	SPLAT_RADIUS: 0.80,
+	SPLAT_FORCE: 12000,
 	SHADING: true,
 	COLORFUL: true,
 	COLOR_UPDATE_SPEED: 5.0,
