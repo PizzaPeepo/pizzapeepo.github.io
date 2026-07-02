@@ -75,7 +75,11 @@ void main () {
 		float o = mod(atan(gx, -gy), PI);                        // tangent ⟂ gradient
 		float di = clamp(floor(o / PI * uDirCount), 0.0, uDirCount - 1.0);
 		float md = texture2D(uDirGlyphs, vec2((di + cuv.x) / uDirCount, cuv.y)).r;
-		mask = mix(fillMask, md, smoothstep(0.15, 0.5, gm));      // draw the contour, fill flats
+		// Suppress contours deep inside a bright core: if every neighbour is dense we're an
+		// interior cell, not a boundary, so keep the ramp fill (stops line glyphs bleeding in).
+		float minN = min(min(min(l00, l10), min(l20, l01)), min(min(l21, l02), min(l12, l22)));
+		float interior = 1.0 - smoothstep(0.55, 0.9, minN);
+		mask = mix(fillMask, md, smoothstep(0.15, 0.5, gm) * interior);   // draw boundary contours, fill flats + cores
 	}
 #endif
 #ifdef BRAILLE
