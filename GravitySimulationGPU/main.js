@@ -958,8 +958,8 @@ function makeSplatMaterial(posNode, velNode, densNode, varNode, isDust, imageSig
 			const rampSpeed = mix(repulse, attract, gSignU);
 			// radius mode: blackbody-ish — hot white-blue at the primary core → deep red rim
 			const rT = posNode.sub(corePosU).length().div(DISK_R * 0.9).saturate();
-			const rampRadius = mix(mix(color(0xe8f1ff), color(0xffc06a), rT.mul(2.0).saturate()),
-				color(0x8a2408), rT.sub(0.5).mul(2.0).saturate()).mul(float(1.6).sub(rT));
+			const rampRadius = mix(mix(color(0xe8f1ff), color(0xff9a4a), rT.mul(3.0).saturate()),
+				color(0x8a2408), rT.sub(0.35).mul(1.6).saturate()).mul(float(1.6).sub(rT));
 			// galaxy mode: second population gets a violet-pink ramp, keyed by instVar.z
 			const rampB = mix(mix(color(0x7a2cff), color(0xff5ad0), t1), color(0xffd9f0), t2);
 			const rampGalaxy = mix(rampSpeed, rampB, varNode.z);
