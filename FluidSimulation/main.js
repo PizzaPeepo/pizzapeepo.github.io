@@ -56,6 +56,7 @@ if (rgba == null) {
 	rgba = { internalFormat: gl.RGBA, format: gl.RGBA };
 	rg = rgba; r = rgba;
 }
+const sunraysSupported = config.SUNRAYS; // false only on the no-float-target degrade path above
 
 // ── programs ──
 const baseVS = compileShader(gl, gl.VERTEX_SHADER, S.baseVertex);
@@ -985,10 +986,9 @@ function applyAsciiPreset() {
 	setSliderValue('splatForceSlider', 12000);
 	setSliderValue('brushSlider', 0.010);
 	setSliderValue('sunraysWeightSlider', 0.15);
-	setSliderValue('colorSpeedSlider', 5.0);
 	setSliderValue('asciiColsSlider', 60);   // ~17px glyphs on a desktop canvas — readable; 100 was ~10px (mush)
 	setSliderValue('asciiPersistSlider', 0.85);
-	setCheckboxValue('asciiGlowToggle', true);
+	config.ASCII_GLOW = true;
 	setSliderValue('asciiGlowAmountSlider', 1.8);
 	setSliderValue('asciiJitterSlider', 0.1);
 	setRadioValue('colorMode', 'heat');
@@ -997,11 +997,8 @@ function applyAsciiPreset() {
 	setRadioValue('phosphorMode', 'color');
 	setCheckboxValue('particlesToggle', false);
 	setMode('fluid');
-	setCheckboxValue('shadingToggle', true);
-	setCheckboxValue('colorfulToggle', true);
-	setCheckboxValue('transparentToggle', true);
 	setCheckboxValue('emitterToggle', false);
-	setCheckboxValue('sunraysToggle', false);
+	config.SUNRAYS = false;
 	updateKeywords();
 }
 
@@ -1022,22 +1019,17 @@ function wireUI() {
 	bindSlider('splatForceSlider', 'splatForceValue', v => parseInt(v), v => config.SPLAT_FORCE = v);
 	bindSlider('brushSlider', 'brushValue', parseFloat, v => config.OBSTACLE_BRUSH = v, v => v.toFixed(3));
 	bindSlider('sunraysWeightSlider', 'sunraysWeightValue', parseFloat, v => config.SUNRAYS_WEIGHT = v, v => v.toFixed(2));
-	bindSlider('colorSpeedSlider', 'colorSpeedValue', parseFloat, v => config.COLOR_UPDATE_SPEED = v, v => v.toFixed(1));
 
-	bindCheckbox('shadingToggle', v => { config.SHADING = v; updateKeywords(); });
-	bindCheckbox('sunraysToggle', v => { config.SUNRAYS = v; updateKeywords(); });
-	bindCheckbox('colorfulToggle', v => config.COLORFUL = v);
 	bindCheckbox('emitterToggle', v => config.EMITTER = v);
-	bindCheckbox('transparentToggle', v => config.TRANSPARENT = v);
 	bindCheckbox('asciiToggle', v => {
 		config.ASCII = v;
 		resetAsciiView();
 		applyAsciiHudFont(v);
 		if (v) applyAsciiPreset();
+		else { config.SUNRAYS = sunraysSupported; updateKeywords(); }
 	});
 	bindSlider('asciiColsSlider', 'asciiColsValue', v => parseInt(v), v => { config.ASCII_COLS = v; initAsciiTargets(); });
 	bindSlider('asciiPersistSlider', 'asciiPersistValue', parseFloat, v => config.ASCII_PERSIST = v, v => v.toFixed(2));
-	bindCheckbox('asciiGlowToggle', v => config.ASCII_GLOW = v);
 	bindSlider('asciiGlowAmountSlider', 'asciiGlowAmountValue', parseFloat, v => config.ASCII_GLOW_AMOUNT = v, v => v.toFixed(1));
 	bindSlider('asciiJitterSlider', 'asciiJitterValue', parseFloat, v => config.ASCII_JITTER = v, v => v.toFixed(3));
 	const rampInput = document.getElementById('asciiRampInput');
@@ -1096,6 +1088,7 @@ function wireUI() {
 			const cb = document.getElementById('asciiToggle'); if (cb) cb.checked = config.ASCII;
 			applyAsciiHudFont(config.ASCII);
 			if (config.ASCII) applyAsciiPreset();
+			else { config.SUNRAYS = sunraysSupported; updateKeywords(); }
 		}
 	});
 	window.addEventListener('keydown', e => { if (e.key === 'Shift') shiftHeld = true; });
@@ -1134,7 +1127,7 @@ splatStack.push(parseInt(Math.random() * 6) + 8);
 	if (q.get('ascii') === '1') {
 		setCheckboxValue('asciiToggle', true);
 		if (q.has('cols')) setSliderValue('asciiColsSlider', parseInt(q.get('cols')));
-		if (q.get('glow') === '0') setCheckboxValue('asciiGlowToggle', false);
+		if (q.get('glow') === '0') config.ASCII_GLOW = false;
 		if (q.has('zoom')) asciiZoom = Math.min(Math.max(parseFloat(q.get('zoom')), 1), ASCII_ZOOM_MAX);
 		if (q.has('mode')) setRadioValue('glyphMode', q.get('mode'));
 		if (q.has('phosphor')) setRadioValue('phosphorMode', q.get('phosphor'));

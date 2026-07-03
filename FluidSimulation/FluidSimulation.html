@@ -172,42 +172,30 @@
     </div>
 
     <div class="hud-section">
-      <span class="ctrl-label">Colour cycle speed: <span id="colorSpeedValue"></span></span>
-      <input type="range" min="1" max="20" step="0.5" value="5" class="slider" id="colorSpeedSlider">
-    </div>
-
-    <div class="hud-section">
       <span class="ctrl-label">Sunrays weight: <span id="sunraysWeightValue"></span></span>
       <input type="range" min="0" max="2" step="0.05" value="0.15" class="slider" id="sunraysWeightSlider">
     </div>
 
     <div class="hud-section">
       <span class="ctrl-label">Options</span>
-      <label><input type="checkbox" id="shadingToggle" checked> Shading</label>
-      <label><input type="checkbox" id="sunraysToggle" checked> Sunrays</label>
-      <label><input type="checkbox" id="colorfulToggle" checked> Colourful (cycle hue)</label>
-      <label><input type="checkbox" id="emitterToggle"> Flow emitter (vortex street)</label>
-      <label><input type="checkbox" id="transparentToggle" checked> Transparent background</label>
+      <label><input type="checkbox" id="emitterToggle"> Windtunnel</label>
     </div>
 
     <div class="hud-divider"></div>
 
-    <div class="hud-section">
+    <div class="hud-section" style="gap:10px;">
       <span class="ctrl-label">ASCII mode</span>
       <label><input type="checkbox" id="asciiToggle"> Render as ASCII (A)</label>
       <span class="ctrl-label" style="font-size:0.8em;">Columns: <span id="asciiColsValue"></span></span>
       <input type="range" min="40" max="320" step="20" value="60" class="slider" id="asciiColsSlider">
       <span class="ctrl-label" style="font-size:0.8em;">Persistence: <span id="asciiPersistValue"></span></span>
       <input type="range" min="0" max="0.97" step="0.01" value="0.85" class="slider" id="asciiPersistSlider">
-      <label><input type="checkbox" id="asciiGlowToggle" checked> Phosphor glow (zoomed reveal)</label>
-      <span class="ctrl-label" style="font-size:0.8em;">Glow amount (zoomed out): <span id="asciiGlowAmountValue"></span></span>
+      <span class="ctrl-label" style="font-size:0.8em;">Glow: <span id="asciiGlowAmountValue"></span></span>
       <input type="range" min="0" max="4" step="0.1" value="1.8" class="slider" id="asciiGlowAmountSlider">
       <span class="ctrl-label" style="font-size:0.8em;">Dissipation jitter: <span id="asciiJitterValue"></span></span>
       <input type="range" min="0" max="1" step="0.01" value="0.03" class="slider" id="asciiJitterSlider">
       <span class="ctrl-label" style="font-size:0.8em;">Glyph ramp (sparse→dense):</span>
       <input type="text" id="asciiRampInput" spellcheck="false" autocomplete="off" value=" ,:;-~=+*ix-/x\\A2-rs/\\-h235A/-\\SGBMH-/\\-#B%$89@" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:0.8em;padding:4px 6px;background:rgba(0,0,0,0.25);color:inherit;border:1px solid rgba(255,255,255,0.2);border-radius:4px;">
-      <span class="ctrl-label" style="font-size:0.72em;opacity:0.6;">Scroll = zoom · middle-drag = pan · double-click = reset. Zoom in to reveal RGB pixels.</span>
-      <span class="ctrl-label" style="font-size:0.68em;opacity:0.5;">Glyphs &amp; HUD font (ASCII mode): <a href="https://int10h.org/oldschool-pc-fonts/" target="_blank" rel="noopener">Web437 ATI 9x16</a> by VileR · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a></span>
     </div>
 
     <div class="hud-section">
@@ -247,6 +235,13 @@
       <button id="pauseButton">Pause (Space)</button>
       <button id="clearDyeButton">Clear dye (C)</button>
       <button id="resetButton">Reset (R)</button>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-section">
+      <span class="ctrl-label" style="font-size:0.72em;opacity:0.6;">Scroll = zoom · middle-drag = pan · double-click = reset. Zoom in to reveal RGB pixels.</span>
+      <span class="ctrl-label" style="font-size:0.68em;opacity:0.5;">Glyphs &amp; HUD font (ASCII mode): <a href="https://int10h.org/oldschool-pc-fonts/" target="_blank" rel="noopener">Web437 ATI 9x16</a> by VileR · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a></span>
     </div>
 
   </aside>
