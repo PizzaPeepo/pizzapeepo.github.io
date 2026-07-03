@@ -75,6 +75,7 @@
         <button id="presetRing">Ring</button>
         <button id="presetCollapse">Cold collapse</button>
         <button id="presetGalaxy">Galaxy clash</button>
+        <button id="presetBH" style="grid-column:1 / -1;">Black hole</button>
       </div>
     </div>
 
@@ -135,6 +136,11 @@
     <div class="hud-section">
       <span class="ctrl-label">Dust lanes <small>(reseed on Reset)</small>: <span id="dustValue"></span></span>
       <input type="range" min="0" max="0.3" step="0.01" value="0.15" class="slider" id="dustSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Lensing: <span id="lensValue"></span></span>
+      <input type="range" min="0" max="2" step="0.05" value="0" class="slider" id="lensSlider">
     </div>
 
     <div class="hud-section">

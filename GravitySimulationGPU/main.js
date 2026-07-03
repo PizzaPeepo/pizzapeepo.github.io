@@ -63,6 +63,12 @@ let dofOn = true;             // depth-of-field post pass
 let clashRatio = 1.0;         // galaxy-2 : galaxy-1 mass ratio (clash preset, on reset)
 let clashRetro = false;       // galaxy 2 spins retrograde (clash preset, on reset)
 let colorMode = 0;            // 0 = speed, 1 = radius (temperature), 2 = galaxy ID
+let lensStrength = 0;         // gravitational lens strength; 0 = off (blackhole preset sets it)
+let drag = 0;                 // gas drag per unit time (blackhole preset sets it)
+let accrR = 0;                // accretion radius; particles inside respawn on the rim (0 = off)
+let preBH = null;             // knob snapshot to restore when leaving the blackhole preset
+const BH_RIN = 45, BH_ROUT = 250; // accretion-disk annulus, sim units
+const COLOR_LABELS = ['Color: Speed', 'Color: Radius', 'Color: Galaxy'];
 
 // ── movable cores (≤4 massive bodies; core physics on the CPU always — N is tiny) ──
 // Each: {x,y,z, vx,vy,vz, frac, mass}; mass = coreMass·frac, kept in sync by the slider.
@@ -153,7 +159,11 @@ const camUpU = uniform(new THREE.Vector3(0, 1, 0));
 const streakU = uniform(0.02);      // velocity-stretch factor (long-exposure streaks)
 const densNormU = uniform(1.0);     // adaptive density → brightness normalization
 const colorModeU = uniform(0);      // 0 = speed ramp, 1 = radius/temperature, 2 = galaxy ID
-const corePosU = uniform(new THREE.Vector3()); // primary core, set per frame (radius ramp origin)
+const corePosU = uniform(new THREE.Vector3()); // primary core, set per frame (radius ramp + lens center)
+const camPosU = uniform(new THREE.Vector3()); // camera position, set per frame (lens + Doppler)
+const lensU = uniform(0);           // point-lens strength (scales Einstein angle²); 0 = off
+const rsU = uniform(15);            // Schwarzschild radius, sim units (shadow ≈ 2.6·rs)
+const dopplerU = uniform(0);        // Doppler-beaming strength (approaching side brighter)
 
 // ── DOF uniforms ──
 // Radial DOF: blur = distance from screen center, so sun (OrbitControls target = origin)
@@ -178,11 +188,15 @@ const coresU = uniformArray(coreVecs);
 const coreSoft2U = uniform(64);
 const dtU = uniform(0.01);
 const burstKU = uniform(0);
+const dragU = uniform(0);                // drag·dt, applied to velocity each step
+const accrR2U = uniform(0);              // accretion radius²; 0 disables the respawn branch
+const accrRimU = uniform(245);           // respawn rim radius (just inside BH_ROUT)
 
 // ── runtime ──
 let renderer, scene, camera, controls;
 let mesh, geoCPU, meshDustCPU, geoDustCPU;          // CPU-path render objects
 let meshGPU, geoGPU, meshDustGPU, geoDustGPU;       // GPU-path render objects (lazy)
+let meshLensCPU = null, meshLensGPU = null;         // secondary lensed image (θ₋ branch)
 let postProcessing, scenePass;
 let afterImageNode = null, bloomNode = null, rttNode = null, dofNode = null;
 let instPos, instVel, instDens; // InstancedBufferAttributes streamed each frame (CPU path)
@@ -300,9 +314,22 @@ function step() {
 			const cf = G * co.mass * inv * inv * inv;
 			ax += cf * dcx; ay += cf * dcy; az += cf * dcz;
 		}
-		// symplectic Euler: kick then drift
+		// symplectic Euler: kick then drift (+ optional gas drag)
 		vx[i] += ax * dt; vy[i] += ay * dt; vz[i] += az * dt;
+		if (drag > 0) { const f = 1 - drag * dt; vx[i] *= f; vy[i] *= f; vz[i] *= f; }
 		px[i] += vx[i] * dt; py[i] += vy[i] * dt; pz[i] += vz[i] * dt;
+		if (accrR > 0) {
+			// accretion: fell inside r_acc → respawn on the rim in a circular orbit
+			const c0 = cores[0];
+			const adx = px[i] - c0.x, ady = py[i] - c0.y, adz = pz[i] - c0.z;
+			if (adx * adx + ady * ady + adz * adz < accrR * accrR) {
+				const ang = Math.random() * Math.PI * 2;
+				const rr = 245 * (0.92 + Math.random() * 0.15);
+				const vcr = Math.sqrt(G * c0.mass / (rr + coreSoft));
+				px[i] = c0.x + Math.cos(ang) * rr; py[i] = c0.y + Math.sin(ang) * rr; pz[i] = c0.z + gauss() * 2;
+				vx[i] = -Math.sin(ang) * vcr; vy[i] = Math.cos(ang) * vcr; vz[i] = 0;
+			}
+		}
 	}
 }
 
@@ -426,6 +453,54 @@ function initGalaxyCollision() {
 	seedSpiralGalaxy(d1 + d2 + (n1 - d1), count, cores[1], coreMass * f2, spin2, tilt2, 1.0, 1);
 }
 
+function initBlackhole() {
+	// thin Keplerian annulus around the heavy core, log-uniform in r (inner disk denser)
+	const logR = Math.log(BH_ROUT / BH_RIN);
+	const Geff = Math.max(G, 1);
+	for (let i = 0; i < count; i++) {
+		const r = BH_RIN * Math.exp(Math.random() * logR);
+		const ang = Math.random() * Math.PI * 2;
+		const zMul = i < dustN ? 0.35 : 1.0;
+		px[i] = Math.cos(ang) * r;
+		py[i] = Math.sin(ang) * r;
+		pz[i] = gauss() * 2.5 * zMul;
+		const vc = Math.sqrt(Geff * coreMass / (r + coreSoft)) * (spin || 1);
+		vx[i] = -Math.sin(ang) * vc + gauss() * Math.abs(vc) * 0.01;
+		vy[i] = Math.cos(ang) * vc + gauss() * Math.abs(vc) * 0.01;
+		vz[i] = gauss() * Math.abs(vc) * 0.005;
+	}
+}
+
+// entering/leaving the blackhole preset flips several knobs; snapshot + restore
+function setSliderValue(id, v) {
+	const sl = document.getElementById(id);
+	sl.value = String(v);
+	sl.dispatchEvent(new Event('input'));
+}
+
+function setColorMode(m) {
+	colorMode = m;
+	colorModeU.value = m;
+	document.getElementById('colorButton').textContent = COLOR_LABELS[m];
+}
+
+function enterBH() {
+	if (!preBH) preBH = { coreMass, colorMode, lensStrength };
+	setSliderValue('coreSlider', 50000);
+	setSliderValue('lensSlider', 1.2);
+	setColorMode(1);
+	drag = 0.004; accrR = 30; dopplerU.value = 0.5;
+}
+
+function leaveBH() {
+	if (!preBH) return;
+	setSliderValue('coreSlider', preBH.coreMass);
+	setSliderValue('lensSlider', preBH.lensStrength);
+	setColorMode(preBH.colorMode);
+	drag = 0; accrR = 0; dopplerU.value = 0;
+	preBH = null;
+}
+
 // ── cinematic camera ──
 // per-preset framings the camera eases toward on preset switch
 const FRAMINGS = {
@@ -433,7 +508,8 @@ const FRAMINGS = {
 	spiral: [0, 150, 720],
 	ring: [120, 420, 620],
 	collapse: [350, 260, 650],
-	galaxy: [0, 520, 880]
+	galaxy: [0, 520, 880],
+	blackhole: [0, -540, 80]
 };
 let camTween = null;          // { from, to, t0, dur }
 let lastInteract = -Infinity; // pointer-interaction timestamp gates auto-rotate
@@ -452,6 +528,7 @@ function startCamTween(framing) {
 
 function applyPreset(name) {
 	currentPreset = name;
+	if (name === 'blackhole') enterBH(); else leaveBH();
 	reset();
 	if (FRAMINGS[name]) startCamTween(FRAMINGS[name]);
 }
@@ -460,7 +537,8 @@ function reset() {
 	dustN = Math.round(count * dustFrac);
 	setCores([{ x: 0, y: 0, z: 0, frac: 1 }]); // single core at origin; presets may override
 	gal.fill(0, 0, count);
-	if (currentPreset === 'ring') initRing();
+	if (currentPreset === 'blackhole') initBlackhole();
+	else if (currentPreset === 'ring') initRing();
 	else if (currentPreset === 'collapse') initCollapse();
 	else if (currentPreset === 'galaxy') initGalaxyCollision();
 	else if (currentPreset === 'spiral') initSpiral();
@@ -703,18 +781,46 @@ function makeQuadGeometry() {
 	return geo;
 }
 
-function makeSplatMaterial(posNode, velNode, densNode, varNode, isDust) {
+function makeSplatMaterial(posNode, velNode, densNode, varNode, isDust, imageSign = 1) {
 	// velocity projected onto the billboard plane → long-exposure stretch direction
 	const velPlane = vec2(velNode.dot(camRightU), velNode.dot(camUpU));
 	const speedPlane = velPlane.length();
 	const stretchAmt = speedPlane.mul(streakU).min(4.0);
 
+	// Point-lens (BH at corePosU) image of the splat. Small-angle lens equation:
+	// β = source angle off the camera→BH axis, θ± = (β ± √(β² + 4·θE²))/2 the two
+	// image angles; θE² ∝ rs·d_ls/(d_l·d_s) vanishes for particles in front of the
+	// BH plane (d_ls ≤ 0), so the displacement fades in smoothly with depth.
+	// imageSign +1 = primary image (pushed outward), −1 = secondary (flipped, inside
+	// the Einstein ring). vis collapses splats whose image lands in the shadow.
+	const lensCalc = () => {
+		const toBH = corePosU.sub(camPosU);
+		const dL = toBH.length().max(1.0);
+		const Ldir = toBH.div(dL);
+		const w = posNode.sub(camPosU);
+		const dS = w.dot(Ldir).max(1.0);
+		const perp = w.sub(Ldir.mul(dS));
+		const beta = perp.length().div(dS).max(1e-5);
+		const dLS = dS.sub(dL);
+		const thetaE2 = rsU.mul(2.0).mul(dLS.max(0.0)).div(dL.mul(dS)).mul(lensU);
+		const disc = beta.mul(beta).add(thetaE2.mul(4.0)).sqrt();
+		const theta = imageSign > 0 ? beta.add(disc).mul(0.5) : beta.sub(disc).mul(0.5);
+		const ratio = theta.div(beta);
+		const apparent = camPosU.add(Ldir.mul(dS)).add(perp.mul(ratio));
+		const active = lensU.greaterThan(0.001);
+		const vis = active.and(dLS.greaterThan(0.0))
+			.and(theta.abs().mul(dL).lessThan(rsU.mul(2.6)))
+			.select(float(0.0), float(1.0));
+		return { apparent, ratio, dLS, vis };
+	};
+
 	const material = new THREE.MeshBasicNodeMaterial();
 	material.positionNode = Fn(() => {
-		const xy = positionLocal.xy.mul(sizeU.mul(varNode.x).mul(isDust ? 2.6 : 1.0));
+		const lens = lensCalc();
+		const xy = positionLocal.xy.mul(sizeU.mul(varNode.x).mul(isDust ? 2.6 : 1.0)).mul(lens.vis);
 		const dir = velPlane.div(speedPlane.max(0.0001));
 		const stretched = xy.add(dir.mul(xy.dot(dir)).mul(stretchAmt));
-		return posNode
+		return lens.apparent
 			.add(camRightU.mul(stretched.x))
 			.add(camUpU.mul(stretched.y));
 	})();
@@ -748,14 +854,23 @@ function makeSplatMaterial(posNode, velNode, densNode, varNode, isDust) {
 				colorModeU.lessThan(1.5).select(rampRadius, rampGalaxy));
 			// local density → brightness: clumps and the core glow hot, halo stays faint
 			const b = densNode.mul(densNormU).saturate().pow(0.5);
-			return ramp.mul(b.mul(1.3).add(0.45));
+			// Doppler beaming: the approaching side of the disk brightens
+			const toCam = camPosU.sub(posNode);
+			const vHat = velNode.div(velNode.length().max(0.001));
+			const dopp = float(1.0).add(vHat.dot(toCam.div(toCam.length().max(0.001))).mul(dopplerU)).max(0.05).pow(3.0);
+			// lens magnification ≈ θ/β (primary brightens near the ring, secondary dims)
+			const mag = imageSign > 0 ? lensCalc().ratio.clamp(1.0, 3.0) : lensCalc().ratio.abs().clamp(0.2, 1.5);
+			return ramp.mul(b.mul(1.3).add(0.45)).mul(dopp).mul(mag);
 		})();
 		material.opacityNode = Fn(() => {
 			// gaussian point-spread falloff over the quad, zeroed at the edge
 			const d = uv().mul(2.0).sub(1.0);
 			const alpha = d.dot(d).mul(-4.5).exp().sub(0.011).max(0.0);
 			// dim long streaks: same light spread over more pixels
-			return alpha.div(stretchAmt.mul(0.5).add(1.0));
+			const base = alpha.div(stretchAmt.mul(0.5).add(1.0));
+			// secondary image: only exists for sources behind the lens, and dimmer
+			if (imageSign < 0) return base.mul(smoothstep(float(0.0), float(30.0), lensCalc().dLS)).mul(0.6);
+			return base;
 		})();
 		material.blending = THREE.AdditiveBlending;
 	}
@@ -782,6 +897,12 @@ function syncGalaxyIds() {
 		for (let i = 0; i < n; i++) a[3 * i + 2] = gal[i];
 		at.needsUpdate = true;
 	}
+}
+
+function updateLensVis() {
+	lensU.value = lensStrength;
+	if (meshLensCPU) meshLensCPU.visible = lensStrength > 0 && !gpuMode;
+	if (meshLensGPU) meshLensGPU.visible = lensStrength > 0 && gpuMode;
 }
 
 function updateDustCount() {
@@ -835,11 +956,25 @@ function ensureGPU() {
 				const r2c = dc.dot(dc).add(coreSoft2U);
 				acc.addAssign(dc.mul(cw.w.mul(r2c.mul(r2c.sqrt()).reciprocal())));
 			});
-			// symplectic Euler: kick then drift
+			// symplectic Euler: kick then drift (+ optional gas drag)
 			const v = velBuf.element(instanceIndex).toVar();
 			v.addAssign(acc.mul(dtU));
+			v.mulAssign(float(1.0).sub(dragU));
+			const np = pi.add(v.mul(dtU)).toVar();
+			// accretion: fell inside r_acc → respawn on the rim in a circular orbit
+			const c0 = coresU.element(uint(0));
+			const dc0 = np.sub(c0.xyz);
+			If(dc0.dot(dc0).lessThan(accrR2U), () => {
+				const seed = instanceIndex.add(offsetU).toFloat();
+				const ang = hash(seed).mul(6.2831853);
+				const rr = accrRimU.mul(hash(seed.add(77777.0)).mul(0.15).add(0.92));
+				const ca = ang.cos(), sa = ang.sin();
+				np.assign(c0.xyz.add(vec3(ca.mul(rr), sa.mul(rr), 0.0)));
+				const vcr = c0.w.div(rr).sqrt(); // c0.w = G·mass → √(G·m/r)
+				v.assign(vec3(sa.negate().mul(vcr), ca.mul(vcr), 0.0));
+			});
 			velBuf.element(instanceIndex).assign(v);
-			posBuf.element(instanceIndex).assign(pi.add(v.mul(dtU)));
+			posBuf.element(instanceIndex).assign(np);
 			densBuf.element(instanceIndex).assign(di.mul(massStrideU));
 		});
 	})().compute(GPU_MAX);
@@ -871,6 +1006,10 @@ function ensureGPU() {
 	meshDustGPU.renderOrder = 1;
 	meshDustGPU.visible = false;
 	scene.add(meshDustGPU);
+	meshLensGPU = new THREE.Mesh(geoGPU, makeSplatMaterial(posA, velA, densA, attribute('instVar', 'vec3'), false, -1));
+	meshLensGPU.frustumCulled = false;
+	meshLensGPU.visible = false;
+	scene.add(meshLensGPU);
 	gpuReady = true;
 }
 
@@ -935,6 +1074,7 @@ async function setComputeMode(gpu) {
 	mesh.visible = !gpuMode;
 	if (meshGPU) { meshGPU.visible = gpuMode; geoGPU.instanceCount = count; }
 	updateDustCount();
+	updateLensVis();
 	buildPost(); // fresh afterimage target: don't smear the switch discontinuity into the trails
 	document.getElementById('computeButton').textContent = gpuMode ? 'Compute: GPU n²' : 'Compute: CPU tree';
 }
@@ -986,6 +1126,14 @@ async function init() {
 	meshDustCPU.frustumCulled = false;
 	meshDustCPU.renderOrder = 1;
 	scene.add(meshDustCPU);
+
+	// secondary lensed image (θ₋ branch): same buffers, visible only when lensing is on
+	meshLensCPU = new THREE.Mesh(geoCPU, makeSplatMaterial(
+		attribute('instPos', 'vec3'), attribute('instVel', 'vec3'),
+		attribute('instDens', 'float'), attribute('instVar', 'vec3'), false, -1));
+	meshLensCPU.frustumCulled = false;
+	meshLensCPU.visible = false;
+	scene.add(meshLensCPU);
 
 	controls = new OrbitControls(camera, renderer.domElement);
 	controls.enableDamping = true;
@@ -1103,6 +1251,8 @@ async function animate() {
 			gMassU.value = G * massEach * strideU.value;
 			massStrideU.value = massEach * strideU.value;
 			offsetU.value = Math.floor(Math.random() * count);
+			dragU.value = drag * dt;
+			accrR2U.value = accrR * accrR;
 			await renderer.computeAsync(gpuStepKernel);
 		}
 	} else {
@@ -1142,6 +1292,7 @@ async function animate() {
 	camRightU.value.setFromMatrixColumn(camera.matrixWorld, 0);
 	camUpU.value.setFromMatrixColumn(camera.matrixWorld, 1);
 	if (cores.length) corePosU.value.set(cores[0].x, cores[0].y, cores[0].z);
+	camPosU.value.copy(camera.position);
 	await postProcessing.renderAsync();
 	if (sx || sy || sz) {
 		camera.position.x -= sx; camera.position.y -= sy; camera.position.z -= sz;
@@ -1227,13 +1378,9 @@ function wireUI() {
 		retroBtn.textContent = clashRetro ? 'Galaxy 2: Retrograde' : 'Galaxy 2: Prograde';
 		if (currentPreset === 'galaxy') reset();
 	});
-	const colorBtn = document.getElementById('colorButton');
-	const colorLabels = ['Color: Speed', 'Color: Radius', 'Color: Galaxy'];
-	colorBtn.addEventListener('click', () => {
-		colorMode = (colorMode + 1) % 3;
-		colorModeU.value = colorMode;
-		colorBtn.textContent = colorLabels[colorMode];
-	});
+	document.getElementById('colorButton').addEventListener('click', () => setColorMode((colorMode + 1) % 3));
+	bindNum('lensSlider', 'lensValue', v => { lensStrength = v; updateLensVis(); }, v => v === 0 ? 'Off' : v.toFixed(2));
+	document.getElementById('presetBH').addEventListener('click', () => applyPreset('blackhole'));
 	updateGColors(G);
 	document.getElementById('burstButton').addEventListener('click', burst);
 	const bloomBtn = document.getElementById('bloomButton');
