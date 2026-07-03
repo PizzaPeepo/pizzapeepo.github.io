@@ -66,6 +66,10 @@ let colorMode = 0;            // 0 = speed, 1 = radius (temperature), 2 = galaxy
 let lensStrength = 0;         // gravitational lens strength; 0 = off (blackhole preset sets it)
 let drag = 0;                 // gas drag per unit time (blackhole preset sets it)
 let accrR = 0;                // accretion radius; particles inside respawn on the rim (0 = off)
+let darkMatter = 0;           // isothermal-halo strength (0–1) → flat rotation curve
+let diskHeat = 1;             // seeding velocity-dispersion multiplier (Toomre-ish, on reset)
+let arms = 2;                 // spiral arm count (on reset)
+let pitchDeg = 20;            // spiral arm pitch angle, degrees (on reset)
 let preBH = null;             // knob snapshot to restore when leaving the blackhole preset
 const BH_RIN = 45, BH_ROUT = 250; // accretion-disk annulus, sim units
 const COLOR_LABELS = ['Color: Speed', 'Color: Radius', 'Color: Galaxy'];
@@ -191,6 +195,7 @@ const burstKU = uniform(0);
 const dragU = uniform(0);                // drag·dt, applied to velocity each step
 const accrR2U = uniform(0);              // accretion radius²; 0 disables the respawn branch
 const accrRimU = uniform(245);           // respawn rim radius (just inside BH_ROUT)
+const haloU = uniform(0);                // dark-matter halo v0² (flat circular speed²)
 
 // ── runtime ──
 let renderer, scene, camera, controls;
@@ -223,11 +228,12 @@ function placeDiskParticle(i, gx, gy, zThin, zBulge, sigmaBulge, zMul) {
 	pz[i] = gauss() * (zThin + zBulge * bulge) * zMul;
 	const rDir = r < 0.001 ? 0.001 : r;            // avoid div-by-zero at the center
 	const rVel = Math.max(r, DISK_R * 0.05);        // floor speed near the center
-	// circular orbital speed around the core, tangential (-y, x)/r, + small jitter
-	const vc = Math.sqrt(G * coreMass / (rVel + coreSoft)) * spin;
-	vx[i] = (-gy / rDir) * vc + gauss() * vc * 0.03;
-	vy[i] = (gx / rDir) * vc + gauss() * vc * 0.03;
-	vz[i] = gauss() * vc * 0.02; // small vertical dispersion
+	// circular orbital speed around the core (+ halo term), tangential, jitter·diskHeat
+	const haloV2 = darkMatter * Math.max(G, 0) * coreMass / DISK_R;
+	const vc = Math.sqrt(Math.max(G * coreMass / (rVel + coreSoft) + haloV2 * rVel / (rVel + 30), 0)) * spin;
+	vx[i] = (-gy / rDir) * vc + gauss() * vc * 0.03 * diskHeat;
+	vy[i] = (gx / rDir) * vc + gauss() * vc * 0.03 * diskHeat;
+	vz[i] = gauss() * vc * 0.02 * diskHeat; // small vertical dispersion
 }
 
 function initDisk() {
@@ -248,7 +254,7 @@ function initSpiral() {
 	const zThin = DISK_R * 0.025;
 	const zBulge = DISK_R * 0.10;
 	const sigmaBulge = DISK_R * 0.3;
-	const tanPitch = Math.tan(20 * Math.PI / 180);
+	const tanPitch = Math.tan(pitchDeg * Math.PI / 180);
 	const r0 = DISK_R * 0.08;
 	for (let i = 0; i < count; i++) {
 		let gx = 0, gy = 0, tries = 0;
@@ -257,7 +263,7 @@ function initSpiral() {
 			const r = Math.sqrt(gx * gx + gy * gy);
 			if (r < DISK_R * 0.12) break; // central bulge: no arm structure
 			const ang = Math.atan2(gy, gx);
-			const w = Math.cos(2 * (ang - Math.log(r / r0) / tanPitch));
+			const w = Math.cos(arms * (ang - Math.log(r / r0) / tanPitch));
 			const p = 0.22 + 0.78 * Math.pow(0.5 + 0.5 * w, 2);
 			if (Math.random() < p) break;
 		}
@@ -284,6 +290,7 @@ function step() {
 
 	const coreSoft2 = coreSoft * coreSoft;
 	const theta2 = theta * theta;
+	const haloV2 = darkMatter * Math.max(G, 0) * coreMass / DISK_R;
 	const n = nNodes;
 	for (let i = 0; i < count; i++) {
 		const xi = px[i], yi = py[i], zi = pz[i];
@@ -313,6 +320,12 @@ function step() {
 			const inv = 1 / Math.sqrt(dcx * dcx + dcy * dcy + dcz * dcz + coreSoft2);
 			const cf = G * co.mass * inv * inv * inv;
 			ax += cf * dcx; ay += cf * dcy; az += cf * dcz;
+		}
+		if (haloV2 > 0) {
+			// isothermal dark-matter halo about the origin → flat rotation curve
+			const rh = Math.sqrt(xi * xi + yi * yi + zi * zi) + 1;
+			const ah = haloV2 / ((rh + 30) * rh);
+			ax -= ah * xi; ay -= ah * yi; az -= ah * zi;
 		}
 		// symplectic Euler: kick then drift (+ optional gas drag)
 		vx[i] += ax * dt; vy[i] += ay * dt; vz[i] += az * dt;
@@ -395,7 +408,7 @@ function seedSpiralGalaxy(iStart, iEnd, core, mCore, spinDir, tilt, zMul, galId)
 	const zThin = DISK_R * 0.02;
 	const zBulge = DISK_R * 0.08;
 	const sigmaBulge = DISK_R * 0.25;
-	const tanPitch = Math.tan(20 * Math.PI / 180);
+	const tanPitch = Math.tan(pitchDeg * Math.PI / 180);
 	const r0 = DISK_R * 0.08;
 	const Geff = Math.max(G, 1);
 	const ct = Math.cos(tilt), st = Math.sin(tilt);
@@ -406,7 +419,7 @@ function seedSpiralGalaxy(iStart, iEnd, core, mCore, spinDir, tilt, zMul, galId)
 			const r = Math.sqrt(gx * gx + gy * gy);
 			if (r < DISK_R * 0.10) break; // central bulge: no arm structure
 			const ang = Math.atan2(gy, gx);
-			const w = Math.cos(2 * (ang - Math.log(r / r0) / tanPitch));
+			const w = Math.cos(arms * (ang - Math.log(r / r0) / tanPitch));
 			const p = 0.22 + 0.78 * Math.pow(0.5 + 0.5 * w, 2);
 			if (Math.random() < p) break;
 		}
@@ -416,9 +429,9 @@ function seedSpiralGalaxy(iStart, iEnd, core, mCore, spinDir, tilt, zMul, galId)
 		const rDir = r < 0.001 ? 0.001 : r;
 		const rVel = Math.max(r, DISK_R * 0.05);
 		const vc = Math.sqrt(Geff * mCore / (rVel + coreSoft)) * spin * spinDir;
-		const lvx = (-gy / rDir) * vc + gauss() * Math.abs(vc) * 0.03;
-		const lvy = (gx / rDir) * vc + gauss() * Math.abs(vc) * 0.03;
-		const lvz = gauss() * Math.abs(vc) * 0.02;
+		const lvx = (-gy / rDir) * vc + gauss() * Math.abs(vc) * 0.03 * diskHeat;
+		const lvy = (gx / rDir) * vc + gauss() * Math.abs(vc) * 0.03 * diskHeat;
+		const lvz = gauss() * Math.abs(vc) * 0.02 * diskHeat;
 		// tilt about the x-axis, then shift into the galaxy's moving frame
 		px[i] = core.x + gx;
 		py[i] = core.y + gy * ct - lz * st;
@@ -485,19 +498,21 @@ function setColorMode(m) {
 }
 
 function enterBH() {
-	if (!preBH) preBH = { coreMass, colorMode, lensStrength };
+	if (!preBH) preBH = { coreMass, colorMode, lensStrength, drag };
 	setSliderValue('coreSlider', 50000);
 	setSliderValue('lensSlider', 1.2);
+	setSliderValue('dragSlider', 0.004);
 	setColorMode(1);
-	drag = 0.004; accrR = 30; dopplerU.value = 0.5;
+	accrR = 30; dopplerU.value = 0.5;
 }
 
 function leaveBH() {
 	if (!preBH) return;
 	setSliderValue('coreSlider', preBH.coreMass);
 	setSliderValue('lensSlider', preBH.lensStrength);
+	setSliderValue('dragSlider', preBH.drag);
 	setColorMode(preBH.colorMode);
-	drag = 0; accrR = 0; dopplerU.value = 0;
+	accrR = 0; dopplerU.value = 0;
 	preBH = null;
 }
 
@@ -956,6 +971,9 @@ function ensureGPU() {
 				const r2c = dc.dot(dc).add(coreSoft2U);
 				acc.addAssign(dc.mul(cw.w.mul(r2c.mul(r2c.sqrt()).reciprocal())));
 			});
+			// isothermal dark-matter halo about the origin → flat rotation curve
+			const rh = pi.length().add(1.0);
+			acc.subAssign(pi.mul(haloU.div(rh.add(30.0).mul(rh))));
 			// symplectic Euler: kick then drift (+ optional gas drag)
 			const v = velBuf.element(instanceIndex).toVar();
 			v.addAssign(acc.mul(dtU));
@@ -1253,6 +1271,7 @@ async function animate() {
 			offsetU.value = Math.floor(Math.random() * count);
 			dragU.value = drag * dt;
 			accrR2U.value = accrR * accrR;
+			haloU.value = darkMatter * Math.max(G, 0) * coreMass / DISK_R;
 			await renderer.computeAsync(gpuStepKernel);
 		}
 	} else {
@@ -1380,6 +1399,11 @@ function wireUI() {
 	});
 	document.getElementById('colorButton').addEventListener('click', () => setColorMode((colorMode + 1) % 3));
 	bindNum('lensSlider', 'lensValue', v => { lensStrength = v; updateLensVis(); }, v => v === 0 ? 'Off' : v.toFixed(2));
+	bindNum('dragSlider', 'dragValue', v => drag = v, v => v === 0 ? 'Off' : v.toFixed(4));
+	bindNum('dmSlider', 'dmValue', v => darkMatter = v, v => v === 0 ? 'Off' : v.toFixed(2));
+	bindNum('heatSlider', 'heatValue', v => diskHeat = v, v => v.toFixed(1));
+	bindNum('armsSlider', 'armsValue', v => arms = Math.round(v), v => String(Math.round(v)));
+	bindNum('pitchSlider', 'pitchValue', v => pitchDeg = v, v => v.toFixed(0));
 	document.getElementById('presetBH').addEventListener('click', () => applyPreset('blackhole'));
 	updateGColors(G);
 	document.getElementById('burstButton').addEventListener('click', burst);

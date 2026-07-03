@@ -144,6 +144,31 @@
     </div>
 
     <div class="hud-section">
+      <span class="ctrl-label">Gas drag: <span id="dragValue"></span></span>
+      <input type="range" min="0" max="0.02" step="0.0005" value="0" class="slider" id="dragSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Dark matter: <span id="dmValue"></span></span>
+      <input type="range" min="0" max="1" step="0.05" value="0" class="slider" id="dmSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Disk heat <small>(on reset)</small>: <span id="heatValue"></span></span>
+      <input type="range" min="0" max="3" step="0.1" value="1" class="slider" id="heatSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Spiral arms <small>(on reset)</small>: <span id="armsValue"></span></span>
+      <input type="range" min="1" max="4" step="1" value="2" class="slider" id="armsSlider">
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Arm pitch° <small>(on reset)</small>: <span id="pitchValue"></span></span>
+      <input type="range" min="5" max="35" step="1" value="20" class="slider" id="pitchSlider">
+    </div>
+
+    <div class="hud-section">
       <span class="ctrl-label">Barnes-Hut θ: <span id="thetaValue"></span></span>
       <input type="range" min="0.3" max="2.5" step="0.05" value="1.5" class="slider" id="thetaSlider">
       <span class="ctrl-label" style="font-size:0.72em;opacity:0.6;">Low = accurate/slow · High = fast/loose</span>
