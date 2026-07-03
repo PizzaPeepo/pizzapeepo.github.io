@@ -14,6 +14,19 @@ Suggestions for making the GPU galaxy demo visually exceptional, ordered by impa
 Items 1–15 above are done. This round: new physics knobs, new presets, and the
 black-hole lensing centerpiece.
 
+> **Status (2026-07-03)**: all round-2 items implemented (R2-1 … R2-7), verified
+> headless on both compute paths. Deviations from the spec:
+> - R2-2: impact parameter + inclinations hardcoded; HUD exposes clash mass ratio +
+>   retrograde toggle. Galaxy ID lives in `instVar.z` (attribute, not instanceIndex
+>   split) so dust slots can hold both galaxies.
+> - R2-3: no `coreMass` growth from accretion (respawn only — atomic counter +
+>   readback if the feedback loop is ever wanted); the optional background-star
+>   screen-space warp was skipped. TDE preset reuses the BH knob set.
+> - R2-4: bar-strength knob deferred, as planned. Dark-matter halo is centered on
+>   the origin (not per-galaxy), so it's meaningful for single-galaxy presets.
+> - Cores feel core↔core gravity only (no dynamical friction); the drag knob stands
+>   in for it when sinking mergers are wanted.
+
 ## R2-1. Movable cores (keystone enabler)
 
 The sim has one fixed core at the origin. `initGalaxyCollision` fakes two galaxies:

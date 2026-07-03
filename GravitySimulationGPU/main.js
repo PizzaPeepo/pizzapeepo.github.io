@@ -484,6 +484,89 @@ function initBlackhole() {
 	}
 }
 
+function initTDE() {
+	// compact "star" on a just-bound plunging orbit past the BH → tidal stream
+	const c0 = cores[0];
+	const R0 = 380, b = 55; // start distance, angular-momentum offset (sets periapsis)
+	const Geff = Math.max(G, 1);
+	const vp = Math.sqrt(2 * Geff * coreMass / R0) * 0.98;
+	const vt = Math.sqrt(2 * Geff * coreMass * b) / R0;
+	for (let i = 0; i < count; i++) {
+		px[i] = c0.x + R0 + gauss() * 9;
+		py[i] = c0.y + gauss() * 9;
+		pz[i] = c0.z + 20 + gauss() * 9;
+		vx[i] = -vp + gauss() * 0.5;
+		vy[i] = vt + gauss() * 0.5;
+		vz[i] = gauss() * 0.5;
+	}
+}
+
+function initGlobular() {
+	// self-gravitating cluster, no central core: near-virial gaussian ball
+	setCores([]);
+	const sig = DISK_R * 0.4;
+	const sv = 0.4 * Math.sqrt(Math.max(G, 1) * BASE_DISK_MASS / sig);
+	for (let i = 0; i < count; i++) {
+		px[i] = gauss() * sig; py[i] = gauss() * sig; pz[i] = gauss() * sig;
+		vx[i] = gauss() * sv; vy[i] = gauss() * sv; vz[i] = gauss() * sv;
+	}
+}
+
+function initWeb() {
+	// near-uniform cold box: gravity condenses filaments + halos (best at high counts)
+	setCores([]);
+	const half = DISK_R * 1.1;
+	for (let i = 0; i < count; i++) {
+		px[i] = (Math.random() * 2 - 1) * half;
+		py[i] = (Math.random() * 2 - 1) * half;
+		pz[i] = (Math.random() * 2 - 1) * half;
+		vx[i] = gauss() * 0.5; vy[i] = gauss() * 0.5; vz[i] = gauss() * 0.5;
+	}
+}
+
+function initSatellite() {
+	// big spiral + dwarf companion on a tilted orbit → tidal stream wraps around
+	const nD = Math.round(count * 0.12);
+	const R = DISK_R * 1.4;
+	const Geff = Math.max(G, 1);
+	const vt = Math.sqrt(Geff * coreMass * 0.92 / R) * 0.9;
+	setCores([
+		{ x: 0, y: 0, z: 0, frac: 0.92 },
+		{ x: R, y: 0, z: DISK_R * 0.45, vy: vt * 0.9, vz: -vt * 0.25, frac: 0.08 }
+	]);
+	seedSpiralGalaxy(0, dustN, cores[0], coreMass * 0.92, 1, 0, 0.35, 0);
+	seedSpiralGalaxy(dustN, count - nD, cores[0], coreMass * 0.92, 1, 0, 1.0, 0);
+	const c1 = cores[1], sig = DISK_R * 0.07;
+	const sv = 0.35 * Math.sqrt(Geff * coreMass * 0.08 / sig);
+	for (let i = count - nD; i < count; i++) {
+		px[i] = c1.x + gauss() * sig; py[i] = c1.y + gauss() * sig; pz[i] = c1.z + gauss() * sig;
+		vx[i] = c1.vx + gauss() * sv; vy[i] = c1.vy + gauss() * sv; vz[i] = c1.vz + gauss() * sv;
+		gal[i] = 1;
+	}
+}
+
+function initBinary() {
+	// equal-mass binary in mutual circular orbit + circumbinary annulus
+	const d = 120;
+	const Geff = Math.max(G, 1);
+	const vOrb = Math.sqrt(Geff * coreMass * 0.5 / (2 * d));
+	setCores([
+		{ x: -d / 2, y: 0, z: 0, vy: -vOrb, frac: 0.5 },
+		{ x: d / 2, y: 0, z: 0, vy: vOrb, frac: 0.5 }
+	]);
+	const rIn = 140, rOut = 320;
+	const logR = Math.log(rOut / rIn);
+	for (let i = 0; i < count; i++) {
+		const r = rIn * Math.exp(Math.random() * logR);
+		const ang = Math.random() * Math.PI * 2;
+		px[i] = Math.cos(ang) * r; py[i] = Math.sin(ang) * r;
+		pz[i] = gauss() * 3 * (i < dustN ? 0.35 : 1);
+		const vc = Math.sqrt(Geff * coreMass / (r + coreSoft));
+		vx[i] = -Math.sin(ang) * vc; vy[i] = Math.cos(ang) * vc;
+		vz[i] = gauss() * vc * 0.01;
+	}
+}
+
 // entering/leaving the blackhole preset flips several knobs; snapshot + restore
 function setSliderValue(id, v) {
 	const sl = document.getElementById(id);
@@ -524,7 +607,12 @@ const FRAMINGS = {
 	ring: [120, 420, 620],
 	collapse: [350, 260, 650],
 	galaxy: [0, 520, 880],
-	blackhole: [0, -540, 80]
+	blackhole: [0, -540, 80],
+	tde: [0, -300, 420],
+	globular: [260, 200, 620],
+	web: [300, 300, 900],
+	satellite: [0, 480, 800],
+	binary: [0, -500, 240]
 };
 let camTween = null;          // { from, to, t0, dur }
 let lastInteract = -Infinity; // pointer-interaction timestamp gates auto-rotate
@@ -543,7 +631,7 @@ function startCamTween(framing) {
 
 function applyPreset(name) {
 	currentPreset = name;
-	if (name === 'blackhole') enterBH(); else leaveBH();
+	if (name === 'blackhole' || name === 'tde') enterBH(); else leaveBH();
 	reset();
 	if (FRAMINGS[name]) startCamTween(FRAMINGS[name]);
 }
@@ -553,6 +641,11 @@ function reset() {
 	setCores([{ x: 0, y: 0, z: 0, frac: 1 }]); // single core at origin; presets may override
 	gal.fill(0, 0, count);
 	if (currentPreset === 'blackhole') initBlackhole();
+	else if (currentPreset === 'tde') initTDE();
+	else if (currentPreset === 'globular') initGlobular();
+	else if (currentPreset === 'web') initWeb();
+	else if (currentPreset === 'satellite') initSatellite();
+	else if (currentPreset === 'binary') initBinary();
 	else if (currentPreset === 'ring') initRing();
 	else if (currentPreset === 'collapse') initCollapse();
 	else if (currentPreset === 'galaxy') initGalaxyCollision();
@@ -1311,6 +1404,7 @@ async function animate() {
 	camRightU.value.setFromMatrixColumn(camera.matrixWorld, 0);
 	camUpU.value.setFromMatrixColumn(camera.matrixWorld, 1);
 	if (cores.length) corePosU.value.set(cores[0].x, cores[0].y, cores[0].z);
+	else corePosU.value.set(0, 0, 0);
 	camPosU.value.copy(camera.position);
 	await postProcessing.renderAsync();
 	if (sx || sy || sz) {
@@ -1405,6 +1499,11 @@ function wireUI() {
 	bindNum('armsSlider', 'armsValue', v => arms = Math.round(v), v => String(Math.round(v)));
 	bindNum('pitchSlider', 'pitchValue', v => pitchDeg = v, v => v.toFixed(0));
 	document.getElementById('presetBH').addEventListener('click', () => applyPreset('blackhole'));
+	document.getElementById('presetTDE').addEventListener('click', () => applyPreset('tde'));
+	document.getElementById('presetGlobular').addEventListener('click', () => applyPreset('globular'));
+	document.getElementById('presetWeb').addEventListener('click', () => applyPreset('web'));
+	document.getElementById('presetSatellite').addEventListener('click', () => applyPreset('satellite'));
+	document.getElementById('presetBinary').addEventListener('click', () => applyPreset('binary'));
 	updateGColors(G);
 	document.getElementById('burstButton').addEventListener('click', burst);
 	const bloomBtn = document.getElementById('bloomButton');
