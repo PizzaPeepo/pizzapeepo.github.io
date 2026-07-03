@@ -1363,7 +1363,7 @@ function buildPost() {
 }
 
 // ── ASCII mode: quantize the finished frame into colored terminal glyphs ──
-const ASCII_GLYPHS = ' .,:;i1tfLCG08@';
+const ASCII_GLYPHS = ' .:-=+*#%@';
 let asciiAtlasTex = null;
 
 function makeAsciiAtlas() {
@@ -1391,13 +1391,10 @@ function makeAsciiNode(srcNode) {
 		const c = srcNode.sample(cellId.add(0.5).div(cells));
 		const lum = luminance(c.rgb).saturate();
 		const n = float(ASCII_GLYPHS.length);
-		// pow > 1 spreads the bright end over more glyph steps (disk detail);
-		// static per-cell dither breaks banding across smooth gradients
-		const dith = hash(cellId.x.mul(127.1).add(cellId.y.mul(311.7))).sub(0.5).mul(0.9);
-		const gi = lum.pow(1.4).mul(n.sub(1.0)).add(dith).round().clamp(0.0, n.sub(1.0));
+		const gi = lum.pow(0.7).mul(n.sub(1.0)).round();
 		const local = screenUV.mul(cells).fract();
 		const mask = texture(asciiAtlasTex, vec2(gi.add(local.x).div(n), local.y)).r;
-		return vec4(c.rgb.mul(mask).mul(1.35), 1.0);
+		return vec4(c.rgb.mul(mask).mul(1.5), 1.0);
 	})();
 }
 
