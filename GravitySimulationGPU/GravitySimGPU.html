@@ -63,6 +63,7 @@
       <button id="burstButton">Burst</button>
       <button id="bloomButton">Bloom: Low</button>
       <button id="dofButton">DOF: On</button>
+      <button id="colorButton">Color: Speed</button>
       <button id="computeButton">Compute: GPU n²</button>
     </div>
 
@@ -75,6 +76,12 @@
         <button id="presetCollapse">Cold collapse</button>
         <button id="presetGalaxy">Galaxy clash</button>
       </div>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Clash ratio <small>(on reset)</small>: <span id="ratioValue"></span></span>
+      <input type="range" min="0.25" max="1" step="0.05" value="1" class="slider" id="ratioSlider">
+      <button id="retroButton">Galaxy 2: Prograde</button>
     </div>
 
     <div class="hud-section">

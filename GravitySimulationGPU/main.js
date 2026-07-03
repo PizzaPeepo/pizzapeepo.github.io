@@ -60,6 +60,9 @@ let gpuMode = false;          // false = CPU Barnes-Hut tree, true = GPU compute
 let dustFrac = 0.15;          // fraction of particles re-drawn as dark dust
 let dustN = 0;                // = round(count · dustFrac), kept by updateDustCount()
 let dofOn = true;             // depth-of-field post pass
+let clashRatio = 1.0;         // galaxy-2 : galaxy-1 mass ratio (clash preset, on reset)
+let clashRetro = false;       // galaxy 2 spins retrograde (clash preset, on reset)
+let colorMode = 0;            // 0 = speed, 1 = radius (temperature), 2 = galaxy ID
 
 // ── movable cores (≤4 massive bodies; core physics on the CPU always — N is tiny) ──
 // Each: {x,y,z, vx,vy,vz, frac, mass}; mass = coreMass·frac, kept in sync by the slider.
@@ -99,6 +102,7 @@ function stepCores() {
 let px = new Float32Array(MAX), py = new Float32Array(MAX), pz = new Float32Array(MAX);
 let vx = new Float32Array(MAX), vy = new Float32Array(MAX), vz = new Float32Array(MAX);
 let dens = new Float32Array(MAX); // Σ m/r² accumulated during the force walk
+let gal = new Float32Array(MAX);  // per-particle galaxy ID (0/1), synced into instVar.z on reset
 let cap = MAX;
 
 function ensureCapacity(n) {
@@ -106,7 +110,7 @@ function ensureCapacity(n) {
 	const grow = a => { const b = new Float32Array(n); b.set(a); return b; };
 	px = grow(px); py = grow(py); pz = grow(pz);
 	vx = grow(vx); vy = grow(vy); vz = grow(vz);
-	dens = grow(dens);
+	dens = grow(dens); gal = grow(gal);
 	cap = n;
 }
 
@@ -148,6 +152,8 @@ const camRightU = uniform(new THREE.Vector3(1, 0, 0)); // camera basis, set per 
 const camUpU = uniform(new THREE.Vector3(0, 1, 0));
 const streakU = uniform(0.02);      // velocity-stretch factor (long-exposure streaks)
 const densNormU = uniform(1.0);     // adaptive density → brightness normalization
+const colorModeU = uniform(0);      // 0 = speed ramp, 1 = radius/temperature, 2 = galaxy ID
+const corePosU = uniform(new THREE.Vector3()); // primary core, set per frame (radius ramp origin)
 
 // ── DOF uniforms ──
 // Radial DOF: blur = distance from screen center, so sun (OrbitControls target = origin)
@@ -180,6 +186,7 @@ let meshGPU, geoGPU, meshDustGPU, geoDustGPU;       // GPU-path render objects (
 let postProcessing, scenePass;
 let afterImageNode = null, bloomNode = null, rttNode = null, dofNode = null;
 let instPos, instVel, instDens; // InstancedBufferAttributes streamed each frame (CPU path)
+let instVarCPU = null, instVarGPU = null; // static per-particle variation (z = galaxy ID)
 let gpuReady = false;
 let gpuSuspend = false;         // halts the kernel while readback snapshots pos+vel
 let posBuf, velBuf, densBuf;    // instancedArray storage buffers (GPU path)
@@ -355,40 +362,68 @@ function initCollapse() {
 	}
 }
 
-function initGalaxyCollision() {
-	const half = Math.floor(count / 2);
-	const sigmaXY = DISK_R * 0.35;
+// one tilted spiral galaxy in the frame of a moving core; indices [iStart, iEnd)
+function seedSpiralGalaxy(iStart, iEnd, core, mCore, spinDir, tilt, zMul, galId) {
+	const sigmaXY = DISK_R * 0.35 * Math.sqrt(mCore / (coreMass * 0.5 + 1) + 0.05);
 	const zThin = DISK_R * 0.02;
 	const zBulge = DISK_R * 0.08;
 	const sigmaBulge = DISK_R * 0.25;
-	const offsetX = DISK_R * 1.5;
+	const tanPitch = Math.tan(20 * Math.PI / 180);
+	const r0 = DISK_R * 0.08;
 	const Geff = Math.max(G, 1);
-	const mCore = coreMass * 0.5; // per-galaxy core mass
-	const approachSpeed = Math.sqrt(Geff * mCore / (offsetX * 2 + coreSoft)) * 0.6;
-	setCores([
-		{ x: -offsetX, y: 0, z: 0, vx: approachSpeed, frac: 0.5 },
-		{ x: offsetX, y: 0, z: 0, vx: -approachSpeed, frac: 0.5 }
-	]);
-	for (let pass = 0; pass < 2; pass++) {
-		const start = pass === 0 ? 0 : half;
-		const end = pass === 0 ? half : count;
-		const ox = pass === 0 ? -offsetX : offsetX;
-		const spinDir = pass === 0 ? 1.0 : -1.0;
-		const bulkVx = pass === 0 ? approachSpeed : -approachSpeed;
-		for (let i = start; i < end; i++) {
-			const gx = gauss() * sigmaXY, gy = gauss() * sigmaXY;
+	const ct = Math.cos(tilt), st = Math.sin(tilt);
+	for (let i = iStart; i < iEnd; i++) {
+		let gx = 0, gy = 0, tries = 0;
+		for (; tries < 40; tries++) {
+			gx = gauss() * sigmaXY; gy = gauss() * sigmaXY;
 			const r = Math.sqrt(gx * gx + gy * gy);
-			px[i] = ox + gx; py[i] = gy;
-			const bulge = Math.exp(-r * r / (2 * sigmaBulge * sigmaBulge));
-			pz[i] = gauss() * (zThin + zBulge * bulge);
-			const rDir = r < 0.001 ? 0.001 : r;
-			const rVel = Math.max(r, DISK_R * 0.05);
-			const vc = Math.sqrt(Geff * mCore / (rVel + coreSoft)) * spin * spinDir;
-			vx[i] = bulkVx + (-gy / rDir) * vc;
-			vy[i] = (gx / rDir) * vc;
-			vz[i] = gauss() * Math.abs(vc) * 0.02;
+			if (r < DISK_R * 0.10) break; // central bulge: no arm structure
+			const ang = Math.atan2(gy, gx);
+			const w = Math.cos(2 * (ang - Math.log(r / r0) / tanPitch));
+			const p = 0.22 + 0.78 * Math.pow(0.5 + 0.5 * w, 2);
+			if (Math.random() < p) break;
 		}
+		const r = Math.sqrt(gx * gx + gy * gy);
+		const bulge = Math.exp(-r * r / (2 * sigmaBulge * sigmaBulge));
+		const lz = gauss() * (zThin + zBulge * bulge) * zMul;
+		const rDir = r < 0.001 ? 0.001 : r;
+		const rVel = Math.max(r, DISK_R * 0.05);
+		const vc = Math.sqrt(Geff * mCore / (rVel + coreSoft)) * spin * spinDir;
+		const lvx = (-gy / rDir) * vc + gauss() * Math.abs(vc) * 0.03;
+		const lvy = (gx / rDir) * vc + gauss() * Math.abs(vc) * 0.03;
+		const lvz = gauss() * Math.abs(vc) * 0.02;
+		// tilt about the x-axis, then shift into the galaxy's moving frame
+		px[i] = core.x + gx;
+		py[i] = core.y + gy * ct - lz * st;
+		pz[i] = core.z + gy * st + lz * ct;
+		vx[i] = core.vx + lvx;
+		vy[i] = core.vy + lvy * ct - lvz * st;
+		vz[i] = core.vz + lvy * st + lvz * ct;
+		gal[i] = galId;
 	}
+}
+
+function initGalaxyCollision() {
+	// two spiral galaxies on a grazing encounter; particle counts and core masses
+	// split by clashRatio (galaxy 2 : galaxy 1); galaxy 2 optionally retrograde
+	const q = clashRatio;
+	const f1 = 1 / (1 + q), f2 = q / (1 + q);
+	const n2 = Math.round(count * f2), n1 = count - n2;
+	const d1 = Math.min(Math.round(dustN * f1), n1), d2 = dustN - d1;
+	const ox = DISK_R * 1.5, oy = DISK_R * 0.45; // approach offset + impact parameter
+	const Geff = Math.max(G, 1);
+	const approach = Math.sqrt(Geff * coreMass * 0.5 / (ox * 2 + coreSoft)) * 0.6;
+	setCores([
+		{ x: -ox, y: -oy * 0.5, z: 0, vx: approach, frac: f1 },
+		{ x: ox, y: oy * 0.5, z: 0, vx: -approach, frac: f2 }
+	]);
+	const spin2 = clashRetro ? -1 : 1;
+	const tilt1 = 0.25, tilt2 = -0.45;
+	// dust slots first (both galaxies), then bodies — the dust pass draws instances [0, dustN)
+	seedSpiralGalaxy(0, d1, cores[0], coreMass * f1, 1, tilt1, 0.35, 0);
+	seedSpiralGalaxy(d1, d1 + d2, cores[1], coreMass * f2, spin2, tilt2, 0.35, 1);
+	seedSpiralGalaxy(d1 + d2, d1 + d2 + (n1 - d1), cores[0], coreMass * f1, 1, tilt1, 1.0, 0);
+	seedSpiralGalaxy(d1 + d2 + (n1 - d1), count, cores[1], coreMass * f2, spin2, tilt2, 1.0, 1);
 }
 
 // ── cinematic camera ──
@@ -424,11 +459,13 @@ function applyPreset(name) {
 function reset() {
 	dustN = Math.round(count * dustFrac);
 	setCores([{ x: 0, y: 0, z: 0, frac: 1 }]); // single core at origin; presets may override
+	gal.fill(0, 0, count);
 	if (currentPreset === 'ring') initRing();
 	else if (currentPreset === 'collapse') initCollapse();
 	else if (currentPreset === 'galaxy') initGalaxyCollision();
 	else if (currentPreset === 'spiral') initSpiral();
 	else initDisk();
+	syncGalaxyIds();
 	dens.fill(0, 0, count);
 	if (gpuMode && gpuReady) syncToGPU();
 }
@@ -699,7 +736,16 @@ function makeSplatMaterial(posNode, velNode, densNode, varNode, isDust) {
 			const t2 = s.sub(0.5).mul(2.0).saturate();
 			const attract = mix(mix(color(0x2a4cc0), color(0x3fe0d0), t1), color(0xffe7a0), t2);
 			const repulse = mix(color(0x6a2cff), color(0xff3ce0), s);
-			const ramp = mix(repulse, attract, gSignU);
+			const rampSpeed = mix(repulse, attract, gSignU);
+			// radius mode: blackbody-ish — hot white-blue at the primary core → deep red rim
+			const rT = posNode.sub(corePosU).length().div(DISK_R * 0.9).saturate();
+			const rampRadius = mix(mix(color(0xe8f1ff), color(0xffc06a), rT.mul(2.0).saturate()),
+				color(0x8a2408), rT.sub(0.5).mul(2.0).saturate()).mul(float(1.6).sub(rT));
+			// galaxy mode: second population gets a violet-pink ramp, keyed by instVar.z
+			const rampB = mix(mix(color(0x7a2cff), color(0xff5ad0), t1), color(0xffd9f0), t2);
+			const rampGalaxy = mix(rampSpeed, rampB, varNode.z);
+			const ramp = colorModeU.lessThan(0.5).select(rampSpeed,
+				colorModeU.lessThan(1.5).select(rampRadius, rampGalaxy));
 			// local density → brightness: clumps and the core glow hot, halo stays faint
 			const b = densNode.mul(densNormU).saturate().pow(0.5);
 			return ramp.mul(b.mul(1.3).add(0.45));
@@ -719,13 +765,23 @@ function makeSplatMaterial(posNode, velNode, densNode, varNode, isDust) {
 }
 
 function makeVarAttribute(n) {
-	// static per-particle variation: x = log-normal size scale, y = hue jitter
-	const varArr = new Float32Array(n * 2);
+	// static per-particle variation: x = log-normal size scale, y = hue jitter,
+	// z = galaxy ID (rewritten by syncGalaxyIds on every reset)
+	const varArr = new Float32Array(n * 3);
 	for (let i = 0; i < n; i++) {
-		varArr[2 * i] = Math.min(Math.max(Math.exp(gauss() * 0.5), 0.4), 4.0);
-		varArr[2 * i + 1] = (Math.random() - 0.5) * 0.1;
+		varArr[3 * i] = Math.min(Math.max(Math.exp(gauss() * 0.5), 0.4), 4.0);
+		varArr[3 * i + 1] = (Math.random() - 0.5) * 0.1;
 	}
-	return new THREE.InstancedBufferAttribute(varArr, 2);
+	return new THREE.InstancedBufferAttribute(varArr, 3);
+}
+
+function syncGalaxyIds() {
+	for (const at of [instVarCPU, instVarGPU]) {
+		if (!at) continue;
+		const a = at.array, n = Math.min(count, a.length / 3);
+		for (let i = 0; i < n; i++) a[3 * i + 2] = gal[i];
+		at.needsUpdate = true;
+	}
 }
 
 function updateDustCount() {
@@ -800,17 +856,17 @@ function ensureGPU() {
 
 	// 1M-capacity render meshes reading the storage buffers directly — the render
 	// shader consumes the same memory the kernel writes, nothing crosses the bus
-	const instVarGPU = makeVarAttribute(GPU_MAX);
+	instVarGPU = makeVarAttribute(GPU_MAX);
 	const posA = posBuf.toAttribute(), velA = velBuf.toAttribute(), densA = densBuf.toAttribute();
 	geoGPU = makeQuadGeometry();
 	geoGPU.setAttribute('instVar', instVarGPU);
-	meshGPU = new THREE.Mesh(geoGPU, makeSplatMaterial(posA, velA, densA, attribute('instVar', 'vec2'), false));
+	meshGPU = new THREE.Mesh(geoGPU, makeSplatMaterial(posA, velA, densA, attribute('instVar', 'vec3'), false));
 	meshGPU.frustumCulled = false;
 	meshGPU.visible = false;
 	scene.add(meshGPU);
 	geoDustGPU = makeQuadGeometry();
 	geoDustGPU.setAttribute('instVar', instVarGPU);
-	meshDustGPU = new THREE.Mesh(geoDustGPU, makeSplatMaterial(posA, velA, densA, attribute('instVar', 'vec2'), true));
+	meshDustGPU = new THREE.Mesh(geoDustGPU, makeSplatMaterial(posA, velA, densA, attribute('instVar', 'vec3'), true));
 	meshDustGPU.frustumCulled = false;
 	meshDustGPU.renderOrder = 1;
 	meshDustGPU.visible = false;
@@ -905,15 +961,15 @@ async function init() {
 	instPos = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3).setUsage(THREE.DynamicDrawUsage);
 	instVel = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3).setUsage(THREE.DynamicDrawUsage);
 	instDens = new THREE.InstancedBufferAttribute(new Float32Array(MAX), 1).setUsage(THREE.DynamicDrawUsage);
-	const instVar = makeVarAttribute(MAX);
+	instVarCPU = makeVarAttribute(MAX);
 	geoCPU = makeQuadGeometry();
 	geoCPU.setAttribute('instPos', instPos);
 	geoCPU.setAttribute('instVel', instVel);
 	geoCPU.setAttribute('instDens', instDens);
-	geoCPU.setAttribute('instVar', instVar);
+	geoCPU.setAttribute('instVar', instVarCPU);
 	mesh = new THREE.Mesh(geoCPU, makeSplatMaterial(
 		attribute('instPos', 'vec3'), attribute('instVel', 'vec3'),
-		attribute('instDens', 'float'), attribute('instVar', 'vec2'), false));
+		attribute('instDens', 'float'), attribute('instVar', 'vec3'), false));
 	mesh.frustumCulled = false;
 	scene.add(mesh);
 
@@ -923,10 +979,10 @@ async function init() {
 	geoDustCPU.setAttribute('instPos', instPos);
 	geoDustCPU.setAttribute('instVel', instVel);
 	geoDustCPU.setAttribute('instDens', instDens);
-	geoDustCPU.setAttribute('instVar', instVar);
+	geoDustCPU.setAttribute('instVar', instVarCPU);
 	meshDustCPU = new THREE.Mesh(geoDustCPU, makeSplatMaterial(
 		attribute('instPos', 'vec3'), attribute('instVel', 'vec3'),
-		attribute('instDens', 'float'), attribute('instVar', 'vec2'), true));
+		attribute('instDens', 'float'), attribute('instVar', 'vec3'), true));
 	meshDustCPU.frustumCulled = false;
 	meshDustCPU.renderOrder = 1;
 	scene.add(meshDustCPU);
@@ -966,6 +1022,10 @@ async function init() {
 		sl.dispatchEvent(new Event('input'));
 	}
 	if (q.has('preset') && FRAMINGS[q.get('preset')]) applyPreset(q.get('preset'));
+	if (q.has('color')) {
+		const n = (+q.get('color') || 0) % 3;
+		for (let i = 0; i < n; i++) document.getElementById('colorButton').click();
+	}
 	if (q.has('dust')) {
 		const sl = document.getElementById('dustSlider');
 		sl.value = q.get('dust');
@@ -1081,6 +1141,7 @@ async function animate() {
 	camera.updateMatrixWorld();
 	camRightU.value.setFromMatrixColumn(camera.matrixWorld, 0);
 	camUpU.value.setFromMatrixColumn(camera.matrixWorld, 1);
+	if (cores.length) corePosU.value.set(cores[0].x, cores[0].y, cores[0].z);
 	await postProcessing.renderAsync();
 	if (sx || sy || sz) {
 		camera.position.x -= sx; camera.position.y -= sy; camera.position.z -= sz;
@@ -1159,6 +1220,20 @@ function wireUI() {
 	document.getElementById('presetRing').addEventListener('click', () => applyPreset('ring'));
 	document.getElementById('presetCollapse').addEventListener('click', () => applyPreset('collapse'));
 	document.getElementById('presetGalaxy').addEventListener('click', () => applyPreset('galaxy'));
+	bindNum('ratioSlider', 'ratioValue', v => clashRatio = v, v => v.toFixed(2));
+	const retroBtn = document.getElementById('retroButton');
+	retroBtn.addEventListener('click', () => {
+		clashRetro = !clashRetro;
+		retroBtn.textContent = clashRetro ? 'Galaxy 2: Retrograde' : 'Galaxy 2: Prograde';
+		if (currentPreset === 'galaxy') reset();
+	});
+	const colorBtn = document.getElementById('colorButton');
+	const colorLabels = ['Color: Speed', 'Color: Radius', 'Color: Galaxy'];
+	colorBtn.addEventListener('click', () => {
+		colorMode = (colorMode + 1) % 3;
+		colorModeU.value = colorMode;
+		colorBtn.textContent = colorLabels[colorMode];
+	});
 	updateGColors(G);
 	document.getElementById('burstButton').addEventListener('click', burst);
 	const bloomBtn = document.getElementById('bloomButton');
