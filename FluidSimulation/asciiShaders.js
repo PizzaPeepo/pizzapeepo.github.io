@@ -6,8 +6,6 @@
 //                    (base = luminance ramp). Phosphor mono palette
 //                    folds in as a plain uniform (combine with any glyph mode).
 //   glyphDye       — stamp one glyph's mask into the dye field (type-to-inject text).
-//   particleUpdate — advect a position texture by the velocity field (char particles).
-//   particleVertex / particleRender — draw those particles as glyph point-sprites.
 
 // ── Stage A: fluid → coloured glyph bitmap ──
 export const asciiArt = `
@@ -135,73 +133,5 @@ void main () {
 	float m = texture2D(uGlyphs, vec2((uIndex + local.x) / uGlyphCount, local.y)).r * inside;
 	float free = 1.0 - step(0.5, texture2D(uObstacle, vUv).x);
 	gl_FragColor = vec4(base + uColor * m * free, 1.0);
-}
-`;
-
-// Advect a particle position texture (xy = pos in [0,1], z = life, w = glyph seed) by the
-// velocity field; wrap at edges, respawn at random when life runs out. Cleared-to-0 init
-// → every particle is "dead" on frame 1 and respawns, so no data upload is needed.
-export const particleUpdate = `
-precision highp float;
-precision highp sampler2D;
-varying vec2 vUv;
-uniform sampler2D uPos;
-uniform sampler2D uVelocity;
-uniform vec2 uTexel;   // velocity texel size (uv displacement per unit velocity·dt)
-uniform float uDt;
-uniform float uSpeed;
-uniform float uTime;
-float h (vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-void main () {
-	vec4 p = texture2D(uPos, vUv);
-	vec2 vel = texture2D(uVelocity, p.xy).xy;
-	p.xy = fract(p.xy + vel * uDt * uTexel * uSpeed);
-	p.z -= uDt * (0.25 + 0.5 * h(vUv + 1.7));
-	if (p.z <= 0.0) {
-		p.x = h(vUv + uTime);
-		p.y = h(vUv + uTime + 3.3);
-		p.z = 0.6 + 0.9 * h(vUv + uTime + 7.7);
-		p.w = h(vUv + uTime + 11.1);
-	}
-	gl_FragColor = p;
-}
-`;
-
-export const particleVertex = `
-precision highp float;
-attribute float aIndex;
-uniform sampler2D uPos;
-uniform vec2 uDim;        // particle texture dims
-uniform float uPointSize;
-varying float vSeed;
-varying vec2 vPos;
-void main () {
-	float x = mod(aIndex, uDim.x);
-	float y = floor(aIndex / uDim.x);
-	vec4 p = texture2D(uPos, (vec2(x, y) + 0.5) / uDim);
-	vPos = p.xy;
-	vSeed = p.w;
-	gl_Position = vec4(p.xy * 2.0 - 1.0, 0.0, 1.0);
-	gl_PointSize = uPointSize;
-}
-`;
-
-export const particleRender = `
-precision highp float;
-precision highp sampler2D;
-varying float vSeed;
-varying vec2 vPos;
-uniform sampler2D uGlyphs;   // text atlas
-uniform float uGlyphCount;
-uniform sampler2D uDye;
-void main () {
-	vec2 pc = gl_PointCoord;
-	float idx = floor(vSeed * uGlyphCount);
-	float m = texture2D(uGlyphs, vec2((idx + pc.x) / uGlyphCount, 1.0 - pc.y)).r;
-	if (m < 0.5) discard;
-	vec3 col = texture2D(uDye, vPos).rgb;
-	float b = max(col.r, max(col.g, col.b));
-	vec3 hue = col / max(b, 0.001);
-	gl_FragColor = vec4(hue * clamp(b * 4.0, 0.25, 1.6), 1.0);
 }
 `;

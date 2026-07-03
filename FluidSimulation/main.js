@@ -79,9 +79,6 @@ const sunraysProgram = new Program(gl, baseVS, fs(S.sunrays));
 const obstacleStampProgram = new Program(gl, baseVS, fs(S.obstacleStamp));
 const asciiMaterial = new Material(gl, baseVS, A.asciiArt);   // keyword variants: EDGE/BRAILLE
 const glyphDyeProgram = new Program(gl, baseVS, fs(A.glyphDye));
-const particleUpdateProgram = new Program(gl, baseVS, fs(A.particleUpdate));
-const particleVS = compileShader(gl, gl.VERTEX_SHADER, A.particleVertex);
-const particleRenderProgram = new Program(gl, particleVS, fs(A.particleRender));
 const asciiFadeProgram = new Program(gl, baseVS, fs(S.asciiFade));
 const asciiPresentProgram = new Program(gl, baseVS, fs(S.asciiPresent));
 const displayMaterial = new Material(gl, baseVS, S.display);
@@ -209,7 +206,7 @@ function buildBrailleAtlas() {
 }
 
 const DIR_RAMP = '-/|\\';   // orientation glyphs: 0°→'-', 45°→'/', 90°→'|', 135°→'\' (edge)
-const TEXT_RAMP = (() => { let s = ''; for (let i = 32; i <= 126; i++) s += String.fromCharCode(i); return s; })();   // printable ASCII (type-inject + particles)
+const TEXT_RAMP = (() => { let s = ''; for (let i = 32; i <= 126; i++) s += String.fromCharCode(i); return s; })();   // printable ASCII (type-inject)
 // Matrix-rain glyph set: digits 0-9 + half-width katakana (U+FF66..FF9D). Web437 has no
 // katakana, so this atlas is rendered with a CJK monospace face instead. Leading space → faint
 // cells stay blank; density maps the rest. Used by the Matrix scene (config.ASCII_GLYPH_SET).
@@ -261,27 +258,6 @@ function initAsciiTargets() {
 	asciiTrail = createDoubleFBO(gl, cols * ASCII_GP_X, rows * ASCII_GP_Y, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
 }
 
-// ── advected glyph particles (overlay riding the streamlines) ──
-const PCOLS = 80, PROWS = 80, PCOUNT = PCOLS * PROWS;
-let particlePos = null, particleVAO = null;
-function initParticles() {
-	if (particlePos) return;
-	// pos texture: xy = pos[0,1], z = life, w = glyph seed. Cleared to 0 → all respawn frame 1.
-	particlePos = createDoubleFBO(gl, PCOLS, PROWS, rgba.internalFormat, rgba.format, texType, gl.NEAREST);
-	const idx = new Float32Array(PCOUNT);
-	for (let i = 0; i < PCOUNT; i++) idx[i] = i;
-	const buf = gl.createBuffer();
-	gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-	gl.bufferData(gl.ARRAY_BUFFER, idx, gl.STATIC_DRAW);
-	particleVAO = gl.createVertexArray();   // isolates the point attrib; bindVertexArray(null) restores the quad-blit state
-	gl.bindVertexArray(particleVAO);
-	gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-	gl.vertexAttribPointer(0, 1, gl.FLOAT, false, 0, 0);
-	gl.enableVertexAttribArray(0);
-	gl.bindVertexArray(null);
-	gl.bindBuffer(gl.ARRAY_BUFFER, null);
-}
-
 function getResolution(resolution) {
 	let aspect = gl.drawingBufferWidth / gl.drawingBufferHeight;
 	if (aspect < 1) aspect = 1.0 / aspect;
@@ -311,7 +287,6 @@ function initFramebuffers() {
 
 	initSunraysFramebuffers();
 	initAsciiTargets();
-	initParticles();
 }
 
 function initSunraysFramebuffers() {
@@ -718,8 +693,6 @@ function renderAscii() {
 	gl.uniform1f(asciiPresentProgram.uniforms.uGlow, config.ASCII_GLOW ? 1.0 : 0.0);
 	gl.uniform1f(asciiPresentProgram.uniforms.uGlowAmount, config.ASCII_GLOW_AMOUNT);
 	blit(null);                                      // → screen
-
-	if (config.ASCII_PARTICLES) renderParticles();
 }
 
 // Glyph-mode → shader keyword set (base density mode = no keyword).
@@ -730,40 +703,6 @@ function asciiKeywords() {
 }
 function phosphorIndex() {
 	return { color: 0, green: 1 }[config.ASCII_PHOSPHOR] || 0;
-}
-
-// Advect the particle position texture by the velocity field (one ping-pong step).
-function updateParticles(dt) {
-	if (!particlePos) return;
-	gl.disable(gl.BLEND);
-	particleUpdateProgram.bind();
-	gl.uniform1i(particleUpdateProgram.uniforms.uPos, particlePos.read.attach(0));
-	gl.uniform1i(particleUpdateProgram.uniforms.uVelocity, velocity.read.attach(1));
-	gl.uniform2f(particleUpdateProgram.uniforms.uTexel, velocity.texelSizeX, velocity.texelSizeY);
-	gl.uniform1f(particleUpdateProgram.uniforms.uDt, dt);
-	gl.uniform1f(particleUpdateProgram.uniforms.uSpeed, 1.6);
-	gl.uniform1f(particleUpdateProgram.uniforms.uTime, performance.now() / 1000.0);
-	blit(particlePos.write); particlePos.swap();
-}
-
-// Draw the particles as additive glyph point-sprites over the presented ASCII frame.
-function renderParticles() {
-	if (!particlePos || !particleVAO) return;
-	gl.enable(gl.BLEND);
-	gl.blendFunc(gl.ONE, gl.ONE);
-	particleRenderProgram.bind();
-	gl.uniform1i(particleRenderProgram.uniforms.uPos, particlePos.read.attach(0));
-	gl.uniform1i(particleRenderProgram.uniforms.uGlyphs, textAtlas.attach(1));
-	gl.uniform1f(particleRenderProgram.uniforms.uGlyphCount, textAtlas.count);
-	gl.uniform1i(particleRenderProgram.uniforms.uDye, dye.read.attach(2));
-	gl.uniform2f(particleRenderProgram.uniforms.uDim, PCOLS, PROWS);
-	gl.uniform1f(particleRenderProgram.uniforms.uPointSize, Math.max(8, gl.drawingBufferWidth / 90));
-	gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-	gl.bindVertexArray(particleVAO);
-	gl.drawArrays(gl.POINTS, 0, PCOUNT);
-	gl.bindVertexArray(null);
-	gl.disable(gl.BLEND);
 }
 
 // Stamp a string into the dye field as glyphs (type-to-inject). Letters then advect/dissolve.
@@ -846,7 +785,6 @@ function update() {
 	if (audioOn && !config.PAUSED) audioStep();
 	if (config.EMITTER && !config.PAUSED) emitFlow();
 	if (!config.PAUSED) step(dt);
-	if (config.ASCII && config.ASCII_PARTICLES && !config.PAUSED) updateParticles(dt);
 	render(null);
 
 	frames++;
@@ -995,7 +933,6 @@ function applyAsciiPreset() {
 	setRadioValue('glyphMode', 'density');
 	config.ASCII_GLYPH_SET = 'default';
 	setRadioValue('phosphorMode', 'color');
-	setCheckboxValue('particlesToggle', false);
 	setMode('fluid');
 	setCheckboxValue('emitterToggle', false);
 	config.SUNRAYS = false;
@@ -1050,7 +987,6 @@ function wireUI() {
 	document.querySelectorAll('input[name="phosphorMode"]').forEach(el => {
 		el.addEventListener('change', () => { if (el.checked) config.ASCII_PHOSPHOR = el.value; });
 	});
-	bindCheckbox('particlesToggle', v => config.ASCII_PARTICLES = v);
 	const injectInput = document.getElementById('injectTextInput');
 	bindButton('injectTextButton', () => injectText(injectInput ? injectInput.value : ''));
 	if (injectInput) injectInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); injectText(injectInput.value); } });
@@ -1132,7 +1068,6 @@ splatStack.push(parseInt(Math.random() * 6) + 8);
 		if (q.has('mode')) setRadioValue('glyphMode', q.get('mode'));
 		if (q.has('phosphor')) setRadioValue('phosphorMode', q.get('phosphor'));
 		if (q.has('glyphset')) config.ASCII_GLYPH_SET = q.get('glyphset');   // default | matrix
-		if (q.get('particles') === '1') setCheckboxValue('particlesToggle', true);
 		if (q.has('inject')) injectText(q.get('inject'));
 	}
 	const ns = parseInt(q.get('splats')) || 0;

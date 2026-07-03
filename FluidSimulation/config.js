@@ -33,5 +33,4 @@ export const config = {
 	GLYPH_MODE: 'density',     // density | edge | braille — how a cell picks its glyph
 	ASCII_GLYPH_SET: 'default',// default (Web437 ramp) | matrix (digits + katakana) — density-mode glyph atlas
 	ASCII_PHOSPHOR: 'color',   // color | green — mono terminal palette
-	ASCII_PARTICLES: false,    // advected glyph particles riding the streamlines (overlay)
 };
