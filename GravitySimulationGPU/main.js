@@ -207,7 +207,7 @@ let mesh, geoCPU, meshDustCPU, geoDustCPU;          // CPU-path render objects
 let meshGPU, geoGPU, meshDustGPU, geoDustGPU;       // GPU-path render objects (lazy)
 let meshLensCPU = null, meshLensGPU = null;         // secondary lensed image (θ₋ branch)
 let postProcessing, scenePass;
-let afterImageNode = null, bloomNode = null, rttNode = null, dofNode = null, asciiRtt = null;
+let afterImageNode = null, bloomNode = null, rttNode = null, dofNode = null, asciiRtt = null, asciiGlowRtt = null;
 let instPos, instVel, instDens; // InstancedBufferAttributes streamed each frame (CPU path)
 let instVarCPU = null, instVarGPU = null; // static per-particle variation (z = galaxy ID)
 let gpuReady = false;
@@ -1316,6 +1316,7 @@ function buildPost() {
 	if (dofNode) { dofNode.dispose?.(); dofNode = null; }
 	if (rttNode) { rttNode.dispose?.(); rttNode = null; }
 	if (asciiRtt) { asciiRtt.dispose?.(); asciiRtt = null; }
+	if (asciiGlowRtt) { asciiGlowRtt.dispose?.(); asciiGlowRtt = null; }
 
 	let node = scenePass.getTextureNode('output');
 	if (trailFade > 0) {
@@ -1358,27 +1359,69 @@ function buildPost() {
 		col.addAssign(g.sub(0.5).mul(0.025));
 		return vec4(col, 1.0);
 	})();
-	postProcessing.outputNode = asciiOn ? makeAsciiNode(asciiRtt = rtt(gradeNode)) : gradeNode;
+	postProcessing.outputNode = asciiOn
+		? makeGlowNode(asciiGlowRtt = rtt(makeAsciiNode(asciiRtt = rtt(gradeNode))))
+		: gradeNode;
 	postProcessing.needsUpdate = true;
 }
 
 // ── ASCII mode: quantize the finished frame into colored terminal glyphs ──
-const ASCII_GLYPHS = ' .:-=+*#%@';
+// Glyph ramp, exact-pixel Web437 atlas and phosphor glow ported from FluidSimulation.
+const ASCII_RAMP = ' .:-=+*#%@';
+const ASCII_GP = 16;             // Web437_ATI_9x16 native glyph grid (px)
+const ASCII_GP_X = 9;            // glyph cell width = ink width
+const ASCII_GP_Y = 16;           // glyph cell height
+const ASCII_SS = 8;              // supersample factor for the coverage threshold
+const ASCII_GLOW_AMOUNT = 0.4;   // glyph-bloom halo strength (fluid's ASCII_GLOW_AMOUNT)
 let asciiAtlasTex = null;
 
+// Built with the monospace fallback until the bitmap web-font loads, then rebuilt once.
+const asciiFontFace = new FontFace('Web437_ATI_9x16', "url('../FluidSimulation/Web437_ATI_9x16.woff')");
+asciiFontFace.load()
+	.then(f => {
+		document.fonts.add(f);
+		if (asciiAtlasTex) { asciiAtlasTex.dispose(); asciiAtlasTex = null; }
+		if (asciiOn && postProcessing) buildPost();
+	})
+	.catch(() => {});
+
+// Web437 is a bitmap face: render it at an integer multiple of its native grid with the
+// pen integer-aligned (top/left, SS-snapped), then coverage-threshold each SS-square block
+// down to one texel (ON iff >=50% inked) - exact font pixels, no AA fringe. Same recipe
+// as FluidSimulation/main.js buildAtlas.
 function makeAsciiAtlas() {
-	const n = ASCII_GLYPHS.length, cw = 16, ch = 32;
+	const n = ASCII_RAMP.length;
+	const cellW = ASCII_GP_X * ASCII_SS, cellH = ASCII_GP_Y * ASCII_SS;
 	const cv = document.createElement('canvas');
-	cv.width = n * cw; cv.height = ch;
+	cv.width = n * cellW; cv.height = cellH;
 	const ctx = cv.getContext('2d');
-	ctx.font = 'bold 24px monospace';
-	ctx.textAlign = 'center';
-	ctx.textBaseline = 'middle';
+	ctx.fillStyle = '#000'; ctx.fillRect(0, 0, cv.width, cv.height);
 	ctx.fillStyle = '#fff';
-	for (let i = 0; i < n; i++) ctx.fillText(ASCII_GLYPHS[i], i * cw + cw / 2, ch / 2 + 1);
-	const t = new THREE.CanvasTexture(cv);
+	ctx.font = (ASCII_GP * ASCII_SS) + "px 'Web437_ATI_9x16', monospace";
+	ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+	const offX = Math.round((cellW - ctx.measureText('M').width) / 2 / ASCII_SS) * ASCII_SS;
+	for (let i = 0; i < n; i++) ctx.fillText(ASCII_RAMP[i], i * cellW + offX, 0);
+	const src = ctx.getImageData(0, 0, cv.width, cv.height).data;
+	const outW = n * ASCII_GP_X, outH = ASCII_GP_Y;
+	const out = document.createElement('canvas');
+	out.width = outW; out.height = outH;
+	const octx = out.getContext('2d');
+	const oimg = octx.createImageData(outW, outH);
+	const half = (ASCII_SS * ASCII_SS) / 2;
+	for (let oy = 0; oy < outH; oy++) for (let ox = 0; ox < outW; ox++) {
+		let lit = 0;
+		for (let sy = 0; sy < ASCII_SS; sy++) for (let sx = 0; sx < ASCII_SS; sx++)
+			if (src[((oy * ASCII_SS + sy) * cv.width + (ox * ASCII_SS + sx)) * 4] > 127) lit++;
+		const v = lit >= half ? 255 : 0;
+		const o = (oy * outW + ox) * 4;
+		oimg.data[o] = oimg.data[o + 1] = oimg.data[o + 2] = v;
+		oimg.data[o + 3] = 255;
+	}
+	octx.putImageData(oimg, 0, 0);
+	const t = new THREE.CanvasTexture(out);
 	t.generateMipmaps = false;
-	t.minFilter = THREE.LinearFilter;
+	t.minFilter = THREE.NearestFilter;
+	t.magFilter = THREE.NearestFilter;
 	return t;
 }
 
@@ -1386,15 +1429,32 @@ function makeAsciiAtlas() {
 function makeAsciiNode(srcNode) {
 	if (!asciiAtlasTex) asciiAtlasTex = makeAsciiAtlas();
 	return Fn(() => {
-		const cells = screenSize.div(vec2(8.0, 16.0)).floor().max(vec2(1.0));
+		const cells = screenSize.div(vec2(ASCII_GP_X, ASCII_GP_Y)).floor().max(vec2(1.0));
 		const cellId = screenUV.mul(cells).floor();
 		const c = srcNode.sample(cellId.add(0.5).div(cells));
 		const lum = luminance(c.rgb).saturate();
-		const n = float(ASCII_GLYPHS.length);
+		const n = float(ASCII_RAMP.length);
 		const gi = lum.pow(0.7).mul(n.sub(1.0)).round();
 		const local = screenUV.mul(cells).fract();
 		const mask = texture(asciiAtlasTex, vec2(gi.add(local.x).div(n), local.y)).r;
 		return vec4(c.rgb.mul(mask).mul(1.5), 1.0);
+	})();
+}
+
+// Phosphor glow: gaussian-blur the glyph bitmap and add it back, so lit glyphs bleed a
+// soft halo into the surrounding cell gaps (FluidSimulation's asciiPresent glyph-bloom:
+// 7x7 taps at 1.5px spread, ~half a glyph cell of reach). srcTex must be a texture node (rtt).
+function makeGlowNode(srcTex) {
+	return Fn(() => {
+		const col = srcTex.sample(screenUV).rgb.toVar();
+		const acc = vec3(0.0).toVar();
+		let wsum = 0;
+		for (let bx = -3; bx <= 3; bx++) for (let by = -3; by <= 3; by++) {
+			const w = Math.exp(-(bx * bx + by * by) * 2.25 * 0.10);
+			wsum += w;
+			acc.addAssign(srcTex.sample(screenUV.add(vec2(bx * 1.5, by * 1.5).div(screenSize))).rgb.mul(w));
+		}
+		return vec4(col.add(acc.div(wsum).mul(ASCII_GLOW_AMOUNT)), 1.0);
 	})();
 }
 
