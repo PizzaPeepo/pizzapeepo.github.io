@@ -27,7 +27,7 @@ import * as THREE from 'three/webgpu';
 import {
 	Fn, attribute, positionLocal, uniform, color, pass,
 	float, vec2, vec3, vec4, uv, time, screenUV, luminance, mix, smoothstep, hash, rtt,
-	mx_fractal_noise_float, instancedArray, instanceIndex, Loop, If, uint
+	mx_fractal_noise_float, instancedArray, instanceIndex, Loop, If, uint, uniformArray
 } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { afterImage } from 'three/addons/tsl/display/AfterImageNode.js';
@@ -60,6 +60,40 @@ let gpuMode = false;          // false = CPU Barnes-Hut tree, true = GPU compute
 let dustFrac = 0.15;          // fraction of particles re-drawn as dark dust
 let dustN = 0;                // = round(count · dustFrac), kept by updateDustCount()
 let dofOn = true;             // depth-of-field post pass
+
+// ── movable cores (≤4 massive bodies; core physics on the CPU always — N is tiny) ──
+// Each: {x,y,z, vx,vy,vz, frac, mass}; mass = coreMass·frac, kept in sync by the slider.
+const NCORES = 4;
+let cores = [];
+
+function setCores(list) {
+	cores = list.map(c => ({ vx: 0, vy: 0, vz: 0, ...c, mass: coreMass * c.frac }));
+	updateCoreMode();
+}
+
+// symplectic Euler over core↔core gravity; cores don't feel particle back-reaction
+// ponytail: no dynamical friction — the drag knob makes mergers sink
+function stepCores() {
+	const soft2 = coreSoft * coreSoft;
+	const n = cores.length;
+	for (let a = 0; a < n; a++) {
+		const ca = cores[a];
+		let ax = 0, ay = 0, az = 0;
+		for (let b = 0; b < n; b++) {
+			if (b === a) continue;
+			const cb = cores[b];
+			const dx = cb.x - ca.x, dy = cb.y - ca.y, dz = cb.z - ca.z;
+			const inv = 1 / Math.sqrt(dx * dx + dy * dy + dz * dz + soft2);
+			const f = G * cb.mass * inv * inv * inv;
+			ax += f * dx; ay += f * dy; az += f * dz;
+		}
+		ca.vx += ax * dt; ca.vy += ay * dt; ca.vz += az * dt;
+	}
+	for (let a = 0; a < n; a++) {
+		const c = cores[a];
+		c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
+	}
+}
 
 // ── CPU particle state (structure-of-arrays; grown to GPU_MAX on first GPU use) ──
 let px = new Float32Array(MAX), py = new Float32Array(MAX), pz = new Float32Array(MAX);
@@ -133,7 +167,8 @@ const strideU = uniform(1, 'uint');      // partner index stride (1 = exact n²)
 const offsetU = uniform(0, 'uint');      // fresh random offset per frame (decorrelates sampling)
 const gMassU = uniform(0);               // G · massEach · stride (mass compensation)
 const massStrideU = uniform(0);          // massEach · stride (density compensation)
-const gCoreU = uniform(0);               // G · coreMass
+const coreVecs = Array.from({ length: NCORES }, () => new THREE.Vector4()); // xyz + G·mass (w=0 inactive)
+const coresU = uniformArray(coreVecs);
 const coreSoft2U = uniform(64);
 const dtU = uniform(0.01);
 const burstKU = uniform(0);
@@ -250,10 +285,14 @@ function step() {
 			}
 		}
 		dens[i] = di;
-		// central core at the origin
-		const inv = 1 / Math.sqrt(xi * xi + yi * yi + zi * zi + coreSoft2);
-		const cf = G * coreMass * inv * inv * inv;
-		ax -= cf * xi; ay -= cf * yi; az -= cf * zi;
+		// movable cores
+		for (let c = 0; c < cores.length; c++) {
+			const co = cores[c];
+			const dcx = co.x - xi, dcy = co.y - yi, dcz = co.z - zi;
+			const inv = 1 / Math.sqrt(dcx * dcx + dcy * dcy + dcz * dcz + coreSoft2);
+			const cf = G * co.mass * inv * inv * inv;
+			ax += cf * dcx; ay += cf * dcy; az += cf * dcz;
+		}
 		// symplectic Euler: kick then drift
 		vx[i] += ax * dt; vy[i] += ay * dt; vz[i] += az * dt;
 		px[i] += vx[i] * dt; py[i] += vy[i] * dt; pz[i] += vz[i] * dt;
@@ -324,7 +363,12 @@ function initGalaxyCollision() {
 	const sigmaBulge = DISK_R * 0.25;
 	const offsetX = DISK_R * 1.5;
 	const Geff = Math.max(G, 1);
-	const approachSpeed = Math.sqrt(Geff * coreMass / (offsetX * 2 + coreSoft)) * 0.6;
+	const mCore = coreMass * 0.5; // per-galaxy core mass
+	const approachSpeed = Math.sqrt(Geff * mCore / (offsetX * 2 + coreSoft)) * 0.6;
+	setCores([
+		{ x: -offsetX, y: 0, z: 0, vx: approachSpeed, frac: 0.5 },
+		{ x: offsetX, y: 0, z: 0, vx: -approachSpeed, frac: 0.5 }
+	]);
 	for (let pass = 0; pass < 2; pass++) {
 		const start = pass === 0 ? 0 : half;
 		const end = pass === 0 ? half : count;
@@ -339,7 +383,7 @@ function initGalaxyCollision() {
 			pz[i] = gauss() * (zThin + zBulge * bulge);
 			const rDir = r < 0.001 ? 0.001 : r;
 			const rVel = Math.max(r, DISK_R * 0.05);
-			const vc = Math.sqrt(Geff * coreMass / (rVel + coreSoft)) * spin * spinDir;
+			const vc = Math.sqrt(Geff * mCore / (rVel + coreSoft)) * spin * spinDir;
 			vx[i] = bulkVx + (-gy / rDir) * vc;
 			vy[i] = (gx / rDir) * vc;
 			vz[i] = gauss() * Math.abs(vc) * 0.02;
@@ -379,6 +423,7 @@ function applyPreset(name) {
 
 function reset() {
 	dustN = Math.round(count * dustFrac);
+	setCores([{ x: 0, y: 0, z: 0, frac: 1 }]); // single core at origin; presets may override
 	if (currentPreset === 'ring') initRing();
 	else if (currentPreset === 'collapse') initCollapse();
 	else if (currentPreset === 'galaxy') initGalaxyCollision();
@@ -513,11 +558,18 @@ function createNebula() {
 	scene.add(mesh);
 }
 
-// ── core: animated accretion glow + black-hole mode at high core mass ──
-let bhGroup = null;
+// ── cores: animated accretion glow + black-hole mode at high core mass ──
+// one visual group per core slot, positioned from cores[] each frame
+let coreGroups = [];
 const BH_THRESHOLD = 30000;
 
 function createCore() {
+	for (let i = 0; i < NCORES; i++) coreGroups.push(makeCoreVisual(i === 0));
+	updateCoreMode();
+}
+
+function makeCoreVisual(primary) {
+	const group = new THREE.Group();
 	// inner sphere: noise-modulated emissive, slowly rotating
 	const innerMat = new THREE.MeshBasicNodeMaterial({
 		transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
@@ -531,7 +583,7 @@ function createCore() {
 		return color(0xfff4e2).mul(n.mul(0.7).add(0.7));
 	})();
 	innerMat.opacityNode = float(0.95);
-	scene.add(new THREE.Mesh(new THREE.SphereGeometry(10, 32, 32), innerMat));
+	group.add(new THREE.Mesh(new THREE.SphereGeometry(10, 32, 32), innerMat));
 
 	// halo sphere: slow opacity pulse
 	const haloMat = new THREE.MeshBasicNodeMaterial({
@@ -539,18 +591,20 @@ function createCore() {
 	});
 	haloMat.colorNode = color(0xffae5a);
 	haloMat.opacityNode = float(0.10).add(time.mul(0.7).sin().mul(0.04));
-	scene.add(new THREE.Mesh(new THREE.SphereGeometry(30, 16, 16), haloMat));
+	group.add(new THREE.Mesh(new THREE.SphereGeometry(30, 16, 16), haloMat));
 
-	// camera-facing lens-flare sprite: the dot gradient reused at large scale
-	const flare = new THREE.Sprite(new THREE.SpriteMaterial({
-		map: starTexture, color: 0xffe7c0, transparent: true, opacity: 0.05,
-		blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false
-	}));
-	flare.scale.set(480, 480, 1);
-	scene.add(flare);
+	// camera-facing lens-flare sprite (primary core only): the dot gradient at large scale
+	if (primary) {
+		const flare = new THREE.Sprite(new THREE.SpriteMaterial({
+			map: starTexture, color: 0xffe7c0, transparent: true, opacity: 0.05,
+			blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false
+		}));
+		flare.scale.set(480, 480, 1);
+		group.add(flare);
+	}
 
 	// black-hole mode (high core mass): dark disc + hot photon ring
-	bhGroup = new THREE.Group();
+	const bhGroup = new THREE.Group();
 	bhGroup.add(new THREE.Mesh(
 		new THREE.SphereGeometry(12, 32, 32),
 		new THREE.MeshBasicMaterial({ color: 0x000000 }) // opaque: occludes additive particles
@@ -561,12 +615,18 @@ function createCore() {
 	}));
 	ring.scale.set(78, 78, 1);
 	bhGroup.add(ring);
-	scene.add(bhGroup);
-	updateCoreMode();
+	group.add(bhGroup);
+	group.userData.bh = bhGroup;
+	scene.add(group);
+	return group;
 }
 
 function updateCoreMode() {
-	if (bhGroup) bhGroup.visible = coreMass >= BH_THRESHOLD;
+	for (let i = 0; i < coreGroups.length; i++) {
+		const co = cores[i];
+		coreGroups[i].visible = !!co;
+		coreGroups[i].userData.bh.visible = !!co && co.mass >= BH_THRESHOLD;
+	}
 }
 
 function createShockwave() {
@@ -712,9 +772,13 @@ function ensureGPU() {
 				di.addAssign(r2.reciprocal());
 			});
 			acc.mulAssign(gMassU);
-			// central core at the origin
-			const r2c = pi.dot(pi).add(coreSoft2U);
-			acc.subAssign(pi.mul(gCoreU.mul(r2c.mul(r2c.sqrt()).reciprocal())));
+			// movable cores: xyz + premultiplied G·mass (w = 0 for inactive slots)
+			Loop({ start: uint(0), end: uint(NCORES), type: 'uint', condition: '<' }, ({ i: c }) => {
+				const cw = coresU.element(c);
+				const dc = cw.xyz.sub(pi);
+				const r2c = dc.dot(dc).add(coreSoft2U);
+				acc.addAssign(dc.mul(cw.w.mul(r2c.mul(r2c.sqrt()).reciprocal())));
+			});
 			// symplectic Euler: kick then drift
 			const v = velBuf.element(instanceIndex).toVar();
 			v.addAssign(acc.mul(dtU));
@@ -901,6 +965,7 @@ async function init() {
 		sl.value = String(Math.log10(Math.max(1, +q.get('count') || 1)));
 		sl.dispatchEvent(new Event('input'));
 	}
+	if (q.has('preset') && FRAMINGS[q.get('preset')]) applyPreset(q.get('preset'));
 	if (q.has('dust')) {
 		const sl = document.getElementById('dustSlider');
 		sl.value = q.get('dust');
@@ -963,12 +1028,18 @@ let frames = 0, fpsLast = Date.now();
 
 async function animate() {
 	const now = Date.now();
+	if (!paused && !(gpuMode && gpuSuspend)) stepCores();
+	for (let i = 0; i < cores.length; i++) coreGroups[i].position.set(cores[i].x, cores[i].y, cores[i].z);
 	if (gpuMode) {
 		if (!paused && !gpuSuspend) {
 			countU.value = count;
 			dtU.value = dt;
-			gCoreU.value = G * coreMass;
 			coreSoft2U.value = coreSoft * coreSoft;
+			for (let c = 0; c < NCORES; c++) {
+				const co = cores[c];
+				if (co) coreVecs[c].set(co.x, co.y, co.z, G * co.mass);
+				else coreVecs[c].set(0, 0, 0, 0);
+			}
 			gMassU.value = G * massEach * strideU.value;
 			massStrideU.value = massEach * strideU.value;
 			offsetU.value = Math.floor(Math.random() * count);
@@ -1056,7 +1127,7 @@ function wireUI() {
 		show();
 	};
 	bindNum('gravSlider', 'gravValue', v => { G = v; updateGColors(v); }, v => v.toFixed(0));
-	bindNum('coreSlider', 'coreValue', v => { coreMass = v; updateCoreMode(); }, v => v.toLocaleString());
+	bindNum('coreSlider', 'coreValue', v => { coreMass = v; for (const c of cores) c.mass = coreMass * c.frac; updateCoreMode(); }, v => v.toLocaleString());
 	bindNum('spinSlider', 'spinValue', v => spin = v, v => v.toFixed(2));
 	bindNum('softSlider', 'softValue', v => coreSoft = v, v => v.toFixed(0));
 	bindNum('dtSlider', 'dtValue', v => dt = v, v => v.toFixed(3));
