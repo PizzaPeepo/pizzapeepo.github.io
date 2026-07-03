@@ -2,6 +2,12 @@
 
 Guidance for Claude Code when working with this repo.
 
+## Workflow
+
+**Never commit on your own.** Run `git commit` only when the user explicitly asks for a
+commit in the current request. Finishing a task, phase, or fix is NOT commit
+authorization — leave changes in the working tree and let the user decide.
+
 ## Project Overview
 
 Static GitHub Pages site — interactive JS canvas animations + physics simulations. No build system; files served as-is.
