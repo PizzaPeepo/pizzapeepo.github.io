@@ -103,6 +103,21 @@ Sagittarius stream. Needs R2-1 + drag.
 Two cores orbiting each other inside the gap they carve, streamers across the gap.
 Needs R2-1.
 
+## Round 3 — ASCII mode + low-end performance (2026-07-03, implemented)
+
+- **ASCII mode** (HUD toggle, `?ascii=1`): screen-space post pass at the very end of
+  `buildPost()` — the finished graded frame goes through one extra `rtt`, gets sampled
+  at 8×16-px cell centers, cell luminance picks a glyph from a ` .:-=+*#%@` canvas
+  atlas, glyph mask × cell color. Works with every preset/effect since it eats the
+  final frame (bloom before ASCII = phosphor glow).
+- **Perf knobs for low-end GPUs** (target: RTX A1000 class):
+  - GPU pair budget slider (10^8–10^9.7 pairs/frame; was a hardcoded 2.5e9),
+  - internal resolution scale 40–100% (post chain cost scales quadratically),
+  - Quality Full/Fast button — Fast skips DOF and the chromatic-aberration `rtt`,
+  - dust + secondary-lens passes auto-hide above 300k particles (`EXTRA_MESH_CAP`).
+- Deferred: workgroup-tiled n² kernel (needs TSL `workgroupArray` support check) and
+  the uniform-grid far-field (O(n·k), the real 1M+-on-low-end ceiling raise).
+
 ## Round-2 order of attack
 
 R2-1 (enabler) → R2-2 (spiral clash + galaxy-ID colors + retrograde toggle) →

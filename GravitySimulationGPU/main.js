@@ -26,7 +26,7 @@
 import * as THREE from 'three/webgpu';
 import {
 	Fn, attribute, positionLocal, uniform, color, pass,
-	float, vec2, vec3, vec4, uv, time, screenUV, luminance, mix, smoothstep, hash, rtt,
+	float, vec2, vec3, vec4, uv, time, screenUV, screenSize, luminance, mix, smoothstep, hash, rtt, texture,
 	mx_fractal_noise_float, instancedArray, instanceIndex, Loop, If, uint, uniformArray
 } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
@@ -40,7 +40,7 @@ import { onWindowResize } from "../Utils/ResizeManager.js";
 // ── config ──
 const MAX = 100000;           // CPU-path capacity = largest count the tree handles
 const GPU_MAX = 1000000;      // GPU-path capacity (storage buffers, render meshes)
-const PAIR_BUDGET = 2.5e9;    // GPU pair interactions per frame; exact n² ≤ √budget
+let pairBudget = 2.5e9;       // GPU pair interactions per frame; exact n² ≤ √budget (HUD slider)
 const DISK_R = 300;           // disk radius in sim (pixel-scale) units
 const BASE_DISK_MASS = 5000;  // total disk mass; per-particle = BASE_DISK_MASS / count
 let theta = 1.5;              // Barnes-Hut opening angle (higher = faster, looser)
@@ -70,6 +70,10 @@ let darkMatter = 0;           // isothermal-halo strength (0–1) → flat rotat
 let diskHeat = 1;             // seeding velocity-dispersion multiplier (Toomre-ish, on reset)
 let arms = 2;                 // spiral arm count (on reset)
 let pitchDeg = 20;            // spiral arm pitch angle, degrees (on reset)
+let asciiOn = false;          // ASCII terminal render mode (post pass)
+let fastMode = false;         // fast quality: skip DOF + chromatic aberration
+let resScale = 1;             // internal resolution scale (0.4–1)
+const EXTRA_MESH_CAP = 300000; // hide dust/secondary-lens passes above this count
 let preBH = null;             // knob snapshot to restore when leaving the blackhole preset
 const BH_RIN = 45, BH_ROUT = 250; // accretion-disk annulus, sim units
 const COLOR_LABELS = ['Color: Speed', 'Color: Radius', 'Color: Galaxy'];
@@ -203,7 +207,7 @@ let mesh, geoCPU, meshDustCPU, geoDustCPU;          // CPU-path render objects
 let meshGPU, geoGPU, meshDustGPU, geoDustGPU;       // GPU-path render objects (lazy)
 let meshLensCPU = null, meshLensGPU = null;         // secondary lensed image (θ₋ branch)
 let postProcessing, scenePass;
-let afterImageNode = null, bloomNode = null, rttNode = null, dofNode = null;
+let afterImageNode = null, bloomNode = null, rttNode = null, dofNode = null, asciiRtt = null;
 let instPos, instVel, instDens; // InstancedBufferAttributes streamed each frame (CPU path)
 let instVarCPU = null, instVarGPU = null; // static per-particle variation (z = galaxy ID)
 let gpuReady = false;
@@ -662,6 +666,7 @@ function setCount(n) {
 	updateGpuSampling();
 	if (geoGPU) geoGPU.instanceCount = count;
 	updateDustCount();
+	updateLensVis();
 	reset();
 	document.getElementById('countValue').textContent = n.toLocaleString();
 }
@@ -1009,14 +1014,16 @@ function syncGalaxyIds() {
 
 function updateLensVis() {
 	lensU.value = lensStrength;
-	if (meshLensCPU) meshLensCPU.visible = lensStrength > 0 && !gpuMode;
-	if (meshLensGPU) meshLensGPU.visible = lensStrength > 0 && gpuMode;
+	const on = lensStrength > 0 && count <= EXTRA_MESH_CAP;
+	if (meshLensCPU) meshLensCPU.visible = on && !gpuMode;
+	if (meshLensGPU) meshLensGPU.visible = on && gpuMode;
 }
 
 function updateDustCount() {
 	dustN = Math.round(count * dustFrac);
-	if (geoDustCPU) { geoDustCPU.instanceCount = dustN; meshDustCPU.visible = !gpuMode && dustN > 0; }
-	if (geoDustGPU) { geoDustGPU.instanceCount = dustN; meshDustGPU.visible = gpuMode && dustN > 0; }
+	const cap = count <= EXTRA_MESH_CAP; // dust pass off at extreme counts (vertex cost)
+	if (geoDustCPU) { geoDustCPU.instanceCount = dustN; meshDustCPU.visible = !gpuMode && dustN > 0 && cap; }
+	if (geoDustGPU) { geoDustGPU.instanceCount = dustN; meshDustGPU.visible = gpuMode && dustN > 0 && cap; }
 }
 
 // ── GPU compute path: storage-buffer state + stochastic strided n² kernel ──
@@ -1026,8 +1033,8 @@ function updateGpuSampling() {
 	// strided subset (fresh random offset each frame), with mass scaled by the stride
 	// so the expected force matches the full sum
 	let samples = count, stride = 1;
-	if (count * count > PAIR_BUDGET) {
-		samples = Math.max(1024, Math.floor(PAIR_BUDGET / count));
+	if (count * count > pairBudget) {
+		samples = Math.max(1024, Math.floor(pairBudget / count));
 		stride = Math.ceil(count / samples);
 		samples = Math.ceil(count / stride);
 	}
@@ -1291,6 +1298,13 @@ async function init() {
 		sl.dispatchEvent(new Event('input'));
 	}
 	if (q.get('dof') === '0') document.getElementById('dofButton').click(); // DOF default on; ?dof=0 forces off
+	if (q.get('ascii') === '1') document.getElementById('asciiButton').click();
+	if (q.get('fast') === '1') document.getElementById('qualityButton').click();
+	if (q.has('res')) {
+		const sl = document.getElementById('resSlider');
+		sl.value = q.get('res');
+		sl.dispatchEvent(new Event('input'));
+	}
 
 	renderer.setAnimationLoop(animate);
 }
@@ -1301,6 +1315,7 @@ function buildPost() {
 	if (bloomNode) { bloomNode.dispose?.(); bloomNode = null; }
 	if (dofNode) { dofNode.dispose?.(); dofNode = null; }
 	if (rttNode) { rttNode.dispose?.(); rttNode = null; }
+	if (asciiRtt) { asciiRtt.dispose?.(); asciiRtt = null; }
 
 	let node = scenePass.getTextureNode('output');
 	if (trailFade > 0) {
@@ -1312,7 +1327,7 @@ function buildPost() {
 		bloomNode = bloom(node, st, ra, th);
 		node = node.add(bloomNode);
 	}
-	if (dofOn) {
+	if (dofOn && !fastMode) {
 		// Radial viewZ proxy: 0 at screen center, negative outward.
 		// DOF formula: factor = focus(0) + radialZ → blur grows away from center.
 		const radialZ = uv().sub(vec2(0.5, 0.5)).length().mul(radialScaleU).negate();
@@ -1322,12 +1337,16 @@ function buildPost() {
 	// chromatic aberration needs to resample the composite → render it to a texture.
 	// On sub-pixel splats a full-frame shift dissolves dots into r/g/b triplets, so
 	// the shifted version is blended in toward the frame edges only.
-	const comp = rttNode = rtt(node);
-	const shifted = rgbShift(comp, 0.0012);
-	postProcessing.outputNode = Fn(() => {
+	// fast mode: skip the extra render target and the shift entirely
+	let comp = node, shifted = null;
+	if (!fastMode) {
+		comp = rttNode = rtt(node);
+		shifted = rgbShift(comp, 0.0012);
+	}
+	const gradeNode = Fn(() => {
 		const d = screenUV.sub(0.5).length();
 		const caMask = smoothstep(0.30, 0.75, d).mul(0.8);
-		const col = mix(comp.rgb, shifted.rgb, caMask).toVar();
+		const col = (fastMode ? comp.rgb : mix(comp.rgb, shifted.rgb, caMask)).toVar();
 		// teal-orange grade: cool shadows, warm highlights (both subtle)
 		const lum = luminance(col).saturate();
 		col.assign(mix(col.mul(vec3(0.92, 1.03, 1.10)), col, lum));
@@ -1339,7 +1358,50 @@ function buildPost() {
 		col.addAssign(g.sub(0.5).mul(0.025));
 		return vec4(col, 1.0);
 	})();
+	postProcessing.outputNode = asciiOn ? makeAsciiNode(asciiRtt = rtt(gradeNode)) : gradeNode;
 	postProcessing.needsUpdate = true;
+}
+
+// ── ASCII mode: quantize the finished frame into colored terminal glyphs ──
+const ASCII_GLYPHS = ' .:-=+*#%@';
+let asciiAtlasTex = null;
+
+function makeAsciiAtlas() {
+	const n = ASCII_GLYPHS.length, cw = 16, ch = 32;
+	const cv = document.createElement('canvas');
+	cv.width = n * cw; cv.height = ch;
+	const ctx = cv.getContext('2d');
+	ctx.font = 'bold 24px monospace';
+	ctx.textAlign = 'center';
+	ctx.textBaseline = 'middle';
+	ctx.fillStyle = '#fff';
+	for (let i = 0; i < n; i++) ctx.fillText(ASCII_GLYPHS[i], i * cw + cw / 2, ch / 2 + 1);
+	const t = new THREE.CanvasTexture(cv);
+	t.generateMipmaps = false;
+	t.minFilter = THREE.LinearFilter;
+	return t;
+}
+
+// srcNode must be a texture node (rtt) — sampled once at each cell's center
+function makeAsciiNode(srcNode) {
+	if (!asciiAtlasTex) asciiAtlasTex = makeAsciiAtlas();
+	return Fn(() => {
+		const cells = screenSize.div(vec2(8.0, 16.0)).floor().max(vec2(1.0));
+		const cellId = screenUV.mul(cells).floor();
+		const c = srcNode.sample(cellId.add(0.5).div(cells));
+		const lum = luminance(c.rgb).saturate();
+		const n = float(ASCII_GLYPHS.length);
+		const gi = lum.pow(0.7).mul(n.sub(1.0)).round();
+		const local = screenUV.mul(cells).fract();
+		const mask = texture(asciiAtlasTex, vec2(gi.add(local.x).div(n), local.y)).r;
+		return vec4(c.rgb.mul(mask).mul(1.5), 1.0);
+	})();
+}
+
+function applyResolution() {
+	renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * resScale);
+	renderer.setSize(window.innerWidth, window.innerHeight);
+	buildPost(); // fresh post targets at the new size
 }
 
 // ── FPS badge ──
@@ -1498,6 +1560,20 @@ function wireUI() {
 	bindNum('heatSlider', 'heatValue', v => diskHeat = v, v => v.toFixed(1));
 	bindNum('armsSlider', 'armsValue', v => arms = Math.round(v), v => String(Math.round(v)));
 	bindNum('pitchSlider', 'pitchValue', v => pitchDeg = v, v => v.toFixed(0));
+	bindNum('resSlider', 'resValue', v => { resScale = v; applyResolution(); }, v => Math.round(v * 100) + '%');
+	bindNum('budgetSlider', 'budgetValue', v => { pairBudget = Math.pow(10, v); updateGpuSampling(); }, v => (Math.pow(10, v) / 1e9).toFixed(1) + ' G');
+	const asciiBtn = document.getElementById('asciiButton');
+	asciiBtn.addEventListener('click', () => {
+		asciiOn = !asciiOn;
+		asciiBtn.textContent = asciiOn ? 'ASCII: On' : 'ASCII: Off';
+		buildPost();
+	});
+	const qualityBtn = document.getElementById('qualityButton');
+	qualityBtn.addEventListener('click', () => {
+		fastMode = !fastMode;
+		qualityBtn.textContent = fastMode ? 'Quality: Fast' : 'Quality: Full';
+		buildPost();
+	});
 	document.getElementById('presetBH').addEventListener('click', () => applyPreset('blackhole'));
 	document.getElementById('presetTDE').addEventListener('click', () => applyPreset('tde'));
 	document.getElementById('presetGlobular').addEventListener('click', () => applyPreset('globular'));
