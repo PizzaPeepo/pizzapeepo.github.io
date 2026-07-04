@@ -378,7 +378,6 @@ input[type="checkbox"] {
   cursor: pointer;
   position: relative;
   flex-shrink: 0;
-  margin-top: 1px;
   transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
   vertical-align: middle;
 }
