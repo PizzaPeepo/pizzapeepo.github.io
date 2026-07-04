@@ -1,6 +1,10 @@
 // A double pendulum integrated with classic RK4 over the 4-D state
 // [theta1, omega1, theta2, omega2]. Chaotic: tiny changes in initial angle
 // diverge exponentially, which is what makes overlaid copies fan out.
+// Shared RK4 scratch buffers — step() runs synchronously per instance, so
+// module-level reuse is safe and keeps the hot path allocation-free.
+const K1 = new Float64Array(4), K2 = new Float64Array(4), K3 = new Float64Array(4), K4 = new Float64Array(4);
+
 export default class DoublePendulum {
 	constructor(opts = {}) {
 		this.L1 = opts.L1 ?? 1;
@@ -14,9 +18,8 @@ export default class DoublePendulum {
 		this.hue = opts.hue ?? 45;
 	}
 
-	// Returns the 4 derivatives for a given state, applying linear damping.
-	_derivs(s, g, damping) {
-		const [a1, w1, a2, w2] = s;
+	// Writes the 4 derivatives for the given state into out[], applying linear damping.
+	_derivs(a1, w1, a2, w2, g, damping, out) {
 		const m1 = this.m1, m2 = this.m2, L1 = this.L1, L2 = this.L2;
 		const delta = a1 - a2;
 		const cosD = Math.cos(delta);
@@ -35,29 +38,23 @@ export default class DoublePendulum {
 				+ w2 * w2 * L2 * m2 * cosD))
 			/ (L2 * den) - damping * w2;
 
-		return [w1, dw1, w2, dw2];
+		out[0] = w1; out[1] = dw1; out[2] = w2; out[3] = dw2;
 	}
 
 	step(dt, g, damping) {
-		const s0 = [this.theta1, this.omega1, this.theta2, this.omega2];
+		const a1 = this.theta1, w1 = this.omega1, a2 = this.theta2, w2 = this.omega2;
+		const h = dt * 0.5;
 
-		const k1 = this._derivs(s0, g, damping);
-		const k2 = this._derivs(this._add(s0, k1, dt * 0.5), g, damping);
-		const k3 = this._derivs(this._add(s0, k2, dt * 0.5), g, damping);
-		const k4 = this._derivs(this._add(s0, k3, dt), g, damping);
+		this._derivs(a1, w1, a2, w2, g, damping, K1);
+		this._derivs(a1 + K1[0] * h, w1 + K1[1] * h, a2 + K1[2] * h, w2 + K1[3] * h, g, damping, K2);
+		this._derivs(a1 + K2[0] * h, w1 + K2[1] * h, a2 + K2[2] * h, w2 + K2[3] * h, g, damping, K3);
+		this._derivs(a1 + K3[0] * dt, w1 + K3[1] * dt, a2 + K3[2] * dt, w2 + K3[3] * dt, g, damping, K4);
 
-		for (let i = 0; i < 4; i++) {
-			s0[i] += (dt / 6) * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]);
-		}
-
-		this.theta1 = s0[0];
-		this.omega1 = s0[1];
-		this.theta2 = s0[2];
-		this.omega2 = s0[3];
-	}
-
-	_add(s, k, h) {
-		return [s[0] + k[0] * h, s[1] + k[1] * h, s[2] + k[2] * h, s[3] + k[3] * h];
+		const s = dt / 6;
+		this.theta1 = a1 + s * (K1[0] + 2 * K2[0] + 2 * K3[0] + K4[0]);
+		this.omega1 = w1 + s * (K1[1] + 2 * K2[1] + 2 * K3[1] + K4[1]);
+		this.theta2 = a2 + s * (K1[2] + 2 * K2[2] + 2 * K3[2] + K4[2]);
+		this.omega2 = w2 + s * (K1[3] + 2 * K2[3] + 2 * K3[3] + K4[3]);
 	}
 
 	// Pixel positions of both bobs given a pivot and a length scale (px per unit).

@@ -12,11 +12,14 @@
     #backgroundCanvas { position: fixed; top: 0; left: 0; z-index: 0; }
     .mode-group { display: flex; flex-direction: column; gap: 14px; }
     .mode-group[hidden] { display: none; }
+    #phaseCanvas { position: fixed; left: 18px; bottom: 18px; z-index: 5; border-radius: 10px; pointer-events: none; }
+    @media (max-width: 700px) { #phaseCanvas { display: none !important; } }
   </style>
 </head>
 <body>
 
   <canvas id="backgroundCanvas"></canvas>
+  <canvas id="phaseCanvas" width="260" height="260"></canvas>
 
   <!-- Top-left navigation pill -->
   <div class="hud hud-nav">
@@ -48,14 +51,43 @@
       <label><input type="radio" name="mode" value="wave"> Pendulum wave</label>
     </div>
 
+    <div class="hud-section">
+      <span class="ctrl-label">Speed: <span id="speedValue"></span>&times;</span>
+      <input type="range" min="0.1" max="4" step="0.1" class="slider" id="speedSlider">
+    </div>
+
 
     <!-- ── Double-pendulum controls ── -->
     <div class="mode-group" id="doubleControls">
+      <div class="hud-section">
+        <p class="ctrl-hint" style="font-size:11px;color:var(--tx-3);line-height:1.5;margin:0;">Drag a bob or use the Initial conditions sliders to set the start state.</p>
+      </div>
+
       <div class="hud-section">
         <span class="ctrl-label">Copies: <span id="copiesValue"></span></span>
         <input type="range" min="1" max="40" step="1" class="slider" id="copiesSlider">
       </div>
 
+
+      <details class="hud-details" open>
+        <summary>Initial conditions</summary>
+        <div class="hud-section">
+          <span class="ctrl-label">Angle 1 (&theta;&#8321;): <span id="theta1Value"></span></span>
+          <input type="range" min="-180" max="180" step="1" class="slider" id="theta1Slider">
+        </div>
+        <div class="hud-section">
+          <span class="ctrl-label">Angle 2 (&theta;&#8322;): <span id="theta2Value"></span></span>
+          <input type="range" min="-180" max="180" step="1" class="slider" id="theta2Slider">
+        </div>
+        <div class="hud-section">
+          <span class="ctrl-label">Spin 1 (&omega;&#8321;): <span id="omega1Value"></span> rad/s</span>
+          <input type="range" min="-10" max="10" step="0.1" class="slider" id="omega1Slider">
+        </div>
+        <div class="hud-section">
+          <span class="ctrl-label">Spin 2 (&omega;&#8322;): <span id="omega2Value"></span> rad/s</span>
+          <input type="range" min="-10" max="10" step="0.1" class="slider" id="omega2Slider">
+        </div>
+      </details>
 
       <details class="hud-details" open>
         <summary>Physics</summary>
@@ -68,8 +100,20 @@
           <input type="range" min="0" max="0.5" step="0.005" class="slider" id="dampingSlider">
         </div>
         <div class="hud-section">
+          <span class="ctrl-label">Arm 1 length: <span id="arm1Value"></span></span>
+          <input type="range" min="0.4" max="1.4" step="0.05" class="slider" id="arm1Slider">
+        </div>
+        <div class="hud-section">
           <span class="ctrl-label">Arm 2 length: <span id="arm2Value"></span></span>
           <input type="range" min="0.4" max="1.4" step="0.05" class="slider" id="arm2Slider">
+        </div>
+        <div class="hud-section">
+          <span class="ctrl-label">Bob 2 mass: <span id="mass2Value"></span></span>
+          <input type="range" min="0.2" max="5" step="0.1" class="slider" id="mass2Slider">
+        </div>
+        <div class="hud-section">
+          <span class="ctrl-label">Spread: <span id="spreadValue"></span> rad</span>
+          <input type="range" min="-6" max="-1" step="1" class="slider" id="spreadSlider">
         </div>
       </details>
 
@@ -83,6 +127,15 @@
         <div class="hud-section">
           <span class="ctrl-label">Trail fade: <span id="fadeSpeedValue"></span>%</span>
           <input type="range" min="1" max="30" step="1" class="slider" id="fadeSpeedSlider">
+        </div>
+      </details>
+
+      <details class="hud-details" open>
+        <summary>Phase portrait</summary>
+        <div class="hud-section">
+          <label><input type="checkbox" id="phaseCheckbox" checked> Show phase portrait</label>
+          <label><input type="radio" name="phasePair" value="t2w2" checked> &theta;&#8322; &times; &omega;&#8322;</label>
+          <label><input type="radio" name="phasePair" value="t1t2"> &theta;&#8321; &times; &theta;&#8322;</label>
         </div>
       </details>
     </div>
