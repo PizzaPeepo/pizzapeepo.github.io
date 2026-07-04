@@ -787,6 +787,7 @@ html.viper .hud-details > summary:hover::before {
 /* Animated expand/collapse — needs ::details-content + interpolate-size
    (Chromium 131+/modern; older browsers snap open, no harm) */
 .hud-details::details-content {
+  display: flow-root; /* BFC: contain first child's margin-top so it animates with block-size instead of escaping and snapping shut at transition end */
   opacity: 0;
   block-size: 0;
   padding-block-end: 0;
