@@ -472,6 +472,15 @@
 	var GLOBE_BASE = 0.004;
 	var gAng = 0;
 
+	/* Scroll reaction — scroll velocity kicks the ring spin like a gyroscope
+	   disturbed, decaying in ~0.3s. Position/scale/brightness stay fixed. */
+	var lastScrollY = window.scrollY, spinKick = 0;
+	window.addEventListener('scroll', function () {
+		var y = window.scrollY;
+		spinKick = Math.min(spinKick + Math.abs(y - lastScrollY) * 0.02, 24.0);
+		lastScrollY = y;
+	}, { passive: true });
+
 	document.querySelectorAll('.card').forEach(function (card) {
 		card.addEventListener('mouseenter', function () { hoverStartTime = performance.now() * 0.001; });
 		card.addEventListener('mouseleave', function () { hoverStartTime = -1; });
@@ -503,7 +512,8 @@
 			var p = elapsed / ACCEL_DUR;
 			speedMult = 1.0 + (PEAK_MULT - 1.0) * Math.sin(p * Math.PI);
 		}
-		var targetSpeed = BASE_SPEED * speedMult;
+		spinKick *= Math.exp(-dt * 2.2);
+		var targetSpeed = BASE_SPEED * (speedMult + spinKick);
 		currentSpeed += (targetSpeed - currentSpeed) * 0.13;
 		accAng += dt * currentSpeed;
 
@@ -550,7 +560,7 @@
 
 		/* globe pass — inside frame(), depth-tested against ring depth */
 		if (progG && window._cardanGlobeVBO) {
-			gAng += GLOBE_BASE * speedMult;
+			gAng += GLOBE_BASE * (speedMult + spinKick);
 			var pulseVal = Math.min((speedMult - 1.0) / (PEAK_MULT - 1.0), 1.0);
 			gl.useProgram(progG);
 			gl.depthMask(false);

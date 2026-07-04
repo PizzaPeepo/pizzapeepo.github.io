@@ -6,8 +6,9 @@ Verify tool: `web-screenshot` skill (PowerShell, not Git Bash).
 ## Phase A — land current work (in working tree now)
 
 - [ ] **A1. Review + commit the cinematic pass** — *diff reviewed 2026-07-04, screenshots green; commit pending (user)*
-  Files already changed: `index.html`, `wavegrid.js` (scroll dolly, IO reveals, iris, sticky
-  filter bar, focus/aria, hero 100svh, overture ripples).
+  Files already changed: `index.html`, `wavegrid.js`, `cardan.js` (scroll dolly with ground
+  travel, IO reveals, iris + return-to-catalog, sticky filter bar, focus/aria, hero 100svh,
+  overture ripples, gimbal scroll spin kick).
   Verify: `git diff` read-through; screenshots already green (hero/grid/mobile, 0 errors).
   Manual spot-check in real browser: scroll feel, card click iris, back button, theme cycle,
   filter FLIP after scrolling only halfway down.

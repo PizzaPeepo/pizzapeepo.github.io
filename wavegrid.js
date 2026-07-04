@@ -20,25 +20,33 @@
     'uniform float uTilt;',
     'uniform float uRise;',
     'uniform float uYaw;',
+    'uniform float uCam;',
+    'uniform float uTravel;',
     'uniform vec4  uRipples[8];',
     'uniform vec3  uTrail[12];',
     'out float vH;',
     'out float vTrail;',
+    'out float vEdge;',
     'out vec2  vScrPos;',
     '',
     'void main() {',
     '  float tilt = uTilt;',
     '  float ct = cos(tilt), st = sin(tilt);',
-    '  float cam  = 4.5;',
+    '  float cam  = uCam;',
     '',
-    '  float w0    = cam / (cam + aPos.y * st + 0.5);',
-    '  vec2 scrPos = vec2((aPos.x - uYaw) * w0 / uAspect, (aPos.y * ct - uRise) * w0);',
+    '  // Dolly travel: camera advances over the plane, rows flow toward the viewer.',
+    '  // World wraps (span 2.8 in y); edge bands fade so recycled rows never pop.',
+    '  float yW = mod(aPos.y - uTravel + 1.1, 2.8) - 1.1;',
+    '  vEdge = smoothstep(-1.10, -0.86, yW) * (1.0 - smoothstep(1.46, 1.70, yW));',
+    '',
+    '  float w0    = cam / (cam + yW * st + 0.5);',
+    '  vec2 scrPos = vec2((aPos.x - uYaw) * w0 / uAspect, (yW * ct - uRise) * w0);',
     '  vScrPos = scrPos;',
     '',
     '  float z = 0.0;',
     '  z += sin(aPos.x * 2.8 + uTime * 0.70) * 0.030;',
-    '  z += sin(aPos.y * 2.2 + uTime * 0.55) * 0.025;',
-    '  z += sin((aPos.x - aPos.y) * 1.8 + uTime * 0.42) * 0.018;',
+    '  z += sin(yW * 2.2 + uTime * 0.55) * 0.025;',
+    '  z += sin((aPos.x - yW) * 1.8 + uTime * 0.42) * 0.018;',
     '',
     '  float md = length(scrPos - uMouse);',
     '  z += sin(md * 8.0 - uTime * 4.0) * exp(-md * 2.0) * 0.15;',
@@ -67,10 +75,10 @@
     '',
     '  vH = z;',
     '',
-    '  vec3 p = vec3(aPos.x, aPos.y * ct - z * st, aPos.y * st + z * ct);',
+    '  vec3 p = vec3(aPos.x, yW * ct - z * st, yW * st + z * ct);',
     '  float w = cam / (cam + p.z + 0.5);',
     '  gl_Position  = vec4((p.x - uYaw) * w / uAspect, (p.y - uRise) * w, 0.0, 1.0);',
-    '  gl_PointSize = clamp(w * 2.8, 1.0, 5.0);',
+    '  gl_PointSize = clamp(w * 2.8, 1.0, 6.0);',
     '}'
   ].join('\n');
 
@@ -80,6 +88,7 @@
     'precision highp float;',
     'in float vH;',
     'in float vTrail;',
+    'in float vEdge;',
     'in vec2  vScrPos;',
     'uniform float uTime;',
     'uniform float uLight;',
@@ -129,7 +138,7 @@
     '  float aBase = mix(0.12 + t * 0.50, 0.72 + t * 0.26, uLight);',
     '  float a = mix(aBase, 0.07 + t * 0.32, uViper) * soft;',
     '  a = mix(a, soft * 0.95, vTrail * 0.65);',
-    '  fragColor = vec4(col, min(a * (1.0 + uViper * 0.8), 0.98));',
+    '  fragColor = vec4(col, min(a * (1.0 + uViper * 0.8), 0.98) * vEdge);',
     '}'
   ].join('\n');
 
@@ -207,6 +216,8 @@
     uTilt:    gl.getUniformLocation(prog, 'uTilt'),
     uRise:    gl.getUniformLocation(prog, 'uRise'),
     uYaw:     gl.getUniformLocation(prog, 'uYaw'),
+    uCam:     gl.getUniformLocation(prog, 'uCam'),
+    uTravel:  gl.getUniformLocation(prog, 'uTravel'),
     uViper:   gl.getUniformLocation(prog, 'uViper'),
     uRipples: gl.getUniformLocation(prog, 'uRipples[0]'),
     uTrail:   gl.getUniformLocation(prog, 'uTrail[0]'),
@@ -294,9 +305,11 @@
     gl.uniform1f(LOC.uLight,  lite);
     scrollCur += (scrollTgt - scrollCur) * 0.055;
     yawCur    += (yawTgt    - yawCur)    * 0.045;
-    gl.uniform1f(LOC.uTilt, 0.48 + scrollCur * 0.17);
-    gl.uniform1f(LOC.uRise, 0.08 + scrollCur * 0.26);
-    gl.uniform1f(LOC.uYaw,  yawCur);
+    gl.uniform1f(LOC.uTilt,   0.48 + scrollCur * 0.24);
+    gl.uniform1f(LOC.uRise,   0.08 + scrollCur * 0.20);
+    gl.uniform1f(LOC.uYaw,    yawCur);
+    gl.uniform1f(LOC.uCam,    4.5  - scrollCur * 1.9);
+    gl.uniform1f(LOC.uTravel, scrollCur * 1.35);
     gl.uniform1f(LOC.uViper,  vip);
     gl.uniform4fv(LOC.uRipples, ripData);
     gl.uniform3fv(LOC.uTrail,   trailData);
