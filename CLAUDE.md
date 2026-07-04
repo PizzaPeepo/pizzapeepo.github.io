@@ -50,6 +50,16 @@ helper to wire HUD sliders. Standard hotkeys: Space=pause, R=reset, S=save-PNG.
 Compute-heavy demos (Waves, ReactionDiffusion, Voronoi, Physarum) simulate on a low-res
 offscreen buffer + typed array, then `drawImage`-scale up to the visible canvas.
 
+**HUD panel grouping**: group related sliders/checkboxes/radios into collapsible
+`<details class="hud-details"><summary>Group name</summary>...</details>` sections (see
+`CSS/theme.css` `.hud-details` rules) instead of one long flat list of `.hud-section`s.
+Put a `<div class="hud-divider"></div>` between every `hud-details` block, and between a
+top-level (ungrouped) section and the next `hud-details` block — same as the divider already
+used before `Actions`. Keep frequently-used/mode-select controls (Actions, primary count
+slider, mode radios, hint text) as top-level `.hud-section`s, not inside a `details`. Mark
+the primary/most-used group(s) `open` by default; secondary/advanced groups collapsed. Apply
+this to every new demo's HUD panel and when editing an existing one.
+
 ### Animation Loop
 `window.requestAnimationFrame(draw)` recursive. FPS throttling uses `Date.now()` deltas, not `setInterval`.
 
