@@ -76,7 +76,7 @@ let resScale = 1;             // internal resolution scale (0.4–1)
 const EXTRA_MESH_CAP = 300000; // hide dust/secondary-lens passes above this count
 let preBH = null;             // knob snapshot to restore when leaving the blackhole preset
 const BH_RIN = 45, BH_ROUT = 250; // accretion-disk annulus, sim units
-const COLOR_LABELS = ['Color: Speed', 'Color: Radius', 'Color: Galaxy'];
+const COLOR_LABELS = ['Color: Speed', 'Color: Radius', 'Color: Galaxy', 'Color: Heatmap'];
 
 // ── movable cores (≤4 massive bodies; core physics on the CPU always — N is tiny) ──
 // Each: {x,y,z, vx,vy,vz, frac, mass}; mass = coreMass·frac, kept in sync by the slider.
@@ -166,7 +166,7 @@ const camRightU = uniform(new THREE.Vector3(1, 0, 0)); // camera basis, set per 
 const camUpU = uniform(new THREE.Vector3(0, 1, 0));
 const streakU = uniform(0.02);      // velocity-stretch factor (long-exposure streaks)
 const densNormU = uniform(1.0);     // adaptive density → brightness normalization
-const colorModeU = uniform(0);      // 0 = speed ramp, 1 = radius/temperature, 2 = galaxy ID
+const colorModeU = uniform(0);      // 0 = speed ramp, 1 = radius/temperature, 2 = galaxy ID, 3 = density heatmap
 const corePosU = uniform(new THREE.Vector3()); // primary core, set per frame (radius ramp + lens center)
 const camPosU = uniform(new THREE.Vector3()); // camera position, set per frame (lens + Doppler)
 const lensU = uniform(0);           // point-lens strength (scales Einstein angle²); 0 = off
@@ -208,6 +208,7 @@ let meshGPU, geoGPU, meshDustGPU, geoDustGPU;       // GPU-path render objects (
 let meshLensCPU = null, meshLensGPU = null;         // secondary lensed image (θ₋ branch)
 let postProcessing, scenePass;
 let afterImageNode = null, bloomNode = null, rttNode = null, dofNode = null, asciiRtt = null, asciiGlowRtt = null;
+let asciiTrailRtt = null, asciiTrailNode = null; // glyph-level phosphor persistence (ASCII mode)
 let instPos, instVel, instDens; // InstancedBufferAttributes streamed each frame (CPU path)
 let instVarCPU = null, instVarGPU = null; // static per-particle variation (z = galaxy ID)
 let gpuReady = false;
@@ -963,8 +964,18 @@ function makeSplatMaterial(posNode, velNode, densNode, varNode, isDust, imageSig
 			// galaxy mode: second population gets a violet-pink ramp, keyed by instVar.z
 			const rampB = mix(mix(color(0x7a2cff), color(0xff5ad0), t1), color(0xffd9f0), t2);
 			const rampGalaxy = mix(rampSpeed, rampB, varNode.z);
+			// heatmap mode: local density → thermal palette (FluidSimulation's heatRamp)
+			const hT = densNode.mul(densNormU).mul(1.5).saturate().pow(0.75);
+			let hc = mix(vec3(0.0), vec3(0.0, 0.12, 0.70), smoothstep(0.00, 0.16, hT));
+			hc = mix(hc, vec3(0.0, 0.55, 1.0), smoothstep(0.16, 0.32, hT));
+			hc = mix(hc, vec3(0.0, 1.0, 1.0), smoothstep(0.32, 0.46, hT));
+			hc = mix(hc, vec3(0.85, 0.95, 1.0), smoothstep(0.46, 0.56, hT));
+			hc = mix(hc, vec3(1.0, 1.0, 0.0), smoothstep(0.56, 0.71, hT));
+			hc = mix(hc, vec3(1.0, 0.45, 0.0), smoothstep(0.71, 0.84, hT));
+			const rampHeat = mix(hc, vec3(1.0, 0.0, 0.0), smoothstep(0.84, 1.00, hT));
 			const ramp = colorModeU.lessThan(0.5).select(rampSpeed,
-				colorModeU.lessThan(1.5).select(rampRadius, rampGalaxy));
+				colorModeU.lessThan(1.5).select(rampRadius,
+				colorModeU.lessThan(2.5).select(rampGalaxy, rampHeat)));
 			// local density → brightness: clumps and the core glow hot, halo stays faint
 			const b = densNode.mul(densNormU).saturate().pow(0.5);
 			// Doppler beaming: the approaching side of the disk brightens
@@ -1289,7 +1300,7 @@ async function init() {
 	}
 	if (q.has('preset') && FRAMINGS[q.get('preset')]) applyPreset(q.get('preset'));
 	if (q.has('color')) {
-		const n = (+q.get('color') || 0) % 3;
+		const n = (+q.get('color') || 0) % 4;
 		for (let i = 0; i < n; i++) document.getElementById('colorButton').click();
 	}
 	if (q.has('dust')) {
@@ -1317,6 +1328,8 @@ function buildPost() {
 	if (rttNode) { rttNode.dispose?.(); rttNode = null; }
 	if (asciiRtt) { asciiRtt.dispose?.(); asciiRtt = null; }
 	if (asciiGlowRtt) { asciiGlowRtt.dispose?.(); asciiGlowRtt = null; }
+	if (asciiTrailRtt) { asciiTrailRtt.dispose?.(); asciiTrailRtt = null; }
+	if (asciiTrailNode) { asciiTrailNode.dispose?.(); asciiTrailNode = null; }
 
 	let node = scenePass.getTextureNode('output');
 	if (trailFade > 0) {
@@ -1359,9 +1372,14 @@ function buildPost() {
 		col.addAssign(g.sub(0.5).mul(0.025));
 		return vec4(col, 1.0);
 	})();
-	postProcessing.outputNode = asciiOn
-		? makeGlowNode(asciiGlowRtt = rtt(makeAsciiNode(asciiRtt = rtt(gradeNode))))
-		: gradeNode;
+	if (asciiOn) {
+		let a = makeAsciiNode(asciiRtt = rtt(gradeNode));
+		// glyph-level phosphor persistence: afterimage over the glyph bitmap (fluid's asciiFade)
+		if (asciiPersist > 0) a = asciiTrailNode = afterImage(asciiTrailRtt = rtt(a), asciiPersist);
+		postProcessing.outputNode = makeGlowNode(asciiGlowRtt = rtt(a));
+	} else {
+		postProcessing.outputNode = gradeNode;
+	}
 	postProcessing.needsUpdate = true;
 }
 
@@ -1372,7 +1390,8 @@ const ASCII_GP = 16;             // Web437_ATI_9x16 native glyph grid (px)
 const ASCII_GP_X = 9;            // glyph cell width = ink width
 const ASCII_GP_Y = 16;           // glyph cell height
 const ASCII_SS = 8;              // supersample factor for the coverage threshold
-const ASCII_GLOW_AMOUNT = 0.4;   // glyph-bloom halo strength (fluid's ASCII_GLOW_AMOUNT)
+const glowAmountU = uniform(0.4); // glyph-bloom halo strength (fluid's ASCII_GLOW_AMOUNT, HUD slider)
+let asciiPersist = 0.85;          // glyph phosphor persistence, 0 = off (fluid's ASCII_PERSIST)
 let asciiAtlasTex = null;
 
 // Built with the monospace fallback until the bitmap web-font loads, then rebuilt once.
@@ -1454,7 +1473,7 @@ function makeGlowNode(srcTex) {
 			wsum += w;
 			acc.addAssign(srcTex.sample(screenUV.add(vec2(bx * 1.5, by * 1.5).div(screenSize))).rgb.mul(w));
 		}
-		return vec4(col.add(acc.div(wsum).mul(ASCII_GLOW_AMOUNT)), 1.0);
+		return vec4(col.add(acc.div(wsum).mul(glowAmountU)), 1.0);
 	})();
 }
 
@@ -1592,6 +1611,13 @@ function wireUI() {
 		if ((v > 0) !== wasOn) buildPost();
 		else if (afterImageNode && afterImageNode.damp) afterImageNode.damp.value = v;
 	}, v => v === 0 ? 'Off' : v.toFixed(2));
+	bindNum('glowSlider', 'glowValue', v => glowAmountU.value = v, v => v === 0 ? 'Off' : v.toFixed(2));
+	bindNum('persistSlider', 'persistValue', v => {
+		const wasOn = asciiPersist > 0;
+		asciiPersist = v;
+		if ((v > 0) !== wasOn) { if (asciiOn) buildPost(); }
+		else if (asciiTrailNode && asciiTrailNode.damp) asciiTrailNode.damp.value = v;
+	}, v => v === 0 ? 'Off' : v.toFixed(2));
 
 	const countSl = document.getElementById('countSlider');
 	const updateCount = () => {
@@ -1613,7 +1639,7 @@ function wireUI() {
 		retroBtn.textContent = clashRetro ? 'Galaxy 2: Retrograde' : 'Galaxy 2: Prograde';
 		if (currentPreset === 'galaxy') reset();
 	});
-	document.getElementById('colorButton').addEventListener('click', () => setColorMode((colorMode + 1) % 3));
+	document.getElementById('colorButton').addEventListener('click', () => setColorMode((colorMode + 1) % 4));
 	bindNum('lensSlider', 'lensValue', v => { lensStrength = v; updateLensVis(); }, v => v === 0 ? 'Off' : v.toFixed(2));
 	bindNum('dragSlider', 'dragValue', v => drag = v, v => v === 0 ? 'Off' : v.toFixed(4));
 	bindNum('dmSlider', 'dmValue', v => darkMatter = v, v => v === 0 ? 'Off' : v.toFixed(2));

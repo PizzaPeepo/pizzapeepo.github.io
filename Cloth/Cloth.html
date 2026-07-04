@@ -45,43 +45,49 @@
       <span class="ctrl-label">Left-drag grabs · right-drag tears</span>
     </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Mesh density: <span id="densityValue"></span></span>
-      <input type="range" min="10" max="60" step="1" class="slider" id="densitySlider">
-    </div>
+    <details class="hud-details" open>
+      <summary>Physics</summary>
+      <div class="hud-section">
+        <span class="ctrl-label">Mesh density: <span id="densityValue"></span></span>
+        <input type="range" min="10" max="60" step="1" class="slider" id="densitySlider">
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Gravity: <span id="gravityValue"></span></span>
-      <input type="range" min="0" max="1.2" step="0.02" class="slider" id="gravitySlider">
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Gravity: <span id="gravityValue"></span></span>
+        <input type="range" min="0" max="1.2" step="0.02" class="slider" id="gravitySlider">
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Stiffness: <span id="stiffnessValue"></span></span>
-      <input type="range" min="1" max="8" step="1" class="slider" id="stiffnessSlider">
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Stiffness: <span id="stiffnessValue"></span></span>
+        <input type="range" min="1" max="8" step="1" class="slider" id="stiffnessSlider">
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Tear threshold: <span id="tearValue"></span></span>
-      <input type="range" min="1.5" max="8" step="0.1" class="slider" id="tearSlider">
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Tear threshold: <span id="tearValue"></span></span>
+        <input type="range" min="1.5" max="8" step="0.1" class="slider" id="tearSlider">
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Wind: <span id="windValue"></span></span>
-      <input type="range" min="0" max="60" step="1" class="slider" id="windSlider">
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Wind: <span id="windValue"></span></span>
+        <input type="range" min="0" max="60" step="1" class="slider" id="windSlider">
+      </div>
+    </details>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Pinning</span>
-      <label><input type="radio" name="pin" value="top" checked> Top edge</label>
-      <label><input type="radio" name="pin" value="corners"> Top corners</label>
-      <label><input type="radio" name="pin" value="sides"> Both top + sides</label>
-    </div>
+    <details class="hud-details">
+      <summary>Setup</summary>
+      <div class="hud-section">
+        <span class="ctrl-label">Pinning</span>
+        <label><input type="radio" name="pin" value="top" checked> Top edge</label>
+        <label><input type="radio" name="pin" value="corners"> Top corners</label>
+        <label><input type="radio" name="pin" value="sides"> Both top + sides</label>
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Draw</span>
-      <label><input type="radio" name="draw" value="mesh" checked> Mesh + strain</label>
-      <label><input type="radio" name="draw" value="solid"> Shaded surface</label>
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Draw</span>
+        <label><input type="radio" name="draw" value="mesh" checked> Mesh + strain</label>
+        <label><input type="radio" name="draw" value="solid"> Shaded surface</label>
+      </div>
+    </details>
 
     <div class="hud-divider"></div>
 

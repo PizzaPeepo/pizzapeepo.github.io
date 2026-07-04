@@ -250,75 +250,6 @@
       </div>
     </div>
 
-    <div class="hud-divider"></div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Colour theme</span>
-      <label><input type="radio" name="preset" value="neon" checked> Neon</label>
-      <label><input type="radio" name="preset" value="mono"> Monochrome</label>
-      <label><input type="radio" name="preset" value="geoblue"> Geometric Neon Blue</label>
-      <label><input type="radio" name="preset" value="lights"> Lights</label>
-      <label><input type="radio" name="preset" value="hyperpop"> Hyperpop</label>
-      <label><input type="radio" name="preset" value="orchid"> Electric Orchid</label>
-      <label><input type="radio" name="preset" value="rave"> Cyber Pastel Rave</label>
-      <label><input type="radio" name="preset" value="custom"> Custom</label>
-    </div>
-
-    <div class="hud-divider"></div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Team names &amp; colours</span>
-      <div id="pwTeamControls"></div>
-    </div>
-
-    <div class="hud-divider"></div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Cell size: <span id="cellValue"></span>px</span>
-      <input type="range" min="8" max="48" step="1" class="slider" id="cellSlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Ball speed: <span id="speedValue"></span></span>
-      <input type="range" min="2" max="16" step="0.5" class="slider" id="speedSlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Balls per team: <span id="ballsValue"></span></span>
-      <input type="range" min="1" max="8" step="1" class="slider" id="ballsSlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Field saturation: <span id="satValue"></span></span>
-      <input type="range" min="20" max="100" step="1" class="slider" id="satSlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Options</span>
-      <label><input type="checkbox" id="glowCheckbox" checked> Ball glow</label>
-      <label><input type="checkbox" id="neonCheckbox" checked> Neo-Tokyo style</label>
-      <label><input type="checkbox" id="trailCheckbox" checked> Comet trails</label>
-      <label><input type="checkbox" id="crtCheckbox" checked> CRT overlay</label>
-      <label><input type="checkbox" id="gridCheckbox" checked> Grid lines</label>
-      <label><input type="checkbox" id="bloomCheckbox" checked> Bloom glow</label>
-      <label><input type="checkbox" id="scoreCheckbox" checked> Show scoreboard</label>
-      <label><input type="checkbox" id="autoCheckbox" checked> Auto-restart rounds</label>
-    </div>
-
-    <div class="hud-divider"></div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Game area</span>
-      <div class="pw-size-row" id="gameSizeRow">
-        <input type="number" id="gameWidthInput" min="200" max="3840" step="10" value="1000">
-        <span>×</span>
-        <input type="number" id="gameHeightInput" min="200" max="2160" step="10" value="1000">
-        <button id="applySizeBtn">Apply</button>
-      </div>
-    </div>
-
-    <div class="hud-divider"></div>
-
     <div class="hud-section">
       <span class="ctrl-label">Actions</span>
       <button id="pauseButton">Pause (Space)</button>
@@ -329,14 +260,90 @@
 
     <div class="hud-divider"></div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Power-ups</span>
-      <div id="pwPowerups"></div>
-      <div class="pw-btn-row" style="margin-top: 8px;">
-        <button id="testBanner">Banner</button>
-        <button id="testShake">Shake</button>
+    <details class="hud-details" open>
+      <summary>Appearance</summary>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Colour theme</span>
+        <label><input type="radio" name="preset" value="neon" checked> Neon</label>
+        <label><input type="radio" name="preset" value="mono"> Monochrome</label>
+        <label><input type="radio" name="preset" value="geoblue"> Geometric Neon Blue</label>
+        <label><input type="radio" name="preset" value="lights"> Lights</label>
+        <label><input type="radio" name="preset" value="hyperpop"> Hyperpop</label>
+        <label><input type="radio" name="preset" value="orchid"> Electric Orchid</label>
+        <label><input type="radio" name="preset" value="rave"> Cyber Pastel Rave</label>
+        <label><input type="radio" name="preset" value="custom"> Custom</label>
       </div>
-    </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Team names &amp; colours</span>
+        <div id="pwTeamControls"></div>
+      </div>
+    </details>
+
+    <details class="hud-details" open>
+      <summary>Gameplay</summary>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Cell size: <span id="cellValue"></span>px</span>
+        <input type="range" min="8" max="48" step="1" class="slider" id="cellSlider">
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Ball speed: <span id="speedValue"></span></span>
+        <input type="range" min="2" max="16" step="0.5" class="slider" id="speedSlider">
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Balls per team: <span id="ballsValue"></span></span>
+        <input type="range" min="1" max="8" step="1" class="slider" id="ballsSlider">
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Field saturation: <span id="satValue"></span></span>
+        <input type="range" min="20" max="100" step="1" class="slider" id="satSlider">
+      </div>
+    </details>
+
+    <details class="hud-details">
+      <summary>Display &amp; effects</summary>
+
+      <div class="hud-section">
+        <label><input type="checkbox" id="glowCheckbox" checked> Ball glow</label>
+        <label><input type="checkbox" id="neonCheckbox" checked> Neo-Tokyo style</label>
+        <label><input type="checkbox" id="trailCheckbox" checked> Comet trails</label>
+        <label><input type="checkbox" id="crtCheckbox" checked> CRT overlay</label>
+        <label><input type="checkbox" id="gridCheckbox" checked> Grid lines</label>
+        <label><input type="checkbox" id="bloomCheckbox" checked> Bloom glow</label>
+        <label><input type="checkbox" id="scoreCheckbox" checked> Show scoreboard</label>
+        <label><input type="checkbox" id="autoCheckbox" checked> Auto-restart rounds</label>
+      </div>
+    </details>
+
+    <details class="hud-details">
+      <summary>Game area</summary>
+
+      <div class="hud-section">
+        <div class="pw-size-row" id="gameSizeRow">
+          <input type="number" id="gameWidthInput" min="200" max="3840" step="10" value="1000">
+          <span>×</span>
+          <input type="number" id="gameHeightInput" min="200" max="2160" step="10" value="1000">
+          <button id="applySizeBtn">Apply</button>
+        </div>
+      </div>
+    </details>
+
+    <details class="hud-details">
+      <summary>Power-ups</summary>
+
+      <div class="hud-section">
+        <div id="pwPowerups"></div>
+        <div class="pw-btn-row" style="margin-top: 8px;">
+          <button id="testBanner">Banner</button>
+          <button id="testShake">Shake</button>
+        </div>
+      </div>
+    </details>
 
   </aside>
 

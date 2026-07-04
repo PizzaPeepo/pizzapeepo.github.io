@@ -100,147 +100,166 @@
     </div>
 
     <div class="hud-section">
-      <span class="ctrl-label">Obstacle presets</span>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
-        <button id="presetCylinder">Cylinder</button>
-        <button id="presetAirfoil">Airfoil</button>
-        <button id="presetSlit">Double slit</button>
-        <button id="presetFunnel">Funnel</button>
-      </div>
-      <button id="clearObstaclesButton">Clear obstacles</button>
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Obstacle brush: <span id="brushValue"></span></span>
-      <input type="range" min="0.01" max="0.12" step="0.005" value="0.015" class="slider" id="brushSlider">
-    </div>
-
-    <div class="hud-divider"></div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Vorticity (curl): <span id="curlValue"></span></span>
-      <input type="range" min="0" max="50" step="1" value="17" class="slider" id="curlSlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Velocity dissipation: <span id="velDissValue"></span></span>
-      <input type="range" min="0" max="4" step="0.05" value="1.05" class="slider" id="velDissSlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Dye dissipation: <span id="denDissValue"></span></span>
-      <input type="range" min="0" max="4" step="0.05" value="1.50" class="slider" id="denDissSlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Pressure: <span id="pressureValue"></span></span>
-      <input type="range" min="0" max="1" step="0.05" value="0.4" class="slider" id="pressureSlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Pressure iterations: <span id="iterValue"></span></span>
-      <input type="range" min="10" max="50" step="1" value="40" class="slider" id="iterSlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Splat radius: <span id="splatRadiusValue"></span></span>
-      <input type="range" min="0.05" max="1" step="0.05" value="0.80" class="slider" id="splatRadiusSlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Splat force: <span id="splatForceValue"></span></span>
-      <input type="range" min="1000" max="12000" step="500" value="12000" class="slider" id="splatForceSlider">
-    </div>
-
-    <div class="hud-divider"></div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Resolution</span>
-      <span class="ctrl-label" style="font-size:0.8em;">Sim: <span id="simResValue"></span></span>
-      <input type="range" min="64" max="256" step="64" value="128" class="slider" id="simResSlider">
-      <span class="ctrl-label" style="font-size:0.8em;">Dye: <span id="dyeResValue"></span></span>
-      <input type="range" min="512" max="2048" step="512" value="2048" class="slider" id="dyeResSlider">
-    </div>
-
-    <div class="hud-divider"></div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Colour mode</span>
-      <label><input type="radio" name="colorMode" value="velocity" checked> By velocity</label>
-      <label><input type="radio" name="colorMode" value="heat"> Heatmap</label>
-      <label><input type="radio" name="colorMode" value="neon"> Neon</label>
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Sunrays weight: <span id="sunraysWeightValue"></span></span>
-      <input type="range" min="0" max="2" step="0.05" value="0.15" class="slider" id="sunraysWeightSlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Options</span>
-      <label><input type="checkbox" id="emitterToggle"> Windtunnel</label>
-    </div>
-
-    <div class="hud-divider"></div>
-
-    <div class="hud-section" style="gap:10px;">
-      <span class="ctrl-label">ASCII mode</span>
-      <label><input type="checkbox" id="asciiToggle"> Render as ASCII (A)</label>
-      <span class="ctrl-label" style="font-size:0.8em;">Columns: <span id="asciiColsValue"></span></span>
-      <input type="range" min="40" max="320" step="20" value="60" class="slider" id="asciiColsSlider">
-      <span class="ctrl-label" style="font-size:0.8em;">Persistence: <span id="asciiPersistValue"></span></span>
-      <input type="range" min="0" max="0.97" step="0.01" value="0.85" class="slider" id="asciiPersistSlider">
-      <span class="ctrl-label" style="font-size:0.8em;">Glow: <span id="asciiGlowAmountValue"></span></span>
-      <input type="range" min="0" max="4" step="0.1" value="1.8" class="slider" id="asciiGlowAmountSlider">
-      <span class="ctrl-label" style="font-size:0.8em;">Dissipation jitter: <span id="asciiJitterValue"></span></span>
-      <input type="range" min="0" max="1" step="0.01" value="0.03" class="slider" id="asciiJitterSlider">
-      <span class="ctrl-label" style="font-size:0.8em;margin-top:6px;">Glyph ramp (sparse→dense):</span>
-      <input type="text" id="asciiRampInput" spellcheck="false" autocomplete="off" value=" ,:;-~=+*ix-/x\\A2-rs/\\-h235A/-\\SGBMH-/\\-#B%$89@" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:0.8em;padding:4px 6px;background:rgba(0,0,0,0.25);color:inherit;border:1px solid rgba(255,255,255,0.2);border-radius:4px;">
-    </div>
-
-    <div class="hud-divider"></div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Glyph mode</span>
-      <label><input type="radio" name="glyphMode" value="density" checked> Density ramp</label>
-      <label><input type="radio" name="glyphMode" value="edge"> Edge / contour</label>
-      <label><input type="radio" name="glyphMode" value="braille"> Braille (2×4 subpixel)</label>
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Phosphor palette</span>
-      <label><input type="radio" name="phosphorMode" value="color" checked> Full colour</label>
-      <label><input type="radio" name="phosphorMode" value="green"> P1 green</label>
-    </div>
-
-    <div class="hud-divider"></div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Inject text</span>
-      <input type="text" id="injectTextInput" spellcheck="false" autocomplete="off" placeholder="type a word + Enter" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:0.8em;padding:4px 6px;background:rgba(0,0,0,0.25);color:inherit;border:1px solid rgba(255,255,255,0.2);border-radius:4px;">
-      <button id="injectTextButton">Stamp text into dye</button>
-    </div>
-
-    <div class="hud-divider"></div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Scenes</span>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
-        <button id="sceneDefault">Default</button>
-        <button id="sceneMatrix">Matrix</button>
-        <button id="audioButton">♪ Audio</button>
-      </div>
-    </div>
-
-    <div class="hud-divider"></div>
-
-    <div class="hud-section">
       <span class="ctrl-label">Actions</span>
       <button id="splatButton">Random splats (P)</button>
       <button id="pauseButton">Pause (Space)</button>
       <button id="clearDyeButton">Clear dye (C)</button>
       <button id="resetButton">Reset (R)</button>
     </div>
+
+    <div class="hud-divider"></div>
+
+
+    <details class="hud-details" open>
+      <summary>Fluid</summary>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Vorticity (curl): <span id="curlValue"></span></span>
+        <input type="range" min="0" max="50" step="1" value="17" class="slider" id="curlSlider">
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Velocity dissipation: <span id="velDissValue"></span></span>
+        <input type="range" min="0" max="4" step="0.05" value="1.05" class="slider" id="velDissSlider">
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Dye dissipation: <span id="denDissValue"></span></span>
+        <input type="range" min="0" max="4" step="0.05" value="1.50" class="slider" id="denDissSlider">
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Pressure: <span id="pressureValue"></span></span>
+        <input type="range" min="0" max="1" step="0.05" value="0.4" class="slider" id="pressureSlider">
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Splat radius: <span id="splatRadiusValue"></span></span>
+        <input type="range" min="0.05" max="1" step="0.05" value="0.80" class="slider" id="splatRadiusSlider">
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Splat force: <span id="splatForceValue"></span></span>
+        <input type="range" min="1000" max="12000" step="500" value="12000" class="slider" id="splatForceSlider">
+      </div>
+    </details>
+
+    <div class="hud-divider"></div>
+
+    <details class="hud-details">
+      <summary>Obstacles</summary>
+
+      <div class="hud-section">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+          <button id="presetCylinder">Cylinder</button>
+          <button id="presetAirfoil">Airfoil</button>
+          <button id="presetSlit">Double slit</button>
+          <button id="presetFunnel">Funnel</button>
+        </div>
+        <button id="clearObstaclesButton">Clear obstacles</button>
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Obstacle brush: <span id="brushValue"></span></span>
+        <input type="range" min="0.01" max="0.12" step="0.005" value="0.015" class="slider" id="brushSlider">
+      </div>
+    </details>
+
+    <div class="hud-divider"></div>
+
+    <details class="hud-details">
+      <summary>Rendering</summary>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Colour mode</span>
+        <label><input type="radio" name="colorMode" value="velocity" checked> By velocity</label>
+        <label><input type="radio" name="colorMode" value="heat"> Heatmap</label>
+        <label><input type="radio" name="colorMode" value="neon"> Neon</label>
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Sunrays weight: <span id="sunraysWeightValue"></span></span>
+        <input type="range" min="0" max="2" step="0.05" value="0.15" class="slider" id="sunraysWeightSlider">
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Options</span>
+        <label><input type="checkbox" id="emitterToggle"> Windtunnel</label>
+      </div>
+    </details>
+
+    <div class="hud-divider"></div>
+
+    <details class="hud-details">
+      <summary>ASCII mode</summary>
+
+      <div class="hud-section" style="gap:10px;">
+        <label><input type="checkbox" id="asciiToggle"> Render as ASCII (A)</label>
+        <span class="ctrl-label" style="font-size:0.8em;">Columns: <span id="asciiColsValue"></span></span>
+        <input type="range" min="40" max="320" step="20" value="60" class="slider" id="asciiColsSlider">
+        <span class="ctrl-label" style="font-size:0.8em;">Persistence: <span id="asciiPersistValue"></span></span>
+        <input type="range" min="0" max="0.97" step="0.01" value="0.85" class="slider" id="asciiPersistSlider">
+        <span class="ctrl-label" style="font-size:0.8em;">Glow: <span id="asciiGlowAmountValue"></span></span>
+        <input type="range" min="0" max="4" step="0.1" value="1.8" class="slider" id="asciiGlowAmountSlider">
+        <span class="ctrl-label" style="font-size:0.8em;">Dissipation jitter: <span id="asciiJitterValue"></span></span>
+        <input type="range" min="0" max="1" step="0.01" value="0.03" class="slider" id="asciiJitterSlider">
+        <span class="ctrl-label" style="font-size:0.8em;margin-top:6px;">Glyph ramp (sparse→dense):</span>
+        <input type="text" id="asciiRampInput" spellcheck="false" autocomplete="off" value=" ,:;-~=+*ix-/x\\A2-rs/\\-h235A/-\\SGBMH-/\\-#B%$89@" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:0.8em;padding:4px 6px;background:rgba(0,0,0,0.25);color:inherit;border:1px solid rgba(255,255,255,0.2);border-radius:4px;">
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Glyph mode</span>
+        <label><input type="radio" name="glyphMode" value="density" checked> Density ramp</label>
+        <label><input type="radio" name="glyphMode" value="edge"> Edge / contour</label>
+        <label><input type="radio" name="glyphMode" value="braille"> Braille (2×4 subpixel)</label>
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Phosphor palette</span>
+        <label><input type="radio" name="phosphorMode" value="color" checked> Full colour</label>
+        <label><input type="radio" name="phosphorMode" value="green"> P1 green</label>
+      </div>
+    </details>
+
+    <div class="hud-divider"></div>
+
+    <details class="hud-details">
+      <summary>Text &amp; scenes</summary>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Inject text</span>
+        <input type="text" id="injectTextInput" spellcheck="false" autocomplete="off" placeholder="type a word + Enter" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:0.8em;padding:4px 6px;background:rgba(0,0,0,0.25);color:inherit;border:1px solid rgba(255,255,255,0.2);border-radius:4px;">
+        <button id="injectTextButton">Stamp text into dye</button>
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Scenes</span>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+          <button id="sceneDefault">Default</button>
+          <button id="sceneMatrix">Matrix</button>
+          <button id="audioButton">♪ Audio</button>
+        </div>
+      </div>
+    </details>
+
+    <div class="hud-divider"></div>
+
+    <details class="hud-details">
+      <summary>Performance</summary>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Resolution</span>
+        <span class="ctrl-label" style="font-size:0.8em;">Sim: <span id="simResValue"></span></span>
+        <input type="range" min="64" max="256" step="64" value="128" class="slider" id="simResSlider">
+        <span class="ctrl-label" style="font-size:0.8em;">Dye: <span id="dyeResValue"></span></span>
+        <input type="range" min="512" max="2048" step="512" value="2048" class="slider" id="dyeResSlider">
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Pressure iterations: <span id="iterValue"></span></span>
+        <input type="range" min="10" max="50" step="1" value="40" class="slider" id="iterSlider">
+      </div>
+    </details>
 
     <div class="hud-divider"></div>
 

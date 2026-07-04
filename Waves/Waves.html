@@ -44,47 +44,53 @@
       <span class="ctrl-label">Click to add a source · right-click removes the nearest</span>
     </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Wavelength: <span id="wavelengthValue"></span>px</span>
-      <input type="range" min="20" max="200" step="2" class="slider" id="wavelengthSlider">
-    </div>
+    <details class="hud-details" open>
+      <summary>Wave physics</summary>
+      <div class="hud-section">
+        <span class="ctrl-label">Wavelength: <span id="wavelengthValue"></span>px</span>
+        <input type="range" min="20" max="200" step="2" class="slider" id="wavelengthSlider">
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Speed: <span id="speedValue"></span></span>
-      <input type="range" min="0" max="4" step="0.05" class="slider" id="speedSlider">
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Speed: <span id="speedValue"></span></span>
+        <input type="range" min="0" max="4" step="0.05" class="slider" id="speedSlider">
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Falloff: <span id="falloffValue"></span></span>
-      <input type="range" min="0" max="100" step="1" class="slider" id="falloffSlider">
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Falloff: <span id="falloffValue"></span></span>
+        <input type="range" min="0" max="100" step="1" class="slider" id="falloffSlider">
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Resolution: <span id="resValue"></span></span>
-      <input type="range" min="120" max="420" step="20" class="slider" id="resSlider">
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Resolution: <span id="resValue"></span></span>
+        <input type="range" min="120" max="420" step="20" class="slider" id="resSlider">
+      </div>
+    </details>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Palette</span>
-      <label><input type="radio" name="palette" value="ocean" checked> Ocean</label>
-      <label><input type="radio" name="palette" value="thermal"> Thermal</label>
-      <label><input type="radio" name="palette" value="mono"> Greyscale</label>
-    </div>
+    <details class="hud-details">
+      <summary>Display</summary>
+      <div class="hud-section">
+        <span class="ctrl-label">Palette</span>
+        <label><input type="radio" name="palette" value="ocean" checked> Ocean</label>
+        <label><input type="radio" name="palette" value="thermal"> Thermal</label>
+        <label><input type="radio" name="palette" value="mono"> Greyscale</label>
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Options</span>
-      <label><input type="checkbox" id="markerCheckbox" checked> Show source markers</label>
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Options</span>
+        <label><input type="checkbox" id="markerCheckbox" checked> Show source markers</label>
+      </div>
+    </details>
 
-    <div class="hud-divider"></div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Sources</span>
-      <button id="twoButton">Two sources (classic)</button>
-      <button id="threeButton">Three sources</button>
-      <button id="lineButton">Linear array</button>
-      <button id="clearButton">Clear</button>
-    </div>
+    <details class="hud-details">
+      <summary>Sources</summary>
+      <div class="hud-section">
+        <button id="twoButton">Two sources (classic)</button>
+        <button id="threeButton">Three sources</button>
+        <button id="lineButton">Linear array</button>
+        <button id="clearButton">Clear</button>
+      </div>
+    </details>
 
     <div class="hud-divider"></div>
 

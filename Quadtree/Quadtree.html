@@ -41,25 +41,28 @@
       </button>
     </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Points: <span id="pointCountValue"></span></span>
-      <input type="range" min="10" max="2000" step="10" class="slider" id="pointCountSlider">
-    </div>
+    <details class="hud-details" open>
+      <summary>Simulation</summary>
+      <div class="hud-section">
+        <span class="ctrl-label">Points: <span id="pointCountValue"></span></span>
+        <input type="range" min="10" max="2000" step="10" class="slider" id="pointCountSlider">
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Cell capacity: <span id="capacityValue"></span></span>
-      <input type="range" min="1" max="16" step="1" class="slider" id="capacitySlider">
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Cell capacity: <span id="capacityValue"></span></span>
+        <input type="range" min="1" max="16" step="1" class="slider" id="capacitySlider">
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Query size: <span id="querySizeValue"></span></span>
-      <input type="range" min="40" max="600" step="10" class="slider" id="querySizeSlider">
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Query size: <span id="querySizeValue"></span></span>
+        <input type="range" min="40" max="600" step="10" class="slider" id="querySizeSlider">
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Options</span>
-      <label><input type="checkbox" id="movingCheckbox"> Animate points</label>
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Options</span>
+        <label><input type="checkbox" id="movingCheckbox"> Animate points</label>
+      </div>
+    </details>
 
     <div class="hud-divider"></div>
 

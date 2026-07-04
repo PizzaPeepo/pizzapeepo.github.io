@@ -40,36 +40,42 @@
       </button>
     </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Rotation speed: <span id="rotationSpeedValue"></span></span>
-      <input type="range" min="0.0001" max="0.01" step="0.0001" class="slider" id="rotationSpeedSlider">
-    </div>
+    <details class="hud-details" open>
+      <summary>Shape</summary>
+      <div class="hud-section">
+        <span class="ctrl-label">Rotation speed: <span id="rotationSpeedValue"></span></span>
+        <input type="range" min="0.0001" max="0.01" step="0.0001" class="slider" id="rotationSpeedSlider">
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Polygon count: <span id="polygonCountValue"></span></span>
-      <input type="range" min="2" max="30" step="1" class="slider" id="polygonCountSlider">
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Polygon count: <span id="polygonCountValue"></span></span>
+        <input type="range" min="2" max="30" step="1" class="slider" id="polygonCountSlider">
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Sides: <span id="sidesValue"></span></span>
-      <input type="range" min="3" max="12" step="1" class="slider" id="sidesSlider">
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Sides: <span id="sidesValue"></span></span>
+        <input type="range" min="3" max="12" step="1" class="slider" id="sidesSlider">
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Base color: <span id="baseColorValue"></span></span>
-      <input type="range" min="0" max="360" step="1" class="slider" id="baseColorSlider">
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Base color: <span id="baseColorValue"></span></span>
+        <input type="range" min="0" max="360" step="1" class="slider" id="baseColorSlider">
+      </div>
+    </details>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Fade trail speed: <span id="fadeSpeedValue"></span>%</span>
-      <input type="range" min="0.01" max="0.3" step="0.01" class="slider" id="fadeSpeedSlider">
-    </div>
+    <details class="hud-details">
+      <summary>Display</summary>
+      <div class="hud-section">
+        <span class="ctrl-label">Fade trail speed: <span id="fadeSpeedValue"></span>%</span>
+        <input type="range" min="0.01" max="0.3" step="0.01" class="slider" id="fadeSpeedSlider">
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Options</span>
-      <label><input type="checkbox" id="rainbowColorCheckbox"> Rainbow colors</label>
-      <label><input type="checkbox" id="trailCheckbox"> Fade trail</label>
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Options</span>
+        <label><input type="checkbox" id="rainbowColorCheckbox"> Rainbow colors</label>
+        <label><input type="checkbox" id="trailCheckbox"> Fade trail</label>
+      </div>
+    </details>
 
     <div class="hud-section">
       <span class="ctrl-label">Actions</span>

@@ -51,28 +51,32 @@
       </button>
     </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Rays: <span id="rayCountValue"></span></span>
-      <input type="range" min="1" max="600" value="200" class="slider" id="rayCountSlider">
-    </div>
+    <details class="hud-details" open>
+      <summary>Scene</summary>
+      <div class="hud-section">
+        <span class="ctrl-label">Rays: <span id="rayCountValue"></span></span>
+        <input type="range" min="1" max="600" value="200" class="slider" id="rayCountSlider">
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Walls: <span id="wallCountValue"></span></span>
-      <input type="range" min="1" max="20" class="slider" id="wallCountSlider">
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Walls: <span id="wallCountValue"></span></span>
+        <input type="range" min="1" max="20" class="slider" id="wallCountSlider">
+      </div>
+    </details>
 
-    <div class="hud-divider"></div>
+    <details class="hud-details">
+      <summary>Auto-regen</summary>
+      <div class="hud-section">
+        <span class="ctrl-label">Auto-regen: <span id="autoRegenStatus">Off</span></span>
+        <button id="autoRegenToggle">Turn On</button>
+        <span class="ctrl-label" style="margin-top:4px">Interval: <span id="regenIntervalValue">15 </span>s</span>
+        <input type="range" min="1" max="30" value="5" class="slider" id="regenIntervalSlider">
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Auto-regen: <span id="autoRegenStatus">Off</span></span>
-      <button id="autoRegenToggle">Turn On</button>
-      <span class="ctrl-label" style="margin-top:4px">Interval: <span id="regenIntervalValue">15 </span>s</span>
-      <input type="range" min="1" max="30" value="5" class="slider" id="regenIntervalSlider">
-    </div>
-
-    <div class="hud-section">
-      <button id="newWallsBtn">New Walls</button>
-    </div>
+      <div class="hud-section">
+        <button id="newWallsBtn">New Walls</button>
+      </div>
+    </details>
 
     <div class="hud-divider"></div>
 

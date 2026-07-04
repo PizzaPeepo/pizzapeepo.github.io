@@ -46,42 +46,45 @@
       <span class="ctrl-label">Draw to paint cells · right-click erases</span>
     </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Cell size: <span id="cellValue"></span>px</span>
-      <input type="range" min="3" max="24" step="1" class="slider" id="cellSlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Speed: <span id="speedValue"></span> gen/s</span>
-      <input type="range" min="1" max="60" step="1" class="slider" id="speedSlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Random density: <span id="densityValue"></span>%</span>
-      <input type="range" min="5" max="70" step="1" class="slider" id="densitySlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Options</span>
-      <label><input type="checkbox" id="wrapCheckbox" checked> Wrap edges</label>
-      <label><input type="checkbox" id="gridCheckbox"> Show grid</label>
-      <label><input type="checkbox" id="ageCheckbox" checked> Colour by age</label>
-    </div>
-
-    <div class="hud-divider"></div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Patterns</span>
-      <div class="btn-row">
-        <button id="randomButton">Random</button>
-        <button id="clearButton">Clear</button>
+    <details class="hud-details" open>
+      <summary>Simulation</summary>
+      <div class="hud-section">
+        <span class="ctrl-label">Cell size: <span id="cellValue"></span>px</span>
+        <input type="range" min="3" max="24" step="1" class="slider" id="cellSlider">
       </div>
-      <button id="gliderGunButton">Gosper glider gun</button>
-      <div class="btn-row">
-        <button id="pulsarButton">Pulsar</button>
-        <button id="pentaButton">Pentadecathlon</button>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Speed: <span id="speedValue"></span> gen/s</span>
+        <input type="range" min="1" max="60" step="1" class="slider" id="speedSlider">
       </div>
-    </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Random density: <span id="densityValue"></span>%</span>
+        <input type="range" min="5" max="70" step="1" class="slider" id="densitySlider">
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Options</span>
+        <label><input type="checkbox" id="wrapCheckbox" checked> Wrap edges</label>
+        <label><input type="checkbox" id="gridCheckbox"> Show grid</label>
+        <label><input type="checkbox" id="ageCheckbox" checked> Colour by age</label>
+      </div>
+    </details>
+
+    <details class="hud-details">
+      <summary>Patterns</summary>
+      <div class="hud-section">
+        <div class="btn-row">
+          <button id="randomButton">Random</button>
+          <button id="clearButton">Clear</button>
+        </div>
+        <button id="gliderGunButton">Gosper glider gun</button>
+        <div class="btn-row">
+          <button id="pulsarButton">Pulsar</button>
+          <button id="pentaButton">Pentadecathlon</button>
+        </div>
+      </div>
+    </details>
 
     <div class="hud-divider"></div>
 

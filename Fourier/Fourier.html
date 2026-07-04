@@ -44,31 +44,34 @@
       <span class="ctrl-label">Draw a closed shape on the canvas to redraw it with circles</span>
     </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Epicycles: <span id="termsValue"></span></span>
-      <input type="range" min="1" max="200" step="1" class="slider" id="termsSlider">
-    </div>
+    <details class="hud-details" open>
+      <summary>Simulation</summary>
+      <div class="hud-section">
+        <span class="ctrl-label">Epicycles: <span id="termsValue"></span></span>
+        <input type="range" min="1" max="200" step="1" class="slider" id="termsSlider">
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Speed: <span id="speedValue"></span></span>
-      <input type="range" min="0.1" max="4" step="0.1" class="slider" id="speedSlider">
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Speed: <span id="speedValue"></span></span>
+        <input type="range" min="0.1" max="4" step="0.1" class="slider" id="speedSlider">
+      </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Options</span>
-      <label><input type="checkbox" id="circlesCheckbox" checked> Show circles &amp; arms</label>
-      <label><input type="checkbox" id="originalCheckbox" checked> Show original path</label>
-    </div>
+      <div class="hud-section">
+        <span class="ctrl-label">Options</span>
+        <label><input type="checkbox" id="circlesCheckbox" checked> Show circles &amp; arms</label>
+        <label><input type="checkbox" id="originalCheckbox" checked> Show original path</label>
+      </div>
+    </details>
 
-    <div class="hud-divider"></div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Built-in shapes</span>
-      <button data-shape="star">★ Star</button>
-      <button data-shape="heart">♥ Heart</button>
-      <button data-shape="square">▢ Square</button>
-      <button data-shape="pi">π Symbol</button>
-    </div>
+    <details class="hud-details">
+      <summary>Built-in shapes</summary>
+      <div class="hud-section">
+        <button data-shape="star">★ Star</button>
+        <button data-shape="heart">♥ Heart</button>
+        <button data-shape="square">▢ Square</button>
+        <button data-shape="pi">π Symbol</button>
+      </div>
+    </details>
 
     <div class="hud-divider"></div>
 

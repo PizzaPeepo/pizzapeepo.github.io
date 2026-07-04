@@ -46,52 +46,58 @@
       <span class="ctrl-label">Drag on the canvas to seed chemical B</span>
     </div>
 
-    <div class="hud-section">
-      <span class="ctrl-label">Feed: <span id="feedValue"></span></span>
-      <input type="range" min="0.01" max="0.08" step="0.0005" class="slider" id="feedSlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Kill: <span id="killValue"></span></span>
-      <input type="range" min="0.04" max="0.07" step="0.0005" class="slider" id="killSlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Steps / frame: <span id="stepsValue"></span></span>
-      <input type="range" min="1" max="20" step="1" class="slider" id="stepsSlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Resolution: <span id="resValue"></span></span>
-      <input type="range" min="120" max="320" step="20" class="slider" id="resSlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Brush size: <span id="brushValue"></span></span>
-      <input type="range" min="2" max="20" step="1" class="slider" id="brushSlider">
-    </div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Palette</span>
-      <label><input type="radio" name="palette" value="viper"> Viper</label>
-      <label><input type="radio" name="palette" value="ember"> Ember</label>
-      <label><input type="radio" name="palette" value="ice"> Ice</label>
-      <label><input type="radio" name="palette" value="mono"> Greyscale</label>
-    </div>
-
-    <div class="hud-divider"></div>
-
-    <div class="hud-section">
-      <span class="ctrl-label">Presets</span>
-      <div class="btn-row">
-        <button data-f="0.0545" data-k="0.062">Coral</button>
-        <button data-f="0.0367" data-k="0.0649">Mitosis</button>
-        <button data-f="0.030"  data-k="0.062">Spots</button>
-        <button data-f="0.058"  data-k="0.065">Worms</button>
-        <button data-f="0.029"  data-k="0.057">Maze</button>
-        <button data-f="0.018"  data-k="0.051">Holes</button>
+    <details class="hud-details" open>
+      <summary>Simulation</summary>
+      <div class="hud-section">
+        <span class="ctrl-label">Feed: <span id="feedValue"></span></span>
+        <input type="range" min="0.01" max="0.08" step="0.0005" class="slider" id="feedSlider">
       </div>
-    </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Kill: <span id="killValue"></span></span>
+        <input type="range" min="0.04" max="0.07" step="0.0005" class="slider" id="killSlider">
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Steps / frame: <span id="stepsValue"></span></span>
+        <input type="range" min="1" max="20" step="1" class="slider" id="stepsSlider">
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Resolution: <span id="resValue"></span></span>
+        <input type="range" min="120" max="320" step="20" class="slider" id="resSlider">
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label">Brush size: <span id="brushValue"></span></span>
+        <input type="range" min="2" max="20" step="1" class="slider" id="brushSlider">
+      </div>
+    </details>
+
+    <details class="hud-details">
+      <summary>Display</summary>
+      <div class="hud-section">
+        <span class="ctrl-label">Palette</span>
+        <label><input type="radio" name="palette" value="viper"> Viper</label>
+        <label><input type="radio" name="palette" value="ember"> Ember</label>
+        <label><input type="radio" name="palette" value="ice"> Ice</label>
+        <label><input type="radio" name="palette" value="mono"> Greyscale</label>
+      </div>
+    </details>
+
+    <details class="hud-details">
+      <summary>Presets</summary>
+      <div class="hud-section">
+        <div class="btn-row">
+          <button data-f="0.0545" data-k="0.062">Coral</button>
+          <button data-f="0.0367" data-k="0.0649">Mitosis</button>
+          <button data-f="0.030"  data-k="0.062">Spots</button>
+          <button data-f="0.058"  data-k="0.065">Worms</button>
+          <button data-f="0.029"  data-k="0.057">Maze</button>
+          <button data-f="0.018"  data-k="0.051">Holes</button>
+        </div>
+      </div>
+    </details>
 
     <div class="hud-divider"></div>
 
