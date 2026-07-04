@@ -670,23 +670,6 @@ label {
 }
 .hud-details > summary:hover::after { opacity: 1; }
 .hud-details > summary:active { transform: translateY(0); }
-/* Viper spotlight: conic pastel rainbow under a soft radial mask, slowly hue-rotating
-   (same treatment as the index card hover) */
-html.viper .hud-details > summary::after {
-  background: conic-gradient(from 0deg at var(--mx, 50%) var(--my, 50%),
-              var(--rb-1), var(--rb-2), var(--rb-3), var(--rb-4),
-              var(--rb-5), var(--rb-6), var(--rb-1));
-  -webkit-mask-image: radial-gradient(110px circle at var(--mx, 50%) var(--my, 50%),
-                      black, transparent 75%);
-  mask-image: radial-gradient(110px circle at var(--mx, 50%) var(--my, 50%),
-              black, transparent 75%);
-  animation: spotHue 8s linear infinite;
-}
-html.viper .hud-details > summary:hover::after { opacity: 0.30; }
-@keyframes spotHue {
-  from { filter: hue-rotate(0deg); }
-  to   { filter: hue-rotate(360deg); }
-}
 /* Viper border highlight: accent edge + outline ring cycle the rainbow on hover */
 html.viper .hud-details > summary:hover {
   animation: summaryEdgeRGB 3s linear infinite;
