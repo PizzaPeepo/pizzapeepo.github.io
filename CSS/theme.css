@@ -689,6 +689,22 @@ html.viper .hud-details > summary:hover {
   66.7%    { border-left-color: var(--rb-5); }
   83.3%    { border-left-color: var(--rb-6); }
 }
+/* Viper text wave: each char (indexed --ci by JS/theme.js) runs the same rainbow
+   cycle, phase-shifted from its neighbour — reads as a wave rolling through the label */
+html.viper .hud-details > summary:hover .sum-ch {
+  animation: sumChRGB 3s linear infinite;
+  /* increasing (less-negative would pause first-hover start, so offset by -6s) phase
+     per char makes the wave travel left→right */
+  animation-delay: calc(var(--ci, 0) * 0.12s - 6s);
+}
+@keyframes sumChRGB {
+  0%, 100% { color: var(--rb-1); text-shadow: 0 0 8px color-mix(in srgb, var(--rb-1) 60%, transparent); }
+  16.7%    { color: var(--rb-2); text-shadow: 0 0 8px color-mix(in srgb, var(--rb-2) 60%, transparent); }
+  33.3%    { color: var(--rb-3); text-shadow: 0 0 8px color-mix(in srgb, var(--rb-3) 60%, transparent); }
+  50%      { color: var(--rb-4); text-shadow: 0 0 8px color-mix(in srgb, var(--rb-4) 60%, transparent); }
+  66.7%    { color: var(--rb-5); text-shadow: 0 0 8px color-mix(in srgb, var(--rb-5) 60%, transparent); }
+  83.3%    { color: var(--rb-6); text-shadow: 0 0 8px color-mix(in srgb, var(--rb-6) 60%, transparent); }
+}
 .hud-details > summary::-webkit-details-marker { display: none; }
 .hud-details > summary::before {
   content: '▶';

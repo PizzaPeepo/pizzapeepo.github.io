@@ -153,7 +153,36 @@
     });
   }
 
-  document.querySelectorAll('.hud-details > summary').forEach(makeSummaryLED);
+  // Wrap each summary label character in an indexed span so CSS can run one
+  // rainbow keyframe per char, phase-shifted via animation-delay (RGB wave).
+  // Chars go inside a single .sum-label span — summary is display:flex with a
+  // gap, so bare spans as direct children would be scattered as flex items.
+  function wrapSummaryChars(summary) {
+    var nodes = Array.prototype.slice.call(summary.childNodes);
+    var ci = 0;
+    nodes.forEach(function (node) {
+      if (node.nodeType !== 3 || !node.textContent.trim()) return;
+      var label = document.createElement('span');
+      label.className = 'sum-label';
+      node.textContent.split('').forEach(function (ch) {
+        if (/\s/.test(ch)) {
+          label.appendChild(document.createTextNode(ch));
+        } else {
+          var sp = document.createElement('span');
+          sp.className = 'sum-ch';
+          sp.textContent = ch;
+          sp.style.setProperty('--ci', ci++);
+          label.appendChild(sp);
+        }
+      });
+      summary.replaceChild(label, node);
+    });
+  }
+
+  document.querySelectorAll('.hud-details > summary').forEach(function (s, i) {
+    wrapSummaryChars(s);
+    makeSummaryLED(s, i);
+  });
 
   var btn   = document.getElementById('themeToggle');
   if (!btn) return;
