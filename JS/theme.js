@@ -1,6 +1,17 @@
 /* theme.js — shared theme toggle for Canvas Lab demo pages */
 (function () {
   var root  = document.documentElement;
+
+  // Cursor spotlight on HUD group headers (mirrors the index card hover)
+  document.addEventListener('pointermove', function (e) {
+    if (!e.target || !e.target.closest) return;
+    var s = e.target.closest('.hud-details > summary');
+    if (!s) return;
+    var r = s.getBoundingClientRect();
+    s.style.setProperty('--mx', (100 * (e.clientX - r.left) / r.width).toFixed(1) + '%');
+    s.style.setProperty('--my', (100 * (e.clientY - r.top) / r.height).toFixed(1) + '%');
+  });
+
   var btn   = document.getElementById('themeToggle');
   if (!btn) return;
   var icon  = btn.querySelector('.toggle-icon');

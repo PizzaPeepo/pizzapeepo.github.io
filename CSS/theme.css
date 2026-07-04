@@ -36,6 +36,8 @@
 
   --canvas-bg: #18140e;
   --radius:    14px;
+
+  interpolate-size: allow-keywords; /* lets block-size animate to/from auto (details expand) */
 }
 
 html.light {
@@ -88,6 +90,14 @@ html.viper {
   --tx-2: #84cf72;
   --tx-3: #4f8f3f;
   --tx-4: #294d1f;
+
+  /* pastel rainbow ramp — interaction highlights only (mirrors index.html) */
+  --rb-1: #ff3366;
+  --rb-2: #ffa733;
+  --rb-3: #f8ff33;
+  --rb-4: #33ff70;
+  --rb-5: #33bbff;
+  --rb-6: #9933ff;
 
   --shadow-sm: 0 2px 8px rgba(0,0,0,0.45), 0 1px 2px rgba(0,0,0,0.30);
   --shadow-md: 0 8px 28px rgba(0,0,0,0.55), 0 3px 8px rgba(0,0,0,0.35);
@@ -615,6 +625,7 @@ label {
 
 /* Collapsible particle generator section */
 .hud-details > summary {
+  position: relative;
   cursor: pointer;
   list-style: none;
   display: flex;
@@ -631,17 +642,68 @@ label {
   text-transform: uppercase;
   color: var(--gold);
   user-select: none;
-  transition: color 0.15s ease, background 0.15s ease;
+  outline: 1px solid transparent;
+  transition: color 0.15s ease, background 0.15s ease,
+              border-color 0.15s ease, outline-color 0.15s ease,
+              transform 0.30s cubic-bezier(0.34,1.4,0.64,1),
+              box-shadow 0.30s ease;
+}
+/* Cursor spotlight — center tracks pointer via --mx/--my (set in JS/theme.js) */
+.hud-details > summary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  background: radial-gradient(110px circle at var(--mx, 50%) var(--my, 50%),
+              color-mix(in srgb, var(--gold) 18%, transparent), transparent 70%);
 }
 .hud-details > summary:hover {
   color: var(--gold-hi);
   background: color-mix(in srgb, var(--gold) 15%, transparent);
+  border-left-color: var(--gold-hi);
+  outline-color: color-mix(in srgb, var(--gold) 35%, transparent);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.30), 0 0 20px var(--gold-tint);
+}
+.hud-details > summary:hover::after { opacity: 1; }
+.hud-details > summary:active { transform: translateY(0); }
+/* Viper spotlight: conic pastel rainbow under a soft radial mask, slowly hue-rotating
+   (same treatment as the index card hover) */
+html.viper .hud-details > summary::after {
+  background: conic-gradient(from 0deg at var(--mx, 50%) var(--my, 50%),
+              var(--rb-1), var(--rb-2), var(--rb-3), var(--rb-4),
+              var(--rb-5), var(--rb-6), var(--rb-1));
+  -webkit-mask-image: radial-gradient(110px circle at var(--mx, 50%) var(--my, 50%),
+                      black, transparent 75%);
+  mask-image: radial-gradient(110px circle at var(--mx, 50%) var(--my, 50%),
+              black, transparent 75%);
+  animation: spotHue 8s linear infinite;
+}
+html.viper .hud-details > summary:hover::after { opacity: 0.30; }
+@keyframes spotHue {
+  from { filter: hue-rotate(0deg); }
+  to   { filter: hue-rotate(360deg); }
+}
+/* Viper border highlight: accent edge + outline ring cycle the rainbow on hover */
+html.viper .hud-details > summary:hover {
+  animation: summaryEdgeRGB 3s linear infinite;
+}
+@keyframes summaryEdgeRGB {
+  0%, 100% { border-left-color: var(--rb-1); outline-color: color-mix(in srgb, var(--rb-1) 55%, transparent); }
+  16.7%    { border-left-color: var(--rb-2); outline-color: color-mix(in srgb, var(--rb-2) 55%, transparent); }
+  33.3%    { border-left-color: var(--rb-3); outline-color: color-mix(in srgb, var(--rb-3) 55%, transparent); }
+  50%      { border-left-color: var(--rb-4); outline-color: color-mix(in srgb, var(--rb-4) 55%, transparent); }
+  66.7%    { border-left-color: var(--rb-5); outline-color: color-mix(in srgb, var(--rb-5) 55%, transparent); }
+  83.3%    { border-left-color: var(--rb-6); outline-color: color-mix(in srgb, var(--rb-6) 55%, transparent); }
 }
 .hud-details > summary::-webkit-details-marker { display: none; }
 .hud-details > summary::before {
   content: '▶';
   font-size: 9px;
-  transition: transform 0.2s;
+  transition: transform 0.30s cubic-bezier(0.34,1.4,0.64,1);
   color: var(--gold-mid);
 }
 .hud-details[open] > summary::before { transform: rotate(90deg); }
@@ -653,6 +715,33 @@ label {
   letter-spacing: 0;
 }
 .hud-details > .hud-section { margin-top: 8px; }
+
+/* Animated expand/collapse — needs ::details-content + interpolate-size
+   (Chromium 131+/modern; older browsers snap open, no harm) */
+.hud-details::details-content {
+  opacity: 0;
+  block-size: 0;
+  padding-block-end: 0;
+  margin-block-end: 0;
+  overflow-y: clip; /* needed for the collapse animation; thumbs (18px on a 4px track) would be cut without the open-state padding below */
+  transition: content-visibility 0.30s allow-discrete,
+              opacity 0.22s ease,
+              block-size 0.30s cubic-bezier(0.34,1.2,0.64,1),
+              padding-block-end 0.30s cubic-bezier(0.34,1.2,0.64,1),
+              margin-block-end 0.30s cubic-bezier(0.34,1.2,0.64,1);
+}
+.hud-details[open]::details-content {
+  opacity: 1;
+  block-size: auto;
+  /* padding lets thumbs paint past the clip edge; the negative margin cancels it in layout */
+  padding-block-end: 10px;
+  margin-block-end: -10px;
+  transition: content-visibility 0.30s allow-discrete,
+              opacity 0.25s ease 0.06s,
+              block-size 0.30s cubic-bezier(0.34,1.2,0.64,1),
+              padding-block-end 0.30s cubic-bezier(0.34,1.2,0.64,1),
+              margin-block-end 0.30s cubic-bezier(0.34,1.2,0.64,1);
+}
 
 /* ── HUD PANEL TOGGLE (hamburger) ── */
 .hud-panel-toggle {
