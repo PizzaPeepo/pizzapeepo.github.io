@@ -53,9 +53,8 @@ offscreen buffer + typed array, then `drawImage`-scale up to the visible canvas.
 **HUD panel grouping**: group related sliders/checkboxes/radios into collapsible
 `<details class="hud-details"><summary>Group name</summary>...</details>` sections (see
 `CSS/theme.css` `.hud-details` rules) instead of one long flat list of `.hud-section`s.
-Put a `<div class="hud-divider"></div>` between every `hud-details` block, and between a
-top-level (ungrouped) section and the next `hud-details` block — same as the divider already
-used before `Actions`. Keep frequently-used/mode-select controls (Actions, primary count
+No `hud-divider` elements — the tinted `summary` bars separate groups on their own (the
+class was removed repo-wide). Keep frequently-used/mode-select controls (Actions, primary count
 slider, mode radios, hint text) as top-level `.hud-section`s, not inside a `details`. Mark
 the primary/most-used group(s) `open` by default; secondary/advanced groups collapsed. Apply
 this to every new demo's HUD panel and when editing an existing one.

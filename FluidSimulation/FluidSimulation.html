@@ -48,8 +48,6 @@
     .hud-section { gap: 9px; }
     /* Separate name from number: value readouts in gold, tabular figures so they don't jitter. */
     .hud-panel span[id$="Value"] { color: var(--gold); font-variant-numeric: tabular-nums; }
-    /* Hairline fading dividers instead of a hard bar — less visual weight. */
-    .hud-divider { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tx-4) 55%, transparent) 50%, transparent); }
     /* Preset button grid + clear button: looser gaps. */
     .hud-section > div[style*="grid"] { gap: 8px !important; }
 
@@ -107,7 +105,6 @@
       <button id="resetButton">Reset (R)</button>
     </div>
 
-    <div class="hud-divider"></div>
 
     <details class="hud-details" open>
       <summary>Fluid</summary>
@@ -143,7 +140,6 @@
       </div>
     </details>
 
-    <div class="hud-divider"></div>
 
     <details class="hud-details">
       <summary>Obstacles</summary>
@@ -164,7 +160,6 @@
       </div>
     </details>
 
-    <div class="hud-divider"></div>
 
     <details class="hud-details">
       <summary>Rendering</summary>
@@ -187,7 +182,6 @@
       </div>
     </details>
 
-    <div class="hud-divider"></div>
 
     <details class="hud-details">
       <summary>ASCII mode</summary>
@@ -220,7 +214,6 @@
       </div>
     </details>
 
-    <div class="hud-divider"></div>
 
     <details class="hud-details">
       <summary>Text &amp; scenes</summary>
@@ -241,7 +234,6 @@
       </div>
     </details>
 
-    <div class="hud-divider"></div>
 
     <details class="hud-details">
       <summary>Performance</summary>
@@ -260,7 +252,6 @@
       </div>
     </details>
 
-    <div class="hud-divider"></div>
 
     <div class="hud-section">
       <span class="ctrl-label" style="font-size:0.72em;opacity:0.6;">Scroll = zoom · middle-drag = pan · double-click = reset. Zoom in to reveal RGB pixels.</span>
