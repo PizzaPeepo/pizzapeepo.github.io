@@ -8,7 +8,7 @@
   <script>document.documentElement.classList.add('js');</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,700;0,9..144,800;1,9..144,400;1,9..144,700;1,9..144,800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@0,400..700;1,400..700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -43,6 +43,28 @@
       --shadow-sm: 0 2px 8px rgba(0,0,0,0.25), 0 1px 2px rgba(0,0,0,0.15);
       --shadow-md: 0 8px 28px rgba(0,0,0,0.35), 0 3px 8px rgba(0,0,0,0.20);
       --shadow-lg: 0 20px 48px rgba(0,0,0,0.45), 0 6px 14px rgba(0,0,0,0.25);
+
+      /* ── TYPE CONFIG — single source for font families/sizes/tracking.
+         Mirrors CSS/theme.css; to swap fonts edit these + the <link> above.
+         See .claude/skills/swap-fonts. ── */
+      --font-display: 'STIX Two Text', serif;        /* hero, card titles, iris */
+      --font-body:    'IBM Plex Sans', sans-serif;   /* copy, pills, toggle */
+      --font-mono:    'IBM Plex Mono', monospace;    /* eyebrow, tags, nums, badges */
+
+      --fw-display:        600;      /* card titles */
+      --fw-display-strong: 700;      /* hero, iris */
+      --track-display:     -0.01em;  /* titles — metrics-dependent, retune on swap */
+      --track-hero:        -0.02em;  /* display-size hero only */
+
+      --fs-hero:        clamp(58px, 9.4vw, 114px);
+      --fs-hero-mobile: 54px;
+      --fs-card-title:      25px;
+      --fs-card-title-wide: 37px;
+      --fs-iris:        clamp(28px, 5vw, 56px);
+      --fs-eyebrow:     12px;
+      --fs-ui:          13px;   /* toggle, filter pills */
+      --fs-mono-label:  10px;   /* tags, scroll cue */
+      --fs-mono-value:  11px;   /* card nums, launch, badges */
     }
 
     html.light {
@@ -114,7 +136,7 @@
     body {
       background: var(--bg);   /* fallback if WebGL2 unavailable */
       color: var(--tx);
-      font-family: 'DM Sans', sans-serif;
+      font-family: var(--font-body);
       min-height: 100vh;
       overflow-x: hidden;
       transition: background-color 0.4s ease, color 0.4s ease;
@@ -171,8 +193,8 @@
       border: 1.5px solid var(--tx-4);
       border-radius: 40px;
       color: var(--tx-2);
-      font-family: 'DM Sans', sans-serif;
-      font-size: 13px;
+      font-family: var(--font-body);
+      font-size: var(--fs-ui);
       font-weight: 500;
       padding: 8px 18px 8px 12px;
       cursor: pointer;
@@ -211,7 +233,8 @@
       bottom: 34px;
       transform: translateX(-50%);
       display: flex; flex-direction: column; align-items: center; gap: 10px;
-      font-size: 11px; font-weight: 500;
+      font-family: var(--font-mono);
+      font-size: var(--fs-mono-label); font-weight: 500;
       letter-spacing: 0.22em; text-transform: uppercase;
       color: var(--tx-3);
       text-decoration: none;
@@ -235,9 +258,11 @@
 
     .hdr-eyebrow {
       display: flex; align-items: center; gap: 10px;
-      font-size: 13px;
+      font-family: var(--font-mono);
+      font-size: var(--fs-eyebrow);
       font-weight: 500;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
       color: var(--gold);
       margin-bottom: 24px;
       opacity: 0;
@@ -255,17 +280,17 @@
     }
 
     .hdr-title {
-      font-family: 'Fraunces', serif;
-      font-weight: 800;
-      font-size: clamp(60px, 9.5vw, 116px);
-      line-height: 0.92;
-      letter-spacing: -0.02em;
+      font-family: var(--font-display);
+      font-weight: var(--fw-display-strong);
+      font-size: var(--fs-hero);
+      line-height: 0.96;
+      letter-spacing: var(--track-hero);
       color: var(--tx);
       opacity: 0;
       animation: riseIn 0.7s ease 0.12s forwards;
     }
     .hdr-title em {
-      font-style: italic;
+      font-style: italic; /* STIX Two has a real math-flavored italic */
       color: var(--coral);
     }
 
@@ -295,8 +320,10 @@
       animation: riseIn 0.6s ease 0.38s forwards;
     }
     .badge {
-      font-size: 12px;
+      font-family: var(--font-mono);
+      font-size: var(--fs-mono-value);
       font-weight: 500;
+      letter-spacing: 0.02em;
       padding: 5px 14px;
       border-radius: 40px;
       background: var(--gold-tint);
@@ -436,7 +463,7 @@
 
     /* Wide card */
     .card-wide             { grid-column: span 2; }
-    .card-wide .card-title { font-size: 40px; }
+    .card-wide .card-title { font-size: var(--fs-card-title-wide); }
     .card-wide:hover       { top: -6px; }
 
     /* Card parts */
@@ -445,9 +472,11 @@
     }
 
     .card-tag {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.04em;
+      font-family: var(--font-mono);
+      font-size: var(--fs-mono-label);
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
       padding: 4px 12px;
       border-radius: 40px;
       background: var(--gold-tint);
@@ -463,20 +492,21 @@
     }
 
     .card-num {
-      font-size: 12px;
+      font-size: var(--fs-mono-value);
       font-weight: 400;
-      font-style: italic;
-      font-family: 'Fraunces', serif;
+      letter-spacing: 0.05em;
+      font-family: var(--font-mono);
       color: var(--tx-4);
       transition: color 0.3s;
     }
     .card:hover .card-num { color: var(--tx-3); }
 
     .card-title {
-      font-family: 'Fraunces', serif;
-      font-weight: 700;
-      font-size: 26px;
-      line-height: 1.1;
+      font-family: var(--font-display);
+      font-weight: var(--fw-display);
+      font-size: var(--fs-card-title);
+      line-height: 1.12;
+      letter-spacing: var(--track-display);
       color: var(--tx);
       flex: 1;
       transition: color 0.3s ease;
@@ -499,10 +529,12 @@
     }
 
     .card-launch {
-      font-size: 12px;
+      font-family: var(--font-mono);
+      font-size: var(--fs-mono-value);
       font-weight: 500;
       color: var(--tx-3);
-      letter-spacing: 0.02em;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
     }
 
     .card-arrow {
@@ -548,13 +580,13 @@
       .wrap            { padding: 0 28px; }
       .grid            { grid-template-columns: repeat(2, 1fr); }
       .card-wide       { grid-column: span 1; }
-      .card-wide .card-title { font-size: 26px; }
+      .card-wide .card-title { font-size: var(--fs-card-title); }
       .theme-toggle    { right: 28px; }
     }
     @media (max-width: 600px) {
       .wrap            { padding: 0 20px; }
       .grid            { grid-template-columns: 1fr; gap: 14px; }
-      .hdr-title       { font-size: 52px; }
+      .hdr-title       { font-size: var(--fs-hero-mobile); }
       .theme-toggle    { top: 20px; right: 20px; }
       header           { padding: 80px 0 48px; }
     }
@@ -576,7 +608,7 @@
       padding: 6px 16px; border-radius: 40px;
       border: 1.5px solid color-mix(in srgb, var(--tx-4) 60%, transparent);
       background: transparent; color: var(--tx-3);
-      cursor: pointer; font-family: 'DM Sans', sans-serif;
+      cursor: pointer; font-family: var(--font-body);
       transition: border-color 0.2s, color 0.2s, background 0.2s;
     }
     .filter-pill:hover { border-color: var(--gold); color: var(--gold); }
@@ -731,12 +763,14 @@
                   left   0.42s cubic-bezier(0.33,0,0.2,1),
                   width  0.42s cubic-bezier(0.33,0,0.2,1),
                   height 0.42s cubic-bezier(0.33,0,0.2,1),
-                  border-radius 0.42s ease;
+                  border-radius 0.42s ease,
+                  opacity 0.3s ease 0.1s;
     }
     .page-iris span {
-      font-family: 'Fraunces', serif;
-      font-weight: 700;
-      font-size: clamp(28px, 5vw, 56px);
+      font-family: var(--font-display);
+      font-weight: var(--fw-display-strong);
+      letter-spacing: var(--track-display);
+      font-size: var(--fs-iris);
       color: var(--tx);
       opacity: 0;
       transform: translateY(12px);
@@ -1407,10 +1441,13 @@
         dark:  { icon: '☀', label: 'Ember' },
         light: { icon: '☾', label: 'Light' },
       };
+      const BGCOL = { viper: '#030806', dark: '#181210', light: '#faf5ee' };
+      let metaTheme = document.querySelector('meta[name="theme-color"]');
 
       function applyTheme(theme) {
         root.classList.toggle('light', theme === 'light');
         root.classList.toggle('viper', theme === 'viper');
+        if (metaTheme) metaTheme.content = BGCOL[theme];
         icon.textContent  = META[theme].icon;
         label.textContent = META[theme].label;
         document.dispatchEvent(new CustomEvent('themechange', { detail: { theme: theme } }));
@@ -1747,11 +1784,9 @@
        demo loads behind it: a match cut instead of a hard navigation. Modified
        clicks (new tab) and reduced-motion users get the plain navigation. */
     (function () {
-      var grid = document.getElementById('demoGrid');
-      if (!grid) return;
       var live = null;
 
-      grid.addEventListener('click', function (e) {
+      function onCardClick(e) {
         if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
         var card = e.target.closest('.card');
         if (!card) return;
@@ -1790,7 +1825,10 @@
         }); });
 
         setTimeout(function () { window.location.href = href; }, 460);
-      });
+      }
+
+      var demoGridZone = document.getElementById('demoGrid');
+      if (demoGridZone) demoGridZone.addEventListener('click', onCardClick);
 
       // bfcache restore (back button) — clear the leftover iris; scroll state is
       // already intact on a bfcache hit, so consume the return marker unused
@@ -1814,13 +1852,50 @@
         de.style.scrollBehavior = 'auto';        // jump, don't smooth-scroll past the hero
         window.scrollTo(0, ret.y);
         de.style.scrollBehavior = '';
-        var back = document.querySelector('.card[href="' + ret.href + '"]');
-        if (back) {
+        var backs = document.querySelectorAll('.card[href="' + ret.href + '"]');
+
+        /* Reverse iris landing — the demo page left a full-screen "Canvas Lab"
+           title card on screen (JS/theme.js); recreate it here synchronously
+           (parser-blocking script, so it covers the first paint) and shrink it
+           into the card you came from. */
+        var origin = null;
+        backs.forEach(function (b) {
+          if (origin) return;
+          var rb = b.getBoundingClientRect();
+          if (rb.bottom > 0 && rb.top < window.innerHeight) origin = b;
+        });
+        if (!origin && backs.length) origin = backs[0];
+        if (origin) {
+          var iris = document.createElement('div');
+          iris.className = 'page-iris grow';
+          iris.style.top          = '0px';
+          iris.style.left         = '0px';
+          iris.style.width        = '100vw';
+          iris.style.height       = '100vh';
+          iris.style.borderRadius = '0px';
+          var sp = document.createElement('span');
+          sp.textContent = 'Canvas Lab';
+          iris.appendChild(sp);
+          document.body.appendChild(iris);
+          requestAnimationFrame(function () { requestAnimationFrame(function () {
+            var rr = origin.getBoundingClientRect();
+            iris.classList.remove('grow');   // span fades back out
+            iris.style.top          = rr.top + 'px';
+            iris.style.left         = rr.left + 'px';
+            iris.style.width        = rr.width + 'px';
+            iris.style.height       = rr.height + 'px';
+            iris.style.borderRadius = '16px';
+            iris.style.opacity      = '0';
+          }); });
+          setTimeout(function () { iris.remove(); }, 520);
+        }
+
+        backs.forEach(function (back) {
           setTimeout(function () {
             back.dispatchEvent(new MouseEvent('mouseenter'));
             setTimeout(function () { back.dispatchEvent(new MouseEvent('mouseleave')); }, 1300);
           }, 400);
-        }
+        });
       }
     })();
   </script>

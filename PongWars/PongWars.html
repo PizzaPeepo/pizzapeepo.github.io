@@ -63,7 +63,7 @@
       z-index: 30; pointer-events: none;
       display: flex; flex-direction: column; align-items: stretch; gap: 9px;
       width: min(620px, 86vw);
-      font-family: 'Fraunces', Georgia, serif;
+      font-family: var(--font-display, sans-serif);
       padding: 12px 18px;
       background: rgba(0,0,0,0.32);
       border: 1px solid rgba(255,255,255,0.12);
@@ -115,13 +115,13 @@
       box-shadow: 0 24px 60px rgba(0,0,0,0.5);
     }
     .pw-overlay-title {
-      font-family: 'Fraunces', Georgia, serif;
-      font-weight: 800; font-size: clamp(40px, 7vw, 92px);
+      font-family: var(--font-display, sans-serif);
+      font-weight: 700; font-size: clamp(40px, 7vw, 92px);
       line-height: 1; color: #fff; letter-spacing: -0.02em;
       text-shadow: 0 4px 24px rgba(0,0,0,0.55);
     }
     .pw-overlay-sub {
-      font-family: 'DM Sans', system-ui, sans-serif;
+      font-family: var(--font-body, system-ui, sans-serif);
       font-size: clamp(15px, 2vw, 22px); color: rgba(255,255,255,0.82);
       margin-top: 18px; letter-spacing: 0.02em;
     }
@@ -130,7 +130,7 @@
     .pw-banner {
       position: fixed; top: 110px; left: 50%; transform: translateX(-50%) translateY(-14px);
       z-index: 60; pointer-events: none;
-      font-family: 'DM Sans', system-ui, sans-serif;
+      font-family: var(--font-body, system-ui, sans-serif);
       font-weight: 600; font-size: 19px; color: #fff;
       padding: 12px 26px; border-radius: 40px;
       background: linear-gradient(90deg, var(--gold, #f5a623), var(--coral, #ff6b47));

@@ -184,6 +184,53 @@
     makeSummaryLED(s, i);
   });
 
+  /* Reverse iris — clicking "← Home" grows the pill into a full-screen
+     "Canvas Lab" title card, then the landing page loads behind it and shrinks
+     the card into the demo tile you came from: the forward match cut played
+     backwards. Modified clicks (new tab) get the plain navigation. */
+  var irisLive = null;
+
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    if (!e.target || !e.target.closest) return;
+    var link = e.target.closest('a.back-link');
+    if (!link) return;
+    var href = link.getAttribute('href');
+    if (!href) return;
+    e.preventDefault();
+
+    var r  = link.getBoundingClientRect();
+    var el = document.createElement('div');
+    el.className = 'page-iris';
+    el.style.top          = r.top + 'px';
+    el.style.left         = r.left + 'px';
+    el.style.width        = r.width + 'px';
+    el.style.height       = r.height + 'px';
+    el.style.borderRadius = '40px';
+
+    var t = document.createElement('span');
+    t.textContent = 'Canvas Lab';
+    el.appendChild(t);
+    document.body.appendChild(el);
+    irisLive = el;
+
+    requestAnimationFrame(function () { requestAnimationFrame(function () {
+      el.classList.add('grow');
+      el.style.top          = '0px';
+      el.style.left         = '0px';
+      el.style.width        = '100vw';
+      el.style.height       = '100vh';
+      el.style.borderRadius = '0px';
+    }); });
+
+    setTimeout(function () { window.location.href = href; }, 460);
+  });
+
+  // bfcache restore (forward button back to the demo) — clear the leftover iris
+  window.addEventListener('pageshow', function () {
+    if (irisLive) { irisLive.remove(); irisLive = null; }
+  });
+
   var btn   = document.getElementById('themeToggle');
   if (!btn) return;
   var icon  = btn.querySelector('.toggle-icon');
@@ -195,10 +242,18 @@
     dark:  { icon: '☀', label: 'Ember' },
     light: { icon: '☾', label: 'Light' },
   };
+  var BGCOL = { viper: '#030806', dark: '#181210', light: '#faf5ee' };
+  var metaTheme = document.querySelector('meta[name="theme-color"]');
+  if (!metaTheme) {
+    metaTheme = document.createElement('meta');
+    metaTheme.name = 'theme-color';
+    document.head.appendChild(metaTheme);
+  }
 
   function applyTheme(theme) {
     root.classList.toggle('light', theme === 'light');
     root.classList.toggle('viper', theme === 'viper');
+    metaTheme.content = BGCOL[theme];
     if (icon)  icon.textContent  = META[theme].icon;
     if (label) label.textContent = META[theme].label;
     document.dispatchEvent(new CustomEvent('themechange', {

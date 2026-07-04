@@ -27,6 +27,7 @@
     'out float vH;',
     'out float vTrail;',
     'out float vEdge;',
+    'out float vW;',
     'out vec2  vScrPos;',
     '',
     'void main() {',
@@ -77,6 +78,7 @@
     '',
     '  vec3 p = vec3(aPos.x, yW * ct - z * st, yW * st + z * ct);',
     '  float w = cam / (cam + p.z + 0.5);',
+    '  vW = w;',
     '  gl_Position  = vec4((p.x - uYaw) * w / uAspect, (p.y - uRise) * w, 0.0, 1.0);',
     '  gl_PointSize = clamp(w * 2.8, 1.0, 6.0);',
     '}'
@@ -89,6 +91,7 @@
     'in float vH;',
     'in float vTrail;',
     'in float vEdge;',
+    'in float vW;',
     'in vec2  vScrPos;',
     'uniform float uTime;',
     'uniform float uLight;',
@@ -138,7 +141,9 @@
     '  float aBase = mix(0.12 + t * 0.50, 0.72 + t * 0.26, uLight);',
     '  float a = mix(aBase, 0.07 + t * 0.32, uViper) * soft;',
     '  a = mix(a, soft * 0.95, vTrail * 0.65);',
-    '  fragColor = vec4(col, min(a * (1.0 + uViper * 0.8), 0.98) * vEdge);',
+    '  // depth haze — far rows thin out; deepens as the dolly closes in (w spread widens)',
+    '  float haze = 0.30 + 0.70 * smoothstep(0.52, 0.92, vW);',
+    '  fragColor = vec4(col, min(a * (1.0 + uViper * 0.8), 0.98) * vEdge * haze);',
     '}'
   ].join('\n');
 

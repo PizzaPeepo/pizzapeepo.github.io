@@ -10,6 +10,8 @@ import { setupCanvases } from "../Utils/CanvasManager.js";
 var canvasHeight = window.innerHeight;
 var canvasWidth = window.getCanvasWidth();
 const whiteLineStrokeStyle = "rgba(255, 255, 255, 1.0)";
+// readout font follows the site's --font-body type config (CSS/theme.css)
+const readoutFont = '600 13px ' + getComputedStyle(document.body).fontFamily;
 var resetCanvas = false;
 var paused = false;
 
@@ -237,7 +239,7 @@ function draw(ts) {
 
 	// readout
 	fgCtx.fillStyle = 'rgba(255, 107, 71, 0.95)';
-	fgCtx.font = '600 13px DM Sans, system-ui, sans-serif';
+	fgCtx.font = readoutFont;
 	fgCtx.fillText(queried.length + ' in range', area.x + 6, area.y - 8 < 12 ? area.y + area.h + 18 : area.y - 8);
 
 	if (document.hidden || paused) return;

@@ -2,7 +2,7 @@
    theme.css — shared design system for Canvas Lab demo pages
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,700;1,9..144,400;1,9..144,700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@0,400..700;1,400..700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&display=swap');
 
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -36,6 +36,23 @@
 
   --canvas-bg: #18140e;
   --radius:    14px;
+
+  /* ── TYPE CONFIG — single source for font families/sizes/tracking.
+     To swap the site's fonts, edit these tokens + the @import above
+     (and the mirrored block in index.html). See .claude/skills/swap-fonts. ── */
+  --font-display: 'STIX Two Text', serif;        /* titles, hero, iris */
+  --font-body:    'IBM Plex Sans', sans-serif;   /* copy, buttons, pills */
+  --font-mono:    'IBM Plex Mono', monospace;    /* labels, readouts, tags */
+
+  --fw-display:        600;      /* card/demo titles */
+  --fw-display-strong: 700;      /* hero, iris */
+  --track-display:     -0.01em;  /* metrics-dependent — retune on font swap */
+
+  --fs-page-title: 27px;                      /* .demo-title */
+  --fs-iris:       clamp(28px, 5vw, 56px);    /* page-transition title card */
+  --fs-ui:         13px;                      /* buttons, theme toggle */
+  --fs-mono-label: 10px;                      /* uppercase mono labels */
+  --fs-mono-value: 11px;                      /* mono readouts / badges */
 
   interpolate-size: allow-keywords; /* lets block-size animate to/from auto (details expand) */
 }
@@ -115,7 +132,7 @@ html { scroll-behavior: smooth; }
 body {
   background: var(--bg);
   color: var(--tx);
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-body);
   min-height: 100vh;
   overflow-x: hidden;
   transition: background-color 0.4s ease, color 0.4s ease;
@@ -133,6 +150,33 @@ body { animation: pageArrive 0.32s ease-out; }
 @view-transition { navigation: auto; }
 ::view-transition-old(root) { animation-duration: 0.26s; }
 ::view-transition-new(root) { animation-duration: 0.26s; }
+
+/* ── PAGE IRIS (reverse) — "← Home" grows into a full-screen "Canvas Lab" title
+   card before the landing page loads behind it: the landing page's forward iris
+   match cut, played backwards. Same class + timings as the index inline version. ── */
+.page-iris {
+  position: fixed; z-index: 400;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+  border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
+  transition: top 0.42s cubic-bezier(0.33,0,0.2,1),
+              left 0.42s cubic-bezier(0.33,0,0.2,1),
+              width  0.42s cubic-bezier(0.33,0,0.2,1),
+              height 0.42s cubic-bezier(0.33,0,0.2,1),
+              border-radius 0.42s ease,
+              opacity 0.3s ease 0.1s;
+}
+.page-iris span {
+  font-family: var(--font-display);
+  font-weight: var(--fw-display-strong);
+  letter-spacing: var(--track-display);
+  font-size: var(--fs-iris);
+  color: var(--tx);
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.3s ease 0.10s, transform 0.35s ease 0.10s;
+}
+.page-iris.grow span { opacity: 1; transform: none; }
 
 /* ── BACKGROUND BLOBS ── */
 .blobs {
@@ -199,16 +243,18 @@ html.light .blob-2 { opacity: 0.12; }
 }
 
 .demo-title {
-  font-family: 'Fraunces', serif;
-  font-weight: 700;
-  font-size: 28px;
+  font-family: var(--font-display);
+  font-weight: var(--fw-display);
+  font-size: var(--fs-page-title);
+  letter-spacing: var(--track-display);
   color: var(--tx);
   line-height: 1;
   flex: 1;
 }
 
 .fps-badge {
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-value);
   font-weight: 500;
   color: var(--tx-3);
   background: var(--bg-card);
@@ -227,8 +273,8 @@ html.light .blob-2 { opacity: 0.12; }
   border: 1.5px solid var(--tx-4);
   border-radius: 40px;
   color: var(--tx-2);
-  font-family: 'DM Sans', sans-serif;
-  font-size: 13px;
+  font-family: var(--font-body);
+  font-size: var(--fs-ui);
   font-weight: 500;
   padding: 8px 18px 8px 12px;
   cursor: pointer;
@@ -270,15 +316,17 @@ html.light .blob-2 { opacity: 0.12; }
 }
 
 .ctrl-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-label);
+  font-weight: 500;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--tx-2);
 }
 
 .ctrl-value {
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-value);
   color: var(--tx-2);
   margin-top: 2px;
 }
@@ -349,8 +397,8 @@ html.viper input[type="range"].slider::-moz-range-thumb:hover {
 
 /* Buttons */
 button {
-  font-family: 'DM Sans', sans-serif;
-  font-size: 13px;
+  font-family: var(--font-body);
+  font-size: var(--fs-ui);
   font-weight: 500;
   color: var(--tx-2);
   background: color-mix(in srgb, var(--tx-4) 30%, transparent);
@@ -706,9 +754,10 @@ label {
   border-radius: 6px;
   border-left: 2px solid var(--gold-mid);
   background: color-mix(in srgb, var(--gold) 8%, transparent);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-label);
+  font-weight: 500;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--gold);
   user-select: none;
