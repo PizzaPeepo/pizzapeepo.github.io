@@ -17,6 +17,9 @@
     'uniform float uTime;',
     'uniform vec2  uMouse;',
     'uniform float uAspect;',
+    'uniform float uTilt;',
+    'uniform float uRise;',
+    'uniform float uYaw;',
     'uniform vec4  uRipples[8];',
     'uniform vec3  uTrail[12];',
     'out float vH;',
@@ -24,12 +27,12 @@
     'out vec2  vScrPos;',
     '',
     'void main() {',
-    '  float tilt = 0.48;',
+    '  float tilt = uTilt;',
     '  float ct = cos(tilt), st = sin(tilt);',
     '  float cam  = 4.5;',
     '',
     '  float w0    = cam / (cam + aPos.y * st + 0.5);',
-    '  vec2 scrPos = vec2(aPos.x * w0 / uAspect, (aPos.y * ct - 0.08) * w0);',
+    '  vec2 scrPos = vec2((aPos.x - uYaw) * w0 / uAspect, (aPos.y * ct - uRise) * w0);',
     '  vScrPos = scrPos;',
     '',
     '  float z = 0.0;',
@@ -66,7 +69,7 @@
     '',
     '  vec3 p = vec3(aPos.x, aPos.y * ct - z * st, aPos.y * st + z * ct);',
     '  float w = cam / (cam + p.z + 0.5);',
-    '  gl_Position  = vec4(p.x * w / uAspect, (p.y - 0.08) * w, 0.0, 1.0);',
+    '  gl_Position  = vec4((p.x - uYaw) * w / uAspect, (p.y - uRise) * w, 0.0, 1.0);',
     '  gl_PointSize = clamp(w * 2.8, 1.0, 5.0);',
     '}'
   ].join('\n');
@@ -201,6 +204,9 @@
     uMouse:   gl.getUniformLocation(prog, 'uMouse'),
     uAspect:  gl.getUniformLocation(prog, 'uAspect'),
     uLight:   gl.getUniformLocation(prog, 'uLight'),
+    uTilt:    gl.getUniformLocation(prog, 'uTilt'),
+    uRise:    gl.getUniformLocation(prog, 'uRise'),
+    uYaw:     gl.getUniformLocation(prog, 'uYaw'),
     uViper:   gl.getUniformLocation(prog, 'uViper'),
     uRipples: gl.getUniformLocation(prog, 'uRipples[0]'),
     uTrail:   gl.getUniformLocation(prog, 'uTrail[0]'),
@@ -214,6 +220,17 @@
   var tIdx          = 0;
   var lastTrailTime = 0;
   var t0            = performance.now();
+
+  /* Camera dolly (scroll) + parallax yaw (mouse) — damped toward targets each frame
+     so the "camera" glides instead of tracking input 1:1. */
+  var scrollTgt = 0, scrollCur = 0;
+  var yawTgt    = 0, yawCur    = 0;
+
+  function readScroll() {
+    scrollTgt = Math.min(window.scrollY / (window.innerHeight * 0.85), 1.0);
+  }
+  readScroll();
+  window.addEventListener('scroll', readScroll, { passive: true });
 
   var DARK_BG  = [24/255, 18/255, 16/255];
   var LIGHT_BG = [250/255, 245/255, 238/255];
@@ -230,6 +247,7 @@
   document.addEventListener('mousemove', function (e) {
     mouse[0] =  (e.clientX / canvas.width)  * 2.0 - 1.0;
     mouse[1] = -((e.clientY / canvas.height) * 2.0 - 1.0);
+    yawTgt = mouse[0] * 0.05;
 
     var now = performance.now();
     if (now - lastTrailTime > 50) {
@@ -274,6 +292,11 @@
     gl.uniform2fv(LOC.uMouse, mouse);
     gl.uniform1f(LOC.uAspect, canvas.width / canvas.height);
     gl.uniform1f(LOC.uLight,  lite);
+    scrollCur += (scrollTgt - scrollCur) * 0.055;
+    yawCur    += (yawTgt    - yawCur)    * 0.045;
+    gl.uniform1f(LOC.uTilt, 0.48 + scrollCur * 0.17);
+    gl.uniform1f(LOC.uRise, 0.08 + scrollCur * 0.26);
+    gl.uniform1f(LOC.uYaw,  yawCur);
     gl.uniform1f(LOC.uViper,  vip);
     gl.uniform4fv(LOC.uRipples, ripData);
     gl.uniform3fv(LOC.uTrail,   trailData);
@@ -286,4 +309,17 @@
 
   frame();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) requestAnimationFrame(frame); });
+
+  /* Overture — three scripted raindrops sweep the plane on load, announcing that
+     the surface is live and responsive before the user ever touches it. */
+  [[-0.45, 0.25, 500, 0.85], [0.5, -0.05, 950, 0.6], [0.1, 0.4, 1500, 0.5]].forEach(function (r) {
+    setTimeout(function () {
+      var idx = (rIdx % 8) * 4;
+      ripData[idx]     = r[0];
+      ripData[idx + 1] = r[1];
+      ripData[idx + 2] = (performance.now() - t0) * 0.001;
+      ripData[idx + 3] = r[3];
+      rIdx++;
+    }, r[2]);
+  });
 }());

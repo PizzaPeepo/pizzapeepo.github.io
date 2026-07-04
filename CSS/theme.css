@@ -121,6 +121,19 @@ body {
   transition: background-color 0.4s ease, color 0.4s ease;
 }
 
+/* ── ARRIVAL FADE — demo pages dissolve in, so the landing page's iris transition
+   lands on a fade instead of a hard first paint. Opacity only: a transform or
+   filter here would become the containing block for position:fixed HUD panels. ── */
+body { animation: pageArrive 0.32s ease-out; }
+@keyframes pageArrive { from { opacity: 0; } }
+
+/* Cross-document view transition (Chrome 126+): browser crossfades the old
+   page's last frame (the landing iris) into this page. Progressive — browsers
+   without @view-transition simply hard-swap and still get the fade above. */
+@view-transition { navigation: auto; }
+::view-transition-old(root) { animation-duration: 0.26s; }
+::view-transition-new(root) { animation-duration: 0.26s; }
+
 /* ── BACKGROUND BLOBS ── */
 .blobs {
   position: fixed; inset: 0;

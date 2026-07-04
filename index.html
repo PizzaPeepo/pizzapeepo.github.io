@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#181210">
   <title>Canvas Lab — Interactive Demos</title>
+  <script>document.documentElement.classList.add('js');</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,700;0,9..144,800;1,9..144,400;1,9..144,700;1,9..144,800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet">
@@ -190,11 +192,46 @@
     }
     .theme-toggle:hover .toggle-icon { transform: rotate(30deg) scale(1.1); }
 
-    /* ─── HEADER ─── */
+    /* ─── HEADER — Act I: full-viewport hero, content vertically centred over the plane ─── */
     header {
-      padding: 100px 0 64px;
+      min-height: 100svh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 80px 0 110px;
       position: relative;
     }
+    .hdr-inner { will-change: transform, opacity; }
+
+    /* Scroll cue — a droplet running down a thin line: "there is more below,
+       and scrolling moves the camera" */
+    .scroll-cue {
+      position: absolute;
+      left: 50%;
+      bottom: 34px;
+      transform: translateX(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      font-size: 11px; font-weight: 500;
+      letter-spacing: 0.22em; text-transform: uppercase;
+      color: var(--tx-3);
+      text-decoration: none;
+      transition: color 0.25s ease;
+    }
+    .scroll-cue:hover { color: var(--gold); }
+    .cue-line {
+      width: 1.5px; height: 44px;
+      background: color-mix(in srgb, var(--tx-4) 70%, transparent);
+      overflow: hidden; position: relative;
+      border-radius: 1px;
+    }
+    .cue-line::after {
+      content: ""; position: absolute; left: 0; top: -55%;
+      width: 100%; height: 55%;
+      background: linear-gradient(to bottom, transparent, var(--gold));
+      animation: cueDrop 2.2s cubic-bezier(0.4,0,0.2,1) infinite;
+    }
+    @keyframes cueDrop { to { top: 115%; } }
+    @media (max-height: 560px) { .scroll-cue { display: none; } }
 
     .hdr-eyebrow {
       display: flex; align-items: center; gap: 10px;
@@ -312,9 +349,13 @@
       backdrop-filter: blur(0px) saturate(100%);
       -webkit-backdrop-filter: blur(0px) saturate(100%);
       contain: layout;
-
-      opacity: 0;
-      animation: riseIn 0.5s ease forwards;
+    }
+    /* Scroll-triggered entrance: hidden only when JS will reveal (no-JS keeps content) */
+    html.js .card:not(.reveal) { opacity: 0; }
+    .card.reveal { animation: cardEnter 0.65s cubic-bezier(0.22,1,0.36,1) both; }
+    @keyframes cardEnter {
+      from { opacity: 0; transform: perspective(900px) translateY(34px) rotateX(7deg); }
+      to   { opacity: 1; transform: none; }
     }
     /* Hover shadow lives on a pseudo-element: opacity transition is GPU-composited
        (no per-frame repaint of the 80px blur, unlike animating box-shadow directly). */
@@ -374,21 +415,8 @@
       from { filter: hue-rotate(0deg); }
       to   { filter: hue-rotate(360deg); }
     }
-    .card:nth-child(1)  { animation-delay: 0.10s; }
-    .card:nth-child(2)  { animation-delay: 0.17s; }
-    .card:nth-child(3)  { animation-delay: 0.24s; }
-    .card:nth-child(4)  { animation-delay: 0.31s; }
-    .card:nth-child(5)  { animation-delay: 0.38s; }
-    .card:nth-child(6)  { animation-delay: 0.45s; }
-    .card:nth-child(7)  { animation-delay: 0.52s; }
-    .card:nth-child(8)  { animation-delay: 0.59s; }
-    .card:nth-child(9)  { animation-delay: 0.66s; }
-    .card:nth-child(10) { animation-delay: 0.73s; }
-    .card:nth-child(11) { animation-delay: 0.80s; }
-    .card:nth-child(12) { animation-delay: 0.87s; }
-
-    /* once initial rise-in is done, cards are CSS-static so the filter FLIP can drive inline transform/opacity */
-    .grid.filters-ready .card { animation: none; opacity: 1; }
+    /* once revealed / filtering begins, cards are CSS-static so the filter FLIP can drive inline transform/opacity */
+    html.js .grid.filters-ready .card { animation: none; opacity: 1; }
 
     .card:hover {
       top: -6px;
@@ -531,10 +559,17 @@
       header           { padding: 80px 0 48px; }
     }
 
-    /* ─── FILTER BAR ─── */
+    /* ─── FILTER BAR — sticky wayfinding: stays with you through the 23-card catalog ─── */
     .filter-bar {
       display: flex; flex-wrap: wrap; gap: 8px;
       margin-bottom: 28px;
+      position: sticky; top: 12px; z-index: 40;
+      padding: 10px 12px;
+      border-radius: 16px;
+      background: color-mix(in srgb, var(--bg) 62%, transparent);
+      backdrop-filter: blur(12px) saturate(130%);
+      -webkit-backdrop-filter: blur(12px) saturate(130%);
+      border: 1px solid color-mix(in srgb, var(--tx-4) 40%, transparent);
     }
     .filter-pill {
       font-size: 12px; font-weight: 500;
@@ -670,6 +705,51 @@
       html.viper .hdr-eyebrow .pip { animation: none; }
     }
 
+    /* ─── FOCUS — keyboard path mirrors the hover path ─── */
+    .card:focus-visible {
+      outline: 2px solid var(--gold);
+      outline-offset: 3px;
+    }
+    .card:focus-visible .card-arrow { transform: translate(4px, -4px); opacity: 1; }
+    .card:focus-visible .card-title { color: var(--gold); }
+    .filter-pill:focus-visible,
+    .theme-toggle:focus-visible,
+    .scroll-cue:focus-visible,
+    .foot-link:focus-visible {
+      outline: 2px solid var(--gold);
+      outline-offset: 2px;
+    }
+
+    /* ─── PAGE IRIS — card grows into a title card, then the demo loads behind it ─── */
+    .page-iris {
+      position: fixed; z-index: 400;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg);
+      border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
+      pointer-events: none;
+      transition: top    0.42s cubic-bezier(0.33,0,0.2,1),
+                  left   0.42s cubic-bezier(0.33,0,0.2,1),
+                  width  0.42s cubic-bezier(0.33,0,0.2,1),
+                  height 0.42s cubic-bezier(0.33,0,0.2,1),
+                  border-radius 0.42s ease;
+    }
+    .page-iris span {
+      font-family: 'Fraunces', serif;
+      font-weight: 700;
+      font-size: clamp(28px, 5vw, 56px);
+      color: var(--tx);
+      opacity: 0;
+      transform: translateY(12px);
+      transition: opacity 0.3s ease 0.10s, transform 0.35s ease 0.10s;
+    }
+    .page-iris.grow span { opacity: 1; transform: none; }
+
+    /* ─── VIEW TRANSITION — supporting browsers crossfade document swaps; the iris
+       still plays first, so the cut becomes iris → crossfade → arrival fade ─── */
+    @view-transition { navigation: auto; }
+    ::view-transition-old(root) { animation-duration: 0.26s; }
+    ::view-transition-new(root) { animation-duration: 0.26s; }
+
     /* ─── CARD BORDER SVG ─── */
     .card-border-svg {
       position: absolute;
@@ -700,6 +780,7 @@
 
     <!-- ── HEADER ── -->
     <header>
+      <div class="hdr-inner">
       <div class="hdr-eyebrow">
         <span class="pip"></span>
         Canvas Lab · Interactive Demos
@@ -715,10 +796,15 @@
         <span class="badge coral">Canvas API</span>
         <span class="badge" id="demoCountBadge"/>
       </div>
+      </div><!-- /hdr-inner -->
+      <a class="scroll-cue" href="#demos" aria-label="Scroll to the demo catalog">
+        <span class="cue-line" aria-hidden="true"></span>
+        scroll
+      </a>
     </header>
 
     <!-- ── DEMO GRID ── -->
-    <section class="demos" aria-label="Demo list">
+    <section class="demos" id="demos" aria-label="Demo list">
 
       <div class="filter-bar" id="filterBar">
         <button class="filter-pill active" data-filter="all">All</button>
@@ -1192,6 +1278,27 @@
           card.style.opacity   = '1';
         }, { once: true });
       });
+
+      /* Scroll-triggered reveal — a card rises off the plane only when the
+         camera (scroll) actually reaches it; same-frame arrivals stagger. */
+      if ('IntersectionObserver' in window) {
+        var io = new IntersectionObserver(function (entries) {
+          var batch = 0;
+          entries.forEach(function (en) {
+            if (!en.isIntersecting) return;
+            var card = en.target;
+            if (!card.classList.contains('reveal')) {
+              card.style.animationDelay = (batch * 0.07).toFixed(2) + 's';
+              card.classList.add('reveal');
+              batch++;
+            }
+            io.unobserve(card);
+          });
+        }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+        cards.forEach(function (c) { io.observe(c); });
+      } else {
+        cards.forEach(function (c) { c.classList.add('reveal'); });
+      }
     })();
   </script>
 
@@ -1373,6 +1480,7 @@
       });
 
       pills.forEach(function (pill) {
+        pill.setAttribute('aria-pressed', pill.classList.contains('active') ? 'true' : 'false');
         var n = counts[pill.dataset.filter];
         if (n !== undefined) {
           pill.innerHTML = pill.textContent + '<span class="pill-count">· ' + n + '</span>';
@@ -1394,8 +1502,10 @@
         return filter === 'all' || (card.dataset.cat || '') === filter;
       }
 
-      function markReady() { grid.classList.add('filters-ready'); }
-      setTimeout(markReady, 1500);   // let the initial rise-in finish first
+      function markReady() {
+        grid.classList.add('filters-ready');
+        cards.forEach(function (c) { c.classList.add('reveal'); });   // scroll-reveal yields to filtering
+      }
 
       function clearPreview() {       // undo any pill-hover preview before animating
         cards.forEach(function (c) {
@@ -1530,7 +1640,10 @@
 
       pills.forEach(function (pill) {
         pill.addEventListener('click', function () {
-          pills.forEach(function (p) { p.classList.toggle('active', p === pill); });
+          pills.forEach(function (p) {
+            p.classList.toggle('active', p === pill);
+            p.setAttribute('aria-pressed', p === pill ? 'true' : 'false');
+          });
           applyFilter(pill.dataset.filter);
         });
 
@@ -1538,6 +1651,7 @@
           var f = pill.dataset.filter;
           if (f === 'all') return;
           if (grid.classList.contains('filtered')) return;
+          cards.forEach(function (c) { c.classList.add('reveal'); });   // preview dims via inline opacity — all cards must be visible first
           cards.forEach(function (card) {
             var cat = card.dataset.cat || '';
             if (cat !== f) {
@@ -1601,6 +1715,114 @@
       });
 
 }());
+  </script>
+
+  <script>
+    /* Hero parallax — the title block recedes at ~0.78× scroll speed and dissolves,
+       placing it spatially BETWEEN the camera and the wave plane (which dollies at
+       its own rate in wavegrid.js). Three layers moving at three speeds = depth. */
+    (function () {
+      var inner = document.querySelector('.hdr-inner');
+      var cue   = document.querySelector('.scroll-cue');
+      if (!inner) return;
+
+      var raf = 0;
+      function apply() {
+        raf = 0;
+        var y = window.scrollY;
+        var p = Math.min(y / (window.innerHeight * 0.7), 1);
+        inner.style.transform = 'translateY(' + (y * 0.22).toFixed(1) + 'px)';
+        inner.style.opacity   = String(Math.max(1 - p * 1.15, 0));
+        if (cue) cue.style.opacity = String(Math.max(1 - p * 3, 0));
+      }
+      window.addEventListener('scroll', function () {
+        if (!raf) raf = requestAnimationFrame(apply);
+      }, { passive: true });
+      apply();
+    })();
+  </script>
+
+  <script>
+    /* Page iris — clicking a card grows it into a full-screen title card, then the
+       demo loads behind it: a match cut instead of a hard navigation. Modified
+       clicks (new tab) and reduced-motion users get the plain navigation. */
+    (function () {
+      var grid = document.getElementById('demoGrid');
+      if (!grid) return;
+      var live = null;
+
+      grid.addEventListener('click', function (e) {
+        if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        var card = e.target.closest('.card');
+        if (!card) return;
+        var href = card.getAttribute('href');
+        if (!href) return;
+        e.preventDefault();
+
+        // Remember where the catalog was left, so "← Home" / back lands here again
+        try {
+          sessionStorage.setItem('lab-return', JSON.stringify({ y: window.scrollY, href: href }));
+        } catch (err) {}
+
+        var r  = card.getBoundingClientRect();
+        var el = document.createElement('div');
+        el.className = 'page-iris';
+        el.style.top          = r.top + 'px';
+        el.style.left         = r.left + 'px';
+        el.style.width        = r.width + 'px';
+        el.style.height       = r.height + 'px';
+        el.style.borderRadius = '16px';
+
+        var t = document.createElement('span');
+        var titleEl = card.querySelector('.card-title');
+        t.textContent = titleEl ? titleEl.textContent : '';
+        el.appendChild(t);
+        document.body.appendChild(el);
+        live = el;
+
+        requestAnimationFrame(function () { requestAnimationFrame(function () {
+          el.classList.add('grow');
+          el.style.top          = '0px';
+          el.style.left         = '0px';
+          el.style.width        = '100vw';
+          el.style.height       = '100vh';
+          el.style.borderRadius = '0px';
+        }); });
+
+        setTimeout(function () { window.location.href = href; }, 460);
+      });
+
+      // bfcache restore (back button) — clear the leftover iris; scroll state is
+      // already intact on a bfcache hit, so consume the return marker unused
+      window.addEventListener('pageshow', function (e) {
+        if (live) { live.remove(); live = null; }
+        if (e.persisted) {
+          try { sessionStorage.removeItem('lab-return'); } catch (err) {}
+        }
+      });
+
+      /* Return-to-catalog — a fresh load of the landing page (demo "← Home" link,
+         or back-nav without bfcache) jumps straight to where the catalog was left
+         and winks the card you came from, instead of stranding you at the hero. */
+      var ret = null;
+      try {
+        ret = JSON.parse(sessionStorage.getItem('lab-return') || 'null');
+        sessionStorage.removeItem('lab-return');
+      } catch (err) { ret = null; }
+      if (ret && ret.y > 0) {
+        var de = document.documentElement;
+        de.style.scrollBehavior = 'auto';        // jump, don't smooth-scroll past the hero
+        window.scrollTo(0, ret.y);
+        de.style.scrollBehavior = '';
+        var back = document.querySelector('.card[href="' + ret.href + '"]');
+        if (back) {
+          setTimeout(function () {
+            back.dispatchEvent(new MouseEvent('mouseenter'));
+            setTimeout(function () { back.dispatchEvent(new MouseEvent('mouseleave')); }, 1300);
+          }, 400);
+        }
+      }
+    })();
   </script>
 </body>
 </html>
