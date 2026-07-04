@@ -697,6 +697,11 @@ html.viper .hud-details > summary:hover .sum-ch {
      per char makes the wave travel left→right */
   animation-delay: calc(var(--ci, 0) * 0.12s - 6s);
 }
+/* chevron leads the wave, one phase step ahead of the first char */
+html.viper .hud-details > summary:hover::before {
+  animation: sumChRGB 3s linear infinite;
+  animation-delay: -6.12s;
+}
 @keyframes sumChRGB {
   0%, 100% { color: var(--rb-1); text-shadow: 0 0 8px color-mix(in srgb, var(--rb-1) 60%, transparent); }
   16.7%    { color: var(--rb-2); text-shadow: 0 0 8px color-mix(in srgb, var(--rb-2) 60%, transparent); }
