@@ -5,7 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#181210">
   <title>Canvas Lab — Interactive Demos</title>
-  <script>document.documentElement.classList.add('js');</script>
+  <script>
+    document.documentElement.classList.add('js');
+    /* apply the saved theme before first paint — the full toggle logic further
+       down re-applies it, but by then the hero has already been painted once */
+    (function () {
+      try {
+        var t = localStorage.getItem('theme');
+        if (t === 'light')     document.documentElement.classList.add('light');
+        else if (t !== 'dark') document.documentElement.classList.add('viper');
+      } catch (err) {
+        document.documentElement.classList.add('viper');
+      }
+    })();
+  </script>
+  <!-- hold the first render until the whole document (incl. the end-of-body
+       scripts that restore scroll and spawn the reverse iris) has parsed —
+       otherwise the view transition briefly shows an unscrolled, unthemed hero -->
+  <link rel="expect" href="#pageEnd" blocking="render">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@0,400..700;1,400..700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
@@ -782,6 +799,20 @@
       transition: opacity 0.3s ease 0.10s, transform 0.35s ease 0.10s;
     }
     .page-iris.grow span { opacity: 1; transform: none; }
+
+    /* reverse shrink variant — stay opaque while large (page text must not
+       bleed through mid-shrink), fade only near card size; title drops fast */
+    .page-iris.shrink {
+      transition: top    0.42s cubic-bezier(0.33,0,0.2,1),
+                  left   0.42s cubic-bezier(0.33,0,0.2,1),
+                  width  0.42s cubic-bezier(0.33,0,0.2,1),
+                  height 0.42s cubic-bezier(0.33,0,0.2,1),
+                  border-radius 0.42s ease,
+                  opacity 0.18s ease 0.30s;
+    }
+    .page-iris.shrink span {
+      transition: opacity 0.14s ease, transform 0.2s ease;
+    }
 
     /* ─── VIEW TRANSITION — supporting browsers crossfade document swaps; the iris
        still plays first, so the cut becomes iris → crossfade → arrival fade ─── */
@@ -1777,9 +1808,16 @@
         if (!href) return;
         e.preventDefault();
 
-        // Remember where the catalog was left, so "← Home" / back lands here again
+        // Remember where the catalog was left, so "← Home" / back lands here
+        // again — plus the card title, so the demo's reverse-iris cover can
+        // show the exact same string (mismatched text doubles up in the
+        // view-transition crossfade)
         try {
-          sessionStorage.setItem('lab-return', JSON.stringify({ y: window.scrollY, href: href }));
+          var tEl0 = card.querySelector('.card-title');
+          sessionStorage.setItem('lab-return', JSON.stringify({
+            y: window.scrollY, href: href,
+            title: tEl0 ? tEl0.textContent : ''
+          }));
         } catch (err) {}
 
         var r  = card.getBoundingClientRect();
@@ -1872,10 +1910,11 @@
         de.style.scrollBehavior = '';
         var backs = document.querySelectorAll('.card[href="' + ret.href + '"]');
 
-        /* Reverse iris landing — the demo page left a full-screen "Canvas Lab"
-           title card on screen (JS/theme.js); recreate it here synchronously
+        /* Reverse iris landing — the demo page left a full-screen title card
+           on screen (JS/theme.js); recreate it here synchronously
            (parser-blocking script, so it covers the first paint) and shrink it
-           into the card you came from. */
+           into the card you came from: the forward match cut played backwards,
+           live preview and all. */
         var origin = null;
         backs.forEach(function (b) {
           if (origin) return;
@@ -1891,12 +1930,41 @@
           iris.style.width        = '100vw';
           iris.style.height       = '100vh';
           iris.style.borderRadius = '0px';
+
+          // Seed with the card's live preview, same as the forward iris — the
+          // full-screen simulation shrinks back into the little card
+          var revRaf = 0;
+          var revFn  = window.cardPreviews ? window.cardPreviews.drawFnFor(ret.href) : null;
+          if (revFn) {
+            var rw  = window.innerWidth, rh = window.innerHeight;
+            var rdp = Math.min(window.devicePixelRatio || 1, 1.5);
+            var rc  = document.createElement('canvas');
+            rc.width  = Math.round(rw * rdp);
+            rc.height = Math.round(rh * rdp);
+            rc.style.width  = rw + 'px';
+            rc.style.height = rh + 'px';
+            iris.appendChild(rc);
+            var rcx = rc.getContext('2d');
+            var or0 = origin.getBoundingClientRect();
+            var rK  = Math.max(1, Math.min(rw / Math.max(or0.width, 1), 2.5));
+            var rT0 = performance.now();
+            (function revFrame() {
+              var pt = (performance.now() - rT0) * 0.001 + 2.0;
+              rcx.setTransform(rdp * rK, 0, 0, rdp * rK, 0, 0);
+              rcx.clearRect(0, 0, rw / rK, rh / rK);
+              revFn(rcx, rw / rK, rh / rK, pt, true);
+              revRaf = requestAnimationFrame(revFrame);
+            })();
+          }
+
           var sp = document.createElement('span');
-          sp.textContent = 'Canvas Lab';
+          var orTitle = origin.querySelector('.card-title');
+          sp.textContent = orTitle ? orTitle.textContent : 'Canvas Lab';
           iris.appendChild(sp);
           document.body.appendChild(iris);
           requestAnimationFrame(function () { requestAnimationFrame(function () {
             var rr = origin.getBoundingClientRect();
+            iris.classList.add('shrink');
             iris.classList.remove('grow');   // span fades back out
             iris.style.top          = rr.top + 'px';
             iris.style.left         = rr.left + 'px';
@@ -1905,7 +1973,10 @@
             iris.style.borderRadius = '16px';
             iris.style.opacity      = '0';
           }); });
-          setTimeout(function () { iris.remove(); }, 520);
+          setTimeout(function () {
+            if (revRaf) cancelAnimationFrame(revRaf);
+            iris.remove();
+          }, 520);
         }
 
         backs.forEach(function (back) {
@@ -1917,5 +1988,6 @@
       }
     })();
   </script>
+  <div id="pageEnd" hidden></div>
 </body>
 </html>

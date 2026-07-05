@@ -170,9 +170,9 @@ body { animation: pageArrive 0.32s ease-out; }
 #backgroundCanvas { view-transition-name: demo-stage; }
 ::view-transition-group(demo-stage) { animation-duration: 0.3s; }
 
-/* ── PAGE IRIS (reverse) — "← Home" grows into a full-screen "Canvas Lab" title
-   card before the landing page loads behind it: the landing page's forward iris
-   match cut, played backwards. Same class + timings as the index inline version. ── */
+/* ── PAGE IRIS (reverse) — "← Home" fades a full-screen title card over the
+   demo; the landing page then loads behind it and shrinks the card into the
+   demo tile you came from (index.html inline script owns that half). ── */
 .page-iris {
   position: fixed; z-index: 400;
   display: flex; align-items: center; justify-content: center;
@@ -196,6 +196,14 @@ body { animation: pageArrive 0.32s ease-out; }
   transition: opacity 0.3s ease 0.10s, transform 0.35s ease 0.10s;
 }
 .page-iris.grow span { opacity: 1; transform: none; }
+/* full-screen cover variant: no geometry animation, just a fast fade-in
+   before navigation hands off to the landing page's shrink */
+.page-iris.cover {
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+.page-iris.cover.grow { opacity: 1; }
 
 /* ── BACKGROUND BLOBS ── */
 .blobs {

@@ -184,10 +184,11 @@
     makeSummaryLED(s, i);
   });
 
-  /* Reverse iris — clicking "← Home" grows the pill into a full-screen
-     "Canvas Lab" title card, then the landing page loads behind it and shrinks
-     the card into the demo tile you came from: the forward match cut played
-     backwards. Modified clicks (new tab) get the plain navigation. */
+  /* Reverse iris — clicking "← Home" fades a full-screen title card over the
+     demo, then the landing page loads behind it and shrinks the card into the
+     demo tile you came from: the forward match cut played backwards. The
+     shrink itself happens on the landing page (index.html), which knows the
+     card's position. Modified clicks (new tab) get the plain navigation. */
   var irisLive = null;
 
   document.addEventListener('click', function (e) {
@@ -199,31 +200,33 @@
     if (!href) return;
     e.preventDefault();
 
-    var r  = link.getBoundingClientRect();
     var el = document.createElement('div');
-    el.className = 'page-iris';
-    el.style.top          = r.top + 'px';
-    el.style.left         = r.left + 'px';
-    el.style.width        = r.width + 'px';
-    el.style.height       = r.height + 'px';
-    el.style.borderRadius = '40px';
+    el.className = 'page-iris cover';
+    el.style.top          = '0px';
+    el.style.left         = '0px';
+    el.style.width        = '100vw';
+    el.style.height       = '100vh';
+    el.style.borderRadius = '0px';
 
     var t = document.createElement('span');
-    t.textContent = 'Canvas Lab';
+    // Use the exact card title the landing page stored at click time — the
+    // index shrink card shows the same string, so the view-transition
+    // crossfade between the two reads as one continuous title
+    var coverTitle = '';
+    try {
+      var lr = JSON.parse(sessionStorage.getItem('lab-return') || 'null');
+      if (lr && lr.title) coverTitle = lr.title;
+    } catch (err) {}
+    t.textContent = coverTitle || (document.title || '').split('—')[0].trim() || 'Canvas Lab';
     el.appendChild(t);
     document.body.appendChild(el);
     irisLive = el;
 
     requestAnimationFrame(function () { requestAnimationFrame(function () {
       el.classList.add('grow');
-      el.style.top          = '0px';
-      el.style.left         = '0px';
-      el.style.width        = '100vw';
-      el.style.height       = '100vh';
-      el.style.borderRadius = '0px';
     }); });
 
-    setTimeout(function () { window.location.href = href; }, 460);
+    setTimeout(function () { window.location.href = href; }, 260);
   });
 
   // bfcache restore (forward button back to the demo) — clear the leftover iris
