@@ -122,7 +122,6 @@ Easy to miss any one; a new demo only shows fully when all three are done:
 - **Quadtree** — Spatial partitioning viz; `Quadtree.js` implements Wikipedia pseudocode
 - **RotatingSquares** — rotating square animation; standard dual-canvas pattern
 - **CircularMotion** — circular motion demo; **4-canvas outlier**: `blackbackgroundCanvas` + `backgroundCanvas` (bgCtx) + `middlegroundCanvas` (mgCtx, trail) + `foregroundCanvas`
-- **Bouncink** — bouncing animation with custom font asset
 - **PhaseshiftDemo1** — phase shift visualization
 - **Boids** — Reynolds flocking; `Boid.js` does separation/alignment/cohesion steering, reuses `GravitySimulation/SpatialHash.js` for neighbour queries. Single-canvas modern-HUD pattern; fillRect trail-fade
 - **DoublePendulum** — two modes (radio-switched): chaotic double pendulum (`DoublePendulum.js`, inline RK4 over the 4-D state, overlaid perturbed copies) and analytic pendulum-wave bank (`PendulumWave.js`). Single-canvas modern-HUD pattern

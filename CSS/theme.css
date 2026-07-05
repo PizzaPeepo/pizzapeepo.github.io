@@ -615,43 +615,6 @@ label {
 /* Sliders inside table — narrower */
 .data-table input[type="range"] { width: 140px; }
 
-/* ── BOUNCINK overlay ── */
-.bouncink-ui {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 48px;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.55), transparent);
-}
-
-.bouncink-ui .back-link {
-  border-color: rgba(255,255,255,0.25);
-  color: rgba(255,255,255,0.7);
-  background: rgba(0,0,0,0.3);
-  backdrop-filter: blur(8px);
-}
-.bouncink-ui .back-link:hover {
-  color: #fff;
-  border-color: rgba(255,255,255,0.6);
-  background: rgba(0,0,0,0.5);
-}
-
-.bouncink-ui .theme-toggle {
-  position: static;
-  background: rgba(0,0,0,0.3);
-  backdrop-filter: blur(8px);
-  border-color: rgba(255,255,255,0.25);
-  color: rgba(255,255,255,0.7);
-  box-shadow: none;
-}
-.bouncink-ui .theme-toggle:hover {
-  border-color: rgba(255,255,255,0.6);
-  color: #fff;
-}
-
 /* ── HUD (glassmorphism full-bleed overlays) ── */
 .hud {
   position: fixed;
@@ -959,5 +922,4 @@ html.viper .hud-details > summary:hover::before {
   .theme-toggle { top: 16px; right: 16px; }
   .topbar { padding-top: 16px; }
   .demo-title { font-size: 22px; }
-  .bouncink-ui { padding: 12px 20px; }
 }

@@ -67,12 +67,11 @@ Judge from a screenshot, not arithmetic.
 
 - `Quadtree/main.js` — canvas readout builds its font string from
   `getComputedStyle(document.body).fontFamily`, so it follows `--font-body` automatically.
-- `PongWars/PongWars.html`, `Bouncink/bouncink.html` — reference `var(--font-display)` /
+- `PongWars/PongWars.html` — references `var(--font-display)` /
   `var(--font-body)` (theme.css is linked there); no literals to touch.
 - **Do NOT touch**: `Web437_ATI_9x16` bitmap font in FluidSimulation / GravitySimulationGPU
   (functional ASCII-art glyph grid, not branding), `pr0xmas` (p5.js one-off),
-  `CSS/fontStyles.css` (legacy Arial stack for old dual-canvas pages),
-  `Bouncink` custom display font asset used on its canvas.
+  `CSS/fontStyles.css` (legacy Arial stack for old dual-canvas pages).
 
 ## Verify
 

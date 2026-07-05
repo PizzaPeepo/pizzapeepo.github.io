@@ -172,30 +172,7 @@
       }
     },
 
-    // 8: DVD Bounce — bouncing logo rect
-    function (ctx, w, h, t, hover) {
-      var lw = 36, lh = 20;
-      var speed = 28;
-      // bounce position from time
-      var px = speed * t % (2 * (w - lw));
-      if (px > w - lw) px = 2 * (w - lw) - px;
-      var py = speed * 0.7 * t % (2 * (h - lh));
-      if (py > h - lh) py = 2 * (h - lh) - py;
-      // color cycles on each "bounce period"
-      var hue = (t * 40) % 360;
-      ctx.save();
-      ctx.strokeStyle = 'hsla(' + hue + ',80%,60%,0.9)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(px, py, lw, lh);
-      // small dot in center
-      ctx.beginPath();
-      ctx.arc(px + lw / 2, py + lh / 2, 2, 0, Math.PI * 2);
-      ctx.fillStyle = 'hsla(' + hue + ',80%,70%,0.9)';
-      ctx.fill();
-      ctx.restore();
-    },
-
-    // 9: Gravity GPU — galaxy swirl (wide card, different feel)
+    // 8: Gravity GPU — galaxy swirl (wide card, different feel)
     function (ctx, w, h, t, hover) {
       var cx = w * 0.5, cy = h * 0.5;
       var N = 55;
@@ -216,7 +193,7 @@
       }
     },
 
-    // 10: Flocking — little triangles drifting in a loose flock
+    // 9: Flocking — little triangles drifting in a loose flock
     function (ctx, w, h, t, hover) {
       var N = 12;
       var cx = w * 0.5 + Math.cos(t * 0.3) * w * 0.18;
@@ -237,7 +214,7 @@
       }
     },
 
-    // 11: Double Pendulum — swinging arms with a trailing arc
+    // 10: Double Pendulum — swinging arms with a trailing arc
     function (ctx, w, h, t, hover) {
       var ox = w * 0.5, oy = h * 0.38;
       var L1 = Math.min(w, h) * 0.22, L2 = Math.min(w, h) * 0.2;
@@ -264,7 +241,7 @@
         ctx.fillStyle = g(0.85); ctx.fill();
       });
     },
-    // 12: Flow Field — particles streaming along a noise field
+    // 11: Flow Field — particles streaming along a noise field
     function (ctx, w, h, t, hover) {
       var N = 26;
       for (var i = 0; i < N; i++) {
@@ -282,7 +259,7 @@
       }
     },
 
-    // 13: Game of Life — blinking cell grid
+    // 12: Game of Life — blinking cell grid
     function (ctx, w, h, t, hover) {
       var cell = 9, cols = Math.floor(w / cell), rows = Math.floor(h / cell);
       var gen = Math.floor(t * 3);
@@ -297,7 +274,7 @@
       }
     },
 
-    // 14: Wave Interference — two interfering source rings
+    // 13: Wave Interference — two interfering source rings
     function (ctx, w, h, t, hover) {
       var srcs = [[w * 0.35, h * 0.5], [w * 0.65, h * 0.5]];
       ctx.lineWidth = 1;
@@ -313,7 +290,7 @@
       }
     },
 
-    // 15: Reaction-Diffusion — growing organic blobs
+    // 14: Reaction-Diffusion — growing organic blobs
     function (ctx, w, h, t, hover) {
       var cx = w * 0.5, cy = h * 0.5;
       for (var i = 0; i < 5; i++) {
@@ -328,7 +305,7 @@
       }
     },
 
-    // 16: Voronoi — moving sites with cell edges
+    // 15: Voronoi — moving sites with cell edges
     function (ctx, w, h, t, hover) {
       var pts = [];
       for (var i = 0; i < 7; i++) {
@@ -357,7 +334,7 @@
       }
     },
 
-    // 17: Slime Mould — branching filament network
+    // 16: Slime Mould — branching filament network
     function (ctx, w, h, t, hover) {
       var cx = w * 0.5, cy = h * 0.5;
       ctx.lineWidth = 1;
@@ -376,7 +353,7 @@
         ctx.stroke();
       }
     },
-    // 18: Cloth — sagging hanging net
+    // 17: Cloth — sagging hanging net
     function (ctx, w, h, t, hover) {
       var cols = 8, rows = 6, sx = w / (cols + 1), top = h * 0.18;
       function sag(col, row) {
@@ -397,7 +374,7 @@
       }
     },
 
-    // 19: Maze — grid with a snaking path
+    // 18: Maze — grid with a snaking path
     function (ctx, w, h, t, hover) {
       var cell = 10, cols = Math.floor(w / cell), rows = Math.floor(h / cell);
       ctx.strokeStyle = g(0.22); ctx.lineWidth = 0.5;
@@ -414,7 +391,7 @@
       ctx.stroke();
     },
 
-    // 20: Fourier — nested rotating circles tracing a tip
+    // 19: Fourier — nested rotating circles tracing a tip
     function (ctx, w, h, t, hover) {
       var cx = w * 0.5, cy = h * 0.5;
       var circ = [[22, 1, 0], [11, -2, 1.2], [6, 3, 2.4], [3.5, -5, 0.5]];
@@ -433,7 +410,7 @@
       ctx.fillStyle = g(0.9);
       ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
     },
-    // 21: Pong Wars — two territories with balls bouncing along a wobbling frontier
+    // 20: Pong Wars — two territories with balls bouncing along a wobbling frontier
     function (ctx, w, h, t, hover) {
       var cols = 11, rows = 8, cw = w / cols, ch = h / rows;
       for (var y = 0; y < rows; y++) {
@@ -450,7 +427,7 @@
       ctx.beginPath(); ctx.arc(bx1, by1, 3.2, 0, Math.PI * 2); ctx.fillStyle = c(0.85); ctx.fill();
       ctx.beginPath(); ctx.arc(bx2, by2, 3.2, 0, Math.PI * 2); ctx.fillStyle = g(0.85); ctx.fill();
     },
-    // 22: Fluid Simulation — dye streaming past a cylinder, shedding vortices
+    // 21: Fluid Simulation — dye streaming past a cylinder, shedding vortices
     function (ctx, w, h, t, hover) {
       var cx = w * 0.6, cy = h * 0.5, R = Math.min(w, h) * 0.13;
       for (var i = 0; i < 7; i++) {
@@ -489,7 +466,6 @@
     'PhaseshiftDemo1',
     'CircularMotion',
     'RotatingSquares',
-    'Bouncink',
     'GravitySimulationGPU',
     'Boids',
     'DoublePendulum',
