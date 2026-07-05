@@ -247,6 +247,15 @@
       overflow: hidden; position: relative;
       border-radius: 1px;
     }
+    /* progress gauge — the line fills from the top as the hero scrolls out */
+    .cue-line::before {
+      content: ""; position: absolute; left: 0; top: 0;
+      width: 100%; height: 100%;
+      background: var(--gold);
+      transform: scaleY(var(--prog, 0));
+      transform-origin: top;
+      opacity: 0.85;
+    }
     .cue-line::after {
       content: ""; position: absolute; left: 0; top: -55%;
       width: 100%; height: 55%;
@@ -255,6 +264,13 @@
     }
     @keyframes cueDrop { to { top: 115%; } }
     @media (max-height: 560px) { .scroll-cue { display: none; } }
+
+    /* Cycling italic word — fresh chars spring in with overshoot, staggered */
+    @keyframes klSpring {
+      0%   { transform: scale(0.86); opacity: 0.15; }
+      55%  { transform: scale(1.07); opacity: 1; }
+      100% { transform: none; }
+    }
 
     .hdr-eyebrow {
       display: flex; align-items: center; gap: 10px;
@@ -285,13 +301,13 @@
       font-size: var(--fs-hero);
       line-height: 0.96;
       letter-spacing: var(--track-hero);
-      color: var(--tx);
-      opacity: 0;
+      color: var(--gold-hi);
+      opacity: 1;
       animation: riseIn 0.7s ease 0.12s forwards;
     }
     .hdr-title em {
       font-style: italic; /* STIX Two has a real math-flavored italic */
-      color: var(--coral);
+      color: #FFFFFF;
     }
 
     .hdr-divider {
@@ -452,13 +468,11 @@
       -webkit-backdrop-filter: blur(8px) saturate(140%);
       z-index: 2;
     }
-    .card:hover .card-arrow   { transform: translate(4px, -4px); opacity: 1; }
     .card:hover .card-title   { color: var(--gold); }
 
     .grid.filtered .card:hover,
     .grid.filtered .card-wide:hover { transform: none; box-shadow: var(--shadow-sm); z-index: 1; }
     .grid.filtered:has(.card:hover) .card:not(:hover) { transform: none; }
-    .grid.filtered .card:hover .card-arrow { transform: none; opacity: 0.45; }
     .grid.filtered .card:hover .card-title { color: var(--tx); }
 
     /* Wide card */
@@ -520,29 +534,9 @@
     }
 
     .card-foot {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
       margin-top: auto;
       padding-top: 14px;
       border-top: 1px solid color-mix(in srgb, var(--tx-4) 60%, transparent);
-    }
-
-    .card-launch {
-      font-family: var(--font-mono);
-      font-size: var(--fs-mono-value);
-      font-weight: 500;
-      color: var(--tx-3);
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-
-    .card-arrow {
-      font-size: 18px;
-      color: var(--gold);
-      opacity: 0.45;
-      transition: transform 0.28s cubic-bezier(0.34,1.4,0.64,1), opacity 0.25s ease;
-      line-height: 1;
     }
 
     /* ─── FOOTER ─── */
@@ -640,7 +634,6 @@
       z-index: 2;
     }
     .card-wide.card-pill-hover { top: -6px; }
-    .card.card-pill-hover .card-arrow { transform: translate(4px, -4px); opacity: 1; }
     .card.card-pill-hover .card-title { color: var(--gold); }
     .card.card-pill-hover .card-num   { color: var(--tx-3); }
     html.light .card.card-pill-hover {
@@ -699,20 +692,6 @@
       background: linear-gradient(90deg, #39ff14, #5dff2e, #39ff14);
     }
 
-    /* "interactive." pulses through the pastel ramp — text-shadow follows the kinetic letters */
-    html.viper .hdr-title em {
-      color: var(--gold-hi);
-      animation: emGlow 9s linear infinite;
-    }
-    @keyframes emGlow {
-      0%, 100% { text-shadow: 0 0 26px rgba(255,179,200,0.60); }
-      17%      { text-shadow: 0 0 26px rgba(255,217,168,0.60); }
-      33%      { text-shadow: 0 0 26px rgba(253,255,176,0.60); }
-      50%      { text-shadow: 0 0 26px rgba(179,255,201,0.65); }
-      67%      { text-shadow: 0 0 26px rgba(168,228,255,0.60); }
-      83%      { text-shadow: 0 0 26px rgba(217,184,255,0.60); }
-    }
-
     /* keep black truly black — calm the blobs */
     html.viper .blob-1 { opacity: 0.26; }
     html.viper .blob-2 { opacity: 0.22; }
@@ -748,7 +727,7 @@
     }
     html.viper ::-webkit-scrollbar-thumb:hover { background: #21d977; }
 
-    @media (prefers-reduced-motion: reduce) {
+    @media (prefers-reduced-motion: no-preference) {
       html.viper .card::before,
       html.viper .hdr-title em,
       html.viper .hdr-eyebrow .pip,
@@ -761,7 +740,6 @@
       outline: 2px solid var(--gold);
       outline-offset: 3px;
     }
-    .card:focus-visible .card-arrow { transform: translate(4px, -4px); opacity: 1; }
     .card:focus-visible .card-title { color: var(--gold); }
     .filter-pill:focus-visible,
     .theme-toggle:focus-visible,
@@ -775,6 +753,7 @@
     .page-iris {
       position: fixed; z-index: 400;
       display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
       background: var(--bg);
       border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
       pointer-events: none;
@@ -785,7 +764,14 @@
                   border-radius 0.42s ease,
                   opacity 0.3s ease 0.1s;
     }
+    /* live preview seed — viewport-sized canvas anchored to the iris corner;
+       the growing window progressively reveals it (clipped by overflow) */
+    .page-iris canvas {
+      position: absolute; top: 0; left: 0;
+      pointer-events: none;
+    }
     .page-iris span {
+      position: relative; z-index: 1;
       font-family: var(--font-display);
       font-weight: var(--fw-display-strong);
       letter-spacing: var(--track-display);
@@ -844,11 +830,6 @@
         A collection of physics simulations, mathematical visualizations,
         and rendering experiments — all running live in your browser.
       </p>
-      <div class="hdr-badges">
-        <span class="badge">Vanilla JS</span>
-        <span class="badge coral">Canvas API</span>
-        <span class="badge" id="demoCountBadge"/>
-      </div>
       </div><!-- /hdr-inner -->
       <a class="scroll-cue" href="#demos" aria-label="Scroll to the demo catalog">
         <span class="cue-line" aria-hidden="true"></span>
@@ -880,10 +861,7 @@
           </div>
           <div class="card-title">Gravity Simulation</div>
           <p class="card-desc">N-body gravitational attraction solved via Runge-Kutta 4th-order integration. Particles attract, collide elastically, and form emergent orbits.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="Raycaster/Raycaster.html">
@@ -893,10 +871,7 @@
           </div>
           <div class="card-title">Raycaster</div>
           <p class="card-desc">2D line-segment ray casting. Rays find the closest wall intersections to simulate light and shadow.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="Quadtree/Quadtree.html">
@@ -906,10 +881,7 @@
           </div>
           <div class="card-title">Quadtree</div>
           <p class="card-desc">Spatial partitioning tree for efficient 2D proximity queries and collision detection.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="Lissajous/Lissajous.html">
@@ -919,10 +891,7 @@
           </div>
           <div class="card-title">Lissajous Table</div>
           <p class="card-desc">Parametric curves from two perpendicular oscillations. Frequency ratios produce distinct closed forms.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="LissajousRotating/LissajousRotating.html">
@@ -932,10 +901,7 @@
           </div>
           <div class="card-title">Rotating Lissajous</div>
           <p class="card-desc">Lissajous figure with a continuously evolving phase angle — the curve breathes and morphs over time.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="PhaseshiftDemo1/PhaseshiftDemo1.html">
@@ -945,10 +911,7 @@
           </div>
           <div class="card-title">Phaseshift</div>
           <p class="card-desc">Visualizing how phase offset between two signals transforms their superposition.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="CircularMotion/CircularMotion.html">
@@ -958,10 +921,7 @@
           </div>
           <div class="card-title">Circular Motion</div>
           <p class="card-desc">Uniform circular motion — angular velocity, centripetal acceleration, and phase projection onto axes.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="RotatingSquares/RotatingSquares.html">
@@ -971,10 +931,7 @@
           </div>
           <div class="card-title">Rotating Polygons</div>
           <p class="card-desc">Nested polygons inscribed inside each other at incremental rotation offsets.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="Boids/Boids.html">
@@ -984,10 +941,7 @@
           </div>
           <div class="card-title">Flocking</div>
           <p class="card-desc">Reynolds' boids — separation, alignment, and cohesion produce emergent flocking. Spatial-hash neighbour queries keep it fast at scale.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="DoublePendulum/DoublePendulum.html">
@@ -997,10 +951,7 @@
           </div>
           <div class="card-title">Double Pendulum</div>
           <p class="card-desc">Chaotic motion via RK4 integration — overlaid copies fan out from a hair's-breadth perturbation. Switch to a tuned pendulum-wave bank.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="FlowField/FlowField.html">
@@ -1010,10 +961,7 @@
           </div>
           <div class="card-title">Flow Field</div>
           <p class="card-desc">Thousands of particles drift along a Simplex noise field, leaving fading ribbons. The field slowly morphs, so the streamlines never settle.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="GameOfLife/GameOfLife.html">
@@ -1023,10 +971,7 @@
           </div>
           <div class="card-title">Game of Life</div>
           <p class="card-desc">Conway's cellular automaton — four rules on a paintable grid. Drop a Gosper glider gun, or seed noise and watch order emerge.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="Waves/Waves.html">
@@ -1036,10 +981,7 @@
           </div>
           <div class="card-title">Wave Interference</div>
           <p class="card-desc">A ripple tank — circular waves from multiple sources superpose into shifting interference fringes. Click to add or drag emitters.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="ReactionDiffusion/ReactionDiffusion.html">
@@ -1049,10 +991,7 @@
           </div>
           <div class="card-title">Reaction-Diffusion</div>
           <p class="card-desc">The Gray-Scott model — two chemicals react and diffuse into corals, spots, and mazes. Paint to seed, and dial in feed / kill live.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="Voronoi/Voronoi.html">
@@ -1062,10 +1001,7 @@
           </div>
           <div class="card-title">Voronoi / Delaunay</div>
           <p class="card-desc">Drifting sites carve the plane into nearest-neighbour cells, with the dual Delaunay mesh overlaid. A natural companion to the Quadtree.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="Physarum/Physarum.html">
@@ -1075,10 +1011,7 @@
           </div>
           <div class="card-title">Slime Mould</div>
           <p class="card-desc">Physarum agents sense a scent trail ahead and turn toward it, depositing as they go. The diffusing map grows emergent transport networks.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="Cloth/Cloth.html">
@@ -1088,10 +1021,7 @@
           </div>
           <div class="card-title">Cloth</div>
           <p class="card-desc">A Verlet-integrated spring mesh you can grab, drag, and tear. Constraints relax into a draping fabric and snap when over-stretched.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="Maze/Maze.html">
@@ -1101,10 +1031,7 @@
           </div>
           <div class="card-title">Maze &amp; Pathfinding</div>
           <p class="card-desc">A recursive-backtracker maze, then watch A*, Dijkstra, BFS, or DFS flood the grid and backtrack the shortest route to the exit.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card card-wide" href="GravitySimulationGPU/GravitySimGPU.html">
@@ -1114,10 +1041,7 @@
           </div>
           <div class="card-title">Gravity Simulation · GPU</div>
           <p class="card-desc">The N-body sim reborn: tens of thousands of particles via Barnes-Hut (O(n log n)), rendered as a glowing 3D galaxy on the GPU. Orbit with the mouse.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="Fourier/Fourier.html">
@@ -1127,10 +1051,7 @@
           </div>
           <div class="card-title">Fourier Epicycles</div>
           <p class="card-desc">Draw any shape and a chain of rotating circles re-traces it — a discrete Fourier transform made visible. Companion to Lissajous and Circular Motion.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="PongWars/PongWars.html">
@@ -1140,10 +1061,7 @@
           </div>
           <div class="card-title">Pong Wars</div>
           <p class="card-desc">Two territories at war — every ball flips the enemy tile it hits to its own colour and ricochets, so the frontier sloshes back and forth forever. Built as a stream waiting screen: live scoreboard, overlay, and chat-driven hooks.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
         <a class="card" href="FluidSimulation/FluidSimulation.html">
@@ -1153,10 +1071,7 @@
           </div>
           <div class="card-title">Fluid Simulation</div>
           <p class="card-desc">A GPU Navier–Stokes fluid you can finger-paint — drag to inject dye and force, then drop in cylinders, airfoils, slits and funnels to watch the flow shed vortices around them. Bloom, sunrays, and a deep bench of solver sliders.</p>
-          <div class="card-foot">
-            <span class="card-launch">Open demo</span>
-            <span class="card-arrow">↗</span>
-          </div>
+          <div class="card-foot"></div>
         </a>
 
       </div>
@@ -1354,6 +1269,14 @@
             if (!card.classList.contains('reveal')) {
               card.style.animationDelay = (batch * 0.07).toFixed(2) + 's';
               card.classList.add('reveal');
+              // ping the wave plane where the card surfaces, synced to its stagger
+              if (window.waveGrid) {
+                (function (rc, delay) {
+                  setTimeout(function () {
+                    window.waveGrid.impulse(rc.left + rc.width * 0.5, rc.top + rc.height * 0.5, 0.35);
+                  }, delay);
+                })(card.getBoundingClientRect(), batch * 70);
+              }
               batch++;
             }
             io.unobserve(card);
@@ -1421,7 +1344,6 @@
       }
       function apply() {
         raf = 0;
-        var viper = document.documentElement.classList.contains('viper');
         for (var i = 0; i < letters.length; i++) {
           var c = centers[i];
           var dx = c.x - mx, dy = c.y - my;
@@ -1431,17 +1353,8 @@
             var px = (dx / dist) * force * MAX_PUSH;
             var py = (dy / dist) * force * MAX_PUSH;
             letters[i].style.transform = 'translate(' + px.toFixed(1) + 'px,' + py.toFixed(1) + 'px)';
-            if (viper) {
-              // blush: push direction picks the pastel hue, force pulls it away from white
-              var hue = (Math.atan2(dy, dx) * 57.2958 + 180).toFixed(0);
-              letters[i].style.color = 'hsl(' + hue + ', 95%, ' + (90 - force * 14).toFixed(0) + '%)';
-              letters[i].style.textShadow = '0 0 ' + (force * 22).toFixed(0) + 'px hsla(' + hue + ', 95%, 75%, 0.8)';
-            } else {
-              clearBlush(letters[i]);
-            }
           } else {
             letters[i].style.transform = '';
-            clearBlush(letters[i]);
           }
         }
       }
@@ -1455,6 +1368,34 @@
         if (raf) { cancelAnimationFrame(raf); raf = 0; }
         letters.forEach(function (l) { l.style.transform = ''; clearBlush(l); });
       });
+
+      /* Cycling italic word — "interactive." flips through the lab's verbs
+         with a spring overshoot; kinetic spans + centers rebuild each swap.
+         animation-fill backwards (not both) so the repel transform regains
+         control of the chars once the spring finishes. */
+      var em = title.querySelector('em');
+      var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (em && !reduced) {
+        var WORDS = ['interactive.', 'chaotic.', 'emergent.', 'oscillate.', 'flow.'];
+        var wi = 0;
+        var heroVisible = true;
+        if ('IntersectionObserver' in window) {
+          new IntersectionObserver(function (en) { heroVisible = en[0].isIntersecting; }).observe(title);
+        }
+        setInterval(function () {
+          if (document.hidden || !heroVisible) return;
+          wi = (wi + 1) % WORDS.length;
+          em.textContent = WORDS[wi];
+          wrapLetters(em);
+          letters = Array.from(title.querySelectorAll('.kl'));
+          var chs = em.querySelectorAll('.kl');
+          for (var i = 0; i < chs.length; i++) {
+            chs[i].style.animation = 'klSpring 0.5s cubic-bezier(0.34,1.56,0.64,1) backwards';
+            chs[i].style.animationDelay = (i * 0.028) + 's';
+          }
+          measure();
+        }, 4000);
+      }
     })();
   </script>
 
@@ -1793,13 +1734,24 @@
       if (!inner) return;
 
       var raf = 0;
+      var cueFired = false;
       function apply() {
         raf = 0;
         var y = window.scrollY;
         var p = Math.min(y / (window.innerHeight * 0.7), 1);
         inner.style.transform = 'translateY(' + (y * 0.22).toFixed(1) + 'px)';
         inner.style.opacity   = String(Math.max(1 - p * 1.15, 0));
-        if (cue) cue.style.opacity = String(Math.max(1 - p * 3, 0));
+        if (cue) {
+          cue.style.opacity = String(Math.max(1 - p * 3, 0));
+          cue.style.setProperty('--prog', p.toFixed(3));
+        }
+        // one-shot: the moment the cards section locks in, ping the plane once
+        if (p >= 1 && !cueFired) {
+          cueFired = true;
+          if (window.waveGrid) {
+            window.waveGrid.impulse(window.innerWidth * 0.5, window.innerHeight * 0.82, 0.5);
+          }
+        }
       }
       window.addEventListener('scroll', function () {
         if (!raf) raf = requestAnimationFrame(apply);
@@ -1814,6 +1766,8 @@
        clicks (new tab) and reduced-motion users get the plain navigation. */
     (function () {
       var live = null;
+      var liveRaf = 0;
+      var VT_SHARED = true;   // Chrome 126+: morph the iris into the demo canvas (kill switch)
 
       function onCardClick(e) {
         if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
@@ -1829,13 +1783,47 @@
         } catch (err) {}
 
         var r  = card.getBoundingClientRect();
+
+        // Wavegrid handoff — shockwave at the card + dolly surge: the camera
+        // accelerates into the plane while the iris grows over it
+        if (window.waveGrid) {
+          window.waveGrid.impulse(r.left + r.width * 0.5, r.top + r.height * 0.5, 1.0);
+          window.waveGrid.surge(1.0);
+        }
+
         var el = document.createElement('div');
         el.className = 'page-iris';
+        if (VT_SHARED) el.style.viewTransitionName = 'demo-stage';
         el.style.top          = r.top + 'px';
         el.style.left         = r.left + 'px';
         el.style.width        = r.width + 'px';
         el.style.height       = r.height + 'px';
         el.style.borderRadius = '16px';
+
+        // Seed the iris with the card's live preview — the simulation itself
+        // fills the screen while the demo loads behind it
+        var pvFn = window.cardPreviews ? window.cardPreviews.drawFnFor(href) : null;
+        if (pvFn) {
+          var vw  = window.innerWidth, vh = window.innerHeight;
+          var dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+          var pvCvs = document.createElement('canvas');
+          pvCvs.width  = Math.round(vw * dpr);
+          pvCvs.height = Math.round(vh * dpr);
+          pvCvs.style.width  = vw + 'px';
+          pvCvs.style.height = vh + 'px';
+          el.appendChild(pvCvs);
+          var pvCtx = pvCvs.getContext('2d');
+          // zoom the card-scale drawing toward viewport scale, clamped for legibility
+          var pvK  = Math.max(1, Math.min(vw / Math.max(r.width, 1), 2.5));
+          var pvT0 = performance.now();
+          (function pvFrame() {
+            var pt = (performance.now() - pvT0) * 0.001 + 2.0;
+            pvCtx.setTransform(dpr * pvK, 0, 0, dpr * pvK, 0, 0);
+            pvCtx.clearRect(0, 0, vw / pvK, vh / pvK);
+            pvFn(pvCtx, vw / pvK, vh / pvK, pt, true);
+            liveRaf = requestAnimationFrame(pvFrame);
+          })();
+        }
 
         var t = document.createElement('span');
         var titleEl = card.querySelector('.card-title');
@@ -1862,6 +1850,7 @@
       // bfcache restore (back button) — clear the leftover iris; scroll state is
       // already intact on a bfcache hit, so consume the return marker unused
       window.addEventListener('pageshow', function (e) {
+        if (liveRaf) { cancelAnimationFrame(liveRaf); liveRaf = 0; }
         if (live) { live.remove(); live = null; }
         if (e.persisted) {
           try { sessionStorage.removeItem('lab-return'); } catch (err) {}

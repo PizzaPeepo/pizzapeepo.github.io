@@ -144,12 +144,31 @@ body {
 body { animation: pageArrive 0.32s ease-out; }
 @keyframes pageArrive { from { opacity: 0; } }
 
+/* Arrival choreography — nav pill drops in, HUD slides from the right, canvas
+   fades in last. Animated on the elements themselves (never body/ancestors:
+   a transform there would become the containing block for fixed HUD panels). */
+.back-link        { animation: arriveDrop  0.45s cubic-bezier(0.22,1,0.36,1) 0.05s backwards; }
+.hud-panel        { animation: arriveSlide 0.5s  cubic-bezier(0.22,1,0.36,1) 0.12s backwards; }
+#backgroundCanvas { animation: pageArrive  0.5s  ease-out 0.2s backwards; }
+@keyframes arriveDrop  { from { opacity: 0; transform: translateY(-8px); } }
+@keyframes arriveSlide { from { opacity: 0; transform: translateX(16px); } }
+@media (prefers-reduced-motion: reduce) {
+  .back-link, .hud-panel, #backgroundCanvas { animation: none; }
+}
+
 /* Cross-document view transition (Chrome 126+): browser crossfades the old
    page's last frame (the landing iris) into this page. Progressive — browsers
    without @view-transition simply hard-swap and still get the fade above. */
 @view-transition { navigation: auto; }
 ::view-transition-old(root) { animation-duration: 0.26s; }
 ::view-transition-new(root) { animation-duration: 0.26s; }
+
+/* Shared element (Chrome 126+): the landing page names its full-screen iris
+   `demo-stage` at click time (index.html); pairing that with the demo canvas
+   lets the browser morph iris → canvas instead of the plain root crossfade.
+   Unpaired names are a no-op, so Firefox/Safari and demo→demo stay unchanged. */
+#backgroundCanvas { view-transition-name: demo-stage; }
+::view-transition-group(demo-stage) { animation-duration: 0.3s; }
 
 /* ── PAGE IRIS (reverse) — "← Home" grows into a full-screen "Canvas Lab" title
    card before the landing page loads behind it: the landing page's forward iris

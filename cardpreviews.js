@@ -555,4 +555,13 @@
 
   frame();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) requestAnimationFrame(frame); });
+
+  /* Public lookup — the page-iris transition (index.html) seeds itself with the
+     clicked card's live preview so the sim itself fills the screen during the cut. */
+  window.cardPreviews = {
+    drawFnFor: function (href) {
+      var idx = ORDER.findIndex(function (k) { return (href || '').includes(k); });
+      return idx >= 0 ? DEMOS[idx] : null;
+    },
+  };
 }());

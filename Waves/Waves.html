@@ -41,7 +41,7 @@
     </div>
 
     <div class="hud-section">
-      <span class="ctrl-label">Click to add a source · right-click removes the nearest</span>
+      <span class="ctrl-label">Click adds a source · drag moves, release throws · right-click removes · Alt-click fires a pulse · Shift-click places the probe</span>
     </div>
 
 
@@ -69,29 +69,62 @@
     </details>
 
 
-    <details class="hud-details">
+    <details class="hud-details" open>
       <summary>Display</summary>
       <div class="hud-section">
         <span class="ctrl-label">Palette</span>
-        <label><input type="radio" name="palette" value="ocean" checked> Ocean</label>
-        <label><input type="radio" name="palette" value="thermal"> Thermal</label>
+        <label><input type="radio" name="palette" value="lab" checked> Lab</label>
+        <label><input type="radio" name="palette" value="ink"> Ink</label>
+        <label><input type="radio" name="palette" value="spectral"> Spectral</label>
         <label><input type="radio" name="palette" value="mono"> Greyscale</label>
       </div>
 
       <div class="hud-section">
         <span class="ctrl-label">Options</span>
+        <label><input type="checkbox" id="lightingCheckbox" checked> Lighting</label>
+        <label><input type="checkbox" id="nodesCheckbox"> Show nodal lines</label>
         <label><input type="checkbox" id="markerCheckbox" checked> Show source markers</label>
       </div>
     </details>
 
 
-    <details class="hud-details">
+    <details class="hud-details" open>
       <summary>Sources</summary>
       <div class="hud-section">
+        <span class="ctrl-label">Presets</span>
         <button id="twoButton">Two sources (classic)</button>
         <button id="threeButton">Three sources</button>
         <button id="lineButton">Linear array</button>
+        <button id="slitButton">Double slit</button>
+        <button id="sweepButton">Phased array sweep</button>
+        <button id="cavityButton">Standing cavity</button>
+        <button id="dopplerButton">Doppler flyby</button>
         <button id="clearButton">Clear</button>
+      </div>
+
+      <div class="hud-section">
+        <span class="ctrl-label" id="selLabel">Selected: none — click a source</span>
+        <span class="ctrl-label">Phase: <span id="phaseValue">–</span></span>
+        <input type="range" min="0" max="6.28" step="0.02" class="slider" id="phaseSlider" disabled>
+        <span class="ctrl-label">Amplitude: <span id="ampValue">–</span></span>
+        <input type="range" min="0" max="2" step="0.05" class="slider" id="ampSlider" disabled>
+        <label><input type="checkbox" id="orbitCheckbox" disabled> Orbit selected source</label>
+      </div>
+    </details>
+
+
+    <details class="hud-details">
+      <summary>Barrier</summary>
+      <div class="hud-section">
+        <label><input type="checkbox" id="barrierCheckbox"> Enable barrier</label>
+        <label><input type="checkbox" id="barrierVertCheckbox"> Vertical orientation</label>
+        <span class="ctrl-label">Slits: <span id="gapsValue"></span></span>
+        <input type="range" min="1" max="2" step="1" class="slider" id="gapsSlider">
+        <span class="ctrl-label">Slit width: <span id="gapWValue"></span>px</span>
+        <input type="range" min="20" max="200" step="5" class="slider" id="gapWSlider">
+        <span class="ctrl-label">Slit separation: <span id="gapSepValue"></span>px</span>
+        <input type="range" min="60" max="480" step="10" class="slider" id="gapSepSlider">
+        <span class="ctrl-label">Drag the wall on the canvas to move it</span>
       </div>
     </details>
 

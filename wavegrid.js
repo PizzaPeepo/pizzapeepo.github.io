@@ -241,6 +241,7 @@
      so the "camera" glides instead of tracking input 1:1. */
   var scrollTgt = 0, scrollCur = 0;
   var yawTgt    = 0, yawCur    = 0;
+  var surgeAmt  = 0;   // dolly impulse (card click / cue) — decays each frame
 
   function readScroll() {
     scrollTgt = Math.min(window.scrollY / (window.innerHeight * 0.85), 1.0);
@@ -276,14 +277,21 @@
     }
   });
 
-  document.addEventListener('click', function (e) {
-    var t   = (performance.now() - t0) * 0.001;
+  function addRipple(nx, ny, strength) {
     var idx = (rIdx % 8) * 4;
-    ripData[idx]     =  (e.clientX / canvas.width)  * 2.0 - 1.0;
-    ripData[idx + 1] = -((e.clientY / canvas.height) * 2.0 - 1.0);
-    ripData[idx + 2] = t;
-    ripData[idx + 3] = 1.0;
+    ripData[idx]     = nx;
+    ripData[idx + 1] = ny;
+    ripData[idx + 2] = (performance.now() - t0) * 0.001;
+    ripData[idx + 3] = strength;
     rIdx++;
+  }
+
+  document.addEventListener('click', function (e) {
+    addRipple(
+       (e.clientX / canvas.width)  * 2.0 - 1.0,
+      -((e.clientY / canvas.height) * 2.0 - 1.0),
+      1.0
+    );
   });
 
   /* ── Render loop ── */
@@ -310,11 +318,12 @@
     gl.uniform1f(LOC.uLight,  lite);
     scrollCur += (scrollTgt - scrollCur) * 0.055;
     yawCur    += (yawTgt    - yawCur)    * 0.045;
+    surgeAmt  *= 0.94;
     gl.uniform1f(LOC.uTilt,   0.48 + scrollCur * 0.24);
     gl.uniform1f(LOC.uRise,   0.08 + scrollCur * 0.20);
     gl.uniform1f(LOC.uYaw,    yawCur);
-    gl.uniform1f(LOC.uCam,    4.5  - scrollCur * 1.9);
-    gl.uniform1f(LOC.uTravel, scrollCur * 1.35);
+    gl.uniform1f(LOC.uCam,    4.5  - scrollCur * 1.9 - surgeAmt * 0.9);
+    gl.uniform1f(LOC.uTravel, scrollCur * 1.35 + surgeAmt * 0.5);
     gl.uniform1f(LOC.uViper,  vip);
     gl.uniform4fv(LOC.uRipples, ripData);
     gl.uniform3fv(LOC.uTrail,   trailData);
@@ -331,13 +340,21 @@
   /* Overture — three scripted raindrops sweep the plane on load, announcing that
      the surface is live and responsive before the user ever touches it. */
   [[-0.45, 0.25, 500, 0.85], [0.5, -0.05, 950, 0.6], [0.1, 0.4, 1500, 0.5]].forEach(function (r) {
-    setTimeout(function () {
-      var idx = (rIdx % 8) * 4;
-      ripData[idx]     = r[0];
-      ripData[idx + 1] = r[1];
-      ripData[idx + 2] = (performance.now() - t0) * 0.001;
-      ripData[idx + 3] = r[3];
-      rIdx++;
-    }, r[2]);
+    setTimeout(function () { addRipple(r[0], r[1], r[3]); }, r[2]);
   });
+
+  /* Public impulse API — landing-page scripts fire ripples / dolly surges into
+     the grid (card click handoff, card scroll-reveal, scroll-cue gauge). */
+  window.waveGrid = {
+    impulse: function (clientX, clientY, strength) {
+      addRipple(
+         (clientX / canvas.width)  * 2.0 - 1.0,
+        -((clientY / canvas.height) * 2.0 - 1.0),
+        Math.max(0, Math.min(strength || 1.0, 1.5))
+      );
+    },
+    surge: function (amt) {
+      surgeAmt = Math.min(surgeAmt + (amt || 1.0), 1.2);
+    },
+  };
 }());
