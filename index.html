@@ -671,6 +671,23 @@
                   0 0 60px rgba(65,241,149,0.13);
     }
 
+    /* Viper: card title runs the same per-char rainbow wave as hud-details summary —
+       each char (indexed --ci by JS below) cycles the ramp, phase-shifted from its
+       neighbour so it reads as a wave rolling through the title on hover */
+    html.viper .card:hover .card-title .ttl-ch,
+    html.viper .card.card-pill-hover .card-title .ttl-ch {
+      animation: cardTtlRGB 3s linear infinite;
+      animation-delay: calc(var(--ci, 0) * 0.12s - 6s);
+    }
+    @keyframes cardTtlRGB {
+      0%, 100% { color: var(--rb-1); text-shadow: 0 0 8px color-mix(in srgb, var(--rb-1) 50%, transparent); }
+      16.7%    { color: var(--rb-2); text-shadow: 0 0 8px color-mix(in srgb, var(--rb-2) 50%, transparent); }
+      33.3%    { color: var(--rb-3); text-shadow: 0 0 8px color-mix(in srgb, var(--rb-3) 50%, transparent); }
+      50%      { color: var(--rb-4); text-shadow: 0 0 8px color-mix(in srgb, var(--rb-4) 50%, transparent); }
+      66.7%    { color: var(--rb-5); text-shadow: 0 0 8px color-mix(in srgb, var(--rb-5) 50%, transparent); }
+      83.3%    { color: var(--rb-6); text-shadow: 0 0 8px color-mix(in srgb, var(--rb-6) 50%, transparent); }
+    }
+
     html.viper .hdr-eyebrow .pip { animation-name: glowViper; }
     @keyframes glowViper {
       0%,100% { box-shadow: 0 0 0 0 rgba(65,241,149,0.5); opacity: 1; }
@@ -734,7 +751,9 @@
     @media (prefers-reduced-motion: reduce) {
       html.viper .card::before,
       html.viper .hdr-title em,
-      html.viper .hdr-eyebrow .pip { animation: none; }
+      html.viper .hdr-eyebrow .pip,
+      html.viper .card:hover .card-title .ttl-ch,
+      html.viper .card.card-pill-hover .card-title .ttl-ch { animation: none; }
     }
 
     /* ─── FOCUS — keyboard path mirrors the hover path ─── */
@@ -1158,6 +1177,30 @@
   <script src="streaks.js"></script>
   <script src="cardan.js"></script>
   <script src="cardpreviews.js"></script>
+
+  <script>
+    /* Wrap each card title's chars in an indexed span so Viper can run the
+       hud-details-style rainbow wave on hover (mirrors JS/theme.js wrapSummaryChars).
+       Flip CARD_TITLE_RAINBOW_WAVE to false to kill the effect entirely — skips the
+       char-wrap, so titles fall back to plain gold-on-hover with zero overhead. */
+    var CARD_TITLE_RAINBOW_WAVE = false;
+    (function () {
+      if (!CARD_TITLE_RAINBOW_WAVE) return;
+      document.querySelectorAll('.card-title').forEach(function (el) {
+        var text = el.textContent;
+        el.textContent = '';
+        var ci = 0;
+        text.split('').forEach(function (ch) {
+          if (/\s/.test(ch)) { el.appendChild(document.createTextNode(ch)); return; }
+          var sp = document.createElement('span');
+          sp.className = 'ttl-ch';
+          sp.textContent = ch;
+          sp.style.setProperty('--ci', ci++);
+          el.appendChild(sp);
+        });
+      });
+    }());
+  </script>
 
   <script>
     (function () {
