@@ -20,6 +20,9 @@ export const asciiDefaults = {
 	CARDAN_FLOOR: 0.05, // scene-alpha tag above this = gimbal cell → thin ramp
 	TEXT_FLOOR: 0.06,   // hero title: ambient ink opacity in still fluid (near-invisible)
 	TEXT_GAIN: 1.4,     // hero title: extra opacity per unit fluid density (wave reveal)
+	TONE_MID: 0.5,      // dye thickness (toneT) where the ink sits; below = deep shadow, above = hot core
+	HOT_WHITE: 0.45,     // how far dense cores desaturate toward white
+	HOT_AMT: 0.7,       // max highlight blend reached at the thickest cores
 };
 
 export function createAsciiPass(gl, blit, baseVS, opts = {}) {
@@ -79,6 +82,9 @@ export function createAsciiPass(gl, blit, baseVS, opts = {}) {
 		gl.uniform1f(AU.uGlyphCount, glyphAtlas.count);
 		gl.uniform1f(AU.uJitter, cfg.JITTER);
 		gl.uniform1f(AU.uFloor, cfg.FLOOR);
+		gl.uniform1f(AU.uToneMid, cfg.TONE_MID);
+		gl.uniform1f(AU.uHotWhite, cfg.HOT_WHITE);
+		gl.uniform1f(AU.uHotAmt, cfg.HOT_AMT);
 		text.upload();
 		gl.uniform1i(AU.uTextA, text.attachA(2));
 		gl.uniform1i(AU.uTextB, text.attachB(3));

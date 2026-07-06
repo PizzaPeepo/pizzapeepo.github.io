@@ -217,6 +217,10 @@ uniform float uCardanGlyphCount;
 uniform float uCardanMask;       // 1 = scene alpha carries the gimbal coverage tag
 uniform float uCardanFloor;      // alpha above this = gimbal cell → thin ramp
 
+uniform float uToneMid;          // tone position where the ink sits between deep shadow and hot core
+uniform float uHotWhite;         // highlight desaturation toward white at dense cores
+uniform float uHotAmt;           // max highlight blend reached at the thickest cores
+
 float hash (vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 
 void main () {
@@ -236,7 +240,15 @@ void main () {
 	float mx = max(col.r, max(col.g, col.b));
 	vec3 hue = col / max(mx, 0.0001);
 
-	vec3 neon = hue * clamp(0.25 + pow(lum, 0.65) * 1.6, 0.0, 0.82);
+	// Tone-shade the ink by dye thickness so each blob spans deep shadow -> ink -> hot core
+	// (a black-body ramp), instead of one flat hue that merely brightens. Chroma shaping is
+	// driven by thickness (toneT); the overall glow still follows the ink luminance.
+	float toneT = clamp(pow(dens, 0.45), 0.0, 1.0);
+	vec3 deep = hue * hue;                            // shadows: richer, deeper, more saturated ink
+	vec3 hot  = mix(hue, vec3(1.0), uHotWhite);       // cores: hot, desaturated toward white
+	vec3 tone = mix(deep, hue, smoothstep(0.0, uToneMid, toneT));
+	tone = mix(tone, hot, smoothstep(uToneMid, 1.0, toneT) * uHotAmt);
+	vec3 neon = tone * clamp(0.22 + pow(lum, 0.6) * 1.5, 0.0, 0.88);
 	float lr = pow(dens, 0.6);
 	lr = clamp(lr + (hash(cell) - 0.5) * uJitter * (1.0 - lr) * step(0.05, lr), 0.0, 0.9999);
 
