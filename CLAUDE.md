@@ -91,10 +91,27 @@ Demo-specific factories live next to their demo, not in `Utils/`: `Raycaster/Lin
 These are IIFE-style (not ES6 modules), loaded only by `index.html`:
 | File | Purpose |
 |------|---------|
-| `wavegrid.js` | WebGL2 interactive wave-dot background |
 | `cardpreviews.js` | Animated canvas micro-previews on each demo card |
-| `streaks.js` | Streak/particle overlay on index page |
-| `cardan.js` | Cardan grille animation on index page |
+
+Classic-background scripts `wavegrid.js`, `streaks.js`, `cardan.js`: loaded only when
+the ASCII toggle is off (see below) — the pre-ASCII index background.
+
+### Index ASCII Background (`asciibg/`)
+ES6 modules, single WebGL2 context — the whole index background is one ASCII glyph
+lattice: GPU fluid core extracted from `FluidSimulation/` (its modules imported
+read-only, stock shaders untouched; forked shaders live in `asciibg/shaders.js`) +
+ambient curl-noise drift + the cardan gimbal (ported from `cardan.js`, composited
+over fluid before the ASCII pass) + in-lattice hero text (`#kineticTitle` is
+`visibility:hidden`, mirrored via MutationObserver). UI↔fluid both ways: hover on
+cards/pills parts the fluid (`ui-link.js`), dye readback tints card borders via
+`--fluid-tint`/`--fluid-amt` CSS vars (`dye-readback.js`). Standalone harness:
+`asciibg/test.html` with boot params `?theme=light|viper`, `&splats=0`, `&stir=1`
+(ring→fluid stir off by default, matches index),
+`&hover=1`, `&text=1`, `&rb=1`, `&warmup=N`; index takes `?perf=1` and `?ascii=0|1`.
+ASCII pill (`#asciiToggle`, top-left stack) picks the engine via localStorage
+`asciibg-ascii` + page reload: on = asciibg, off = classic wavegrid/streaks/cardan
+(boot loader at the bottom of `index.html`; Flow/Gimbal pills hidden in classic mode).
+Plan + worklog: `ASCII_REDESIGN_PLAN.md` (root).
 
 ### Demo Structure
 ```

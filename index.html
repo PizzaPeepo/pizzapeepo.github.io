@@ -231,6 +231,21 @@
     }
     .theme-toggle:hover .toggle-icon { transform: rotate(30deg) scale(1.1); }
 
+    /* Flow + gimbal + ASCII toggles — same chrome as the theme toggle, in a
+       horizontal row top-left; flow/gimbal switch the ambient wind and the
+       cardan gimbal (state in asciibg/main.js), ASCII swaps the whole
+       background engine (boot loader at the bottom of this file) */
+    .left-toggles {
+      position: fixed;
+      top: 28px; left: 48px;
+      z-index: 300;
+      display: flex;
+      gap: 10px;
+    }
+    .left-toggles .theme-toggle { position: static; }
+    .theme-toggle[aria-pressed="false"] { color: var(--tx-4); }
+    .theme-toggle[aria-pressed="false"] .toggle-icon { opacity: 0.4; }
+
     /* ─── HEADER — Act I: full-viewport hero, content vertically centred over the plane ─── */
     header {
       min-height: 100svh;
@@ -387,7 +402,12 @@
     .card {
       position: relative;
       background: rgba(35, 26, 17, 0.5);
-      border: 1px solid rgba(255, 255, 255, 0.13);
+      /* border tint follows the fluid dye under the card (asciibg/dye-readback.js
+         sets --fluid-tint/--fluid-amt); --card-line is the per-theme rest color */
+      --card-line: rgba(255, 255, 255, 0.13);
+      border: 1px solid var(--card-line);
+      border-color: color-mix(in srgb, var(--card-line),
+                    rgb(var(--fluid-tint, 128 128 128)) calc(var(--fluid-amt, 0) * 55%));
       border-radius: 16px;
       padding: 28px 26px 24px;
       text-decoration: none;
@@ -399,6 +419,7 @@
       box-shadow: var(--shadow-sm);
       transition: top 0.30s cubic-bezier(0.34,1.4,0.64,1),
                   box-shadow 0.30s ease,
+                  border-color 0.35s ease,
                   background 0.25s ease,
                   backdrop-filter 0.30s ease,
                   -webkit-backdrop-filter 0.30s ease,
@@ -593,12 +614,14 @@
       .card-wide       { grid-column: span 1; }
       .card-wide .card-title { font-size: var(--fs-card-title); }
       .theme-toggle    { right: 28px; }
+      .left-toggles    { left: 28px; }
     }
     @media (max-width: 600px) {
       .wrap            { padding: 0 20px; }
       .grid            { grid-template-columns: 1fr; gap: 14px; }
       .hdr-title       { font-size: var(--fs-hero-mobile); }
       .theme-toggle    { top: 20px; right: 20px; }
+      .left-toggles    { top: 20px; left: 20px; gap: 8px; }
       header           { padding: 80px 0 48px; }
     }
 
@@ -660,7 +683,7 @@
     /* ─── LIGHT MODE GLASS ─── */
     html.light .card {
       background: rgba(255, 249, 242, 0.55);
-      border-color: rgba(0, 0, 0, 0.12);
+      --card-line: rgba(0, 0, 0, 0.12);
     }
     html.light .card:hover {
       background: rgba(255, 252, 248, 0.6);
@@ -669,7 +692,7 @@
     /* ─── VIPER ACCENTS ─── */
     html.viper .card {
       background: rgba(6, 14, 9, 0.55);
-      border-color: rgba(120, 255, 180, 0.10);
+      --card-line: rgba(120, 255, 180, 0.10);
     }
     html.viper .card:hover,
     html.viper .card.card-pill-hover {
@@ -838,6 +861,24 @@
     <span class="toggle-icon">☀</span>
     <span class="toggle-label">Light</span>
   </button>
+
+  <!-- Ascii/flow/gimbal toggles — asciibg controls, ASCII first, laid out
+       horizontally. Flow/gimbal hidden when the background is static
+       (no WebGL2 / reduced motion, or classic-mode fallback) -->
+  <div class="left-toggles">
+    <button class="theme-toggle ascii-toggle" id="asciiToggle" aria-pressed="true" aria-label="Toggle ASCII background">
+      <span class="toggle-icon">▦</span>
+      <span class="toggle-label">ASCII</span>
+    </button>
+    <button class="theme-toggle flow-toggle" id="flowToggle" aria-pressed="true" aria-label="Toggle ambient fluid blobs">
+      <span class="toggle-icon">≋</span>
+      <span class="toggle-label">Flow</span>
+    </button>
+    <button class="theme-toggle gimbal-toggle" id="gimbalToggle" aria-pressed="true" aria-label="Toggle cardan gimbal">
+      <span class="toggle-icon">◎</span>
+      <span class="toggle-label">Gimbal</span>
+    </button>
+  </div>
 
   <!-- Atmospheric background -->
   <div class="blobs" aria-hidden="true">
@@ -1119,9 +1160,45 @@
     </div>
   </footer>
 
-  <script src="wavegrid.js"></script>
-  <script src="streaks.js"></script>
-  <script src="cardan.js"></script>
+  <script>
+    /* ASCII background toggle — localStorage 'asciibg-ascii' picks the engine.
+       on  (default): asciibg/main.js — ASCII fluid lattice + gimbal + hero text.
+       off: the classic pre-ASCII background — wavegrid + streaks + cardan.
+       Both engines self-mount and neither tears down cleanly, so flipping the
+       toggle reloads the page. Flow/Gimbal pills are asciibg controls — hidden
+       in classic mode. index.html?ascii=0|1 overrides the stored choice
+       (headless verify). */
+    (function () {
+      var qp = new URLSearchParams(location.search).get('ascii');
+      var asciiOn = qp !== null ? qp !== '0'
+        : localStorage.getItem('asciibg-ascii') !== 'off';
+      var btn = document.getElementById('asciiToggle');
+      if (btn) {
+        btn.setAttribute('aria-pressed', asciiOn ? 'true' : 'false');
+        btn.addEventListener('click', function () {
+          localStorage.setItem('asciibg-ascii', asciiOn ? 'off' : 'on');
+          location.reload();
+        });
+      }
+      function load(src, isModule) {
+        var s = document.createElement('script');
+        if (isModule) s.type = 'module';
+        s.src = src;
+        document.body.appendChild(s);
+      }
+      if (asciiOn) {
+        load('asciibg/main.js', true);
+      } else {
+        var flow = document.getElementById('flowToggle');
+        var gimbal = document.getElementById('gimbalToggle');
+        if (flow) flow.style.display = 'none';
+        if (gimbal) gimbal.style.display = 'none';
+        load('wavegrid.js');
+        load('streaks.js');
+        load('cardan.js');
+      }
+    }());
+  </script>
   <script src="cardpreviews.js"></script>
 
   <script>
