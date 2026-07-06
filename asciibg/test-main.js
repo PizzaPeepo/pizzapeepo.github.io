@@ -44,6 +44,7 @@ const cardan = createCardanScene(fluid.gl, fluid.blit, fluid.baseVS);
 function cardanResize() { cardan.resize(Math.max(4, canvas.width >> 1), Math.max(4, canvas.height >> 1)); }
 cardanResize();
 function drawScene(target) {
+	fluid.setColorMode(palette.isHeat ? 'heat' : palette.isHeatRev ? 'heatrev' : 'none');
 	fluid.drawDisplay(target);
 	cardan.compositeInto(target);
 }
@@ -58,7 +59,7 @@ onPalette(p => {
 window.addEventListener('resize', () => { sizeCanvas(); fluid.resize(); ascii.resize(); cardanResize(); });
 
 // ── theme cycle button (harness only — the real page uses JS/theme.js) ──
-const THEME_CYCLE = ['dark', 'light', 'viper'];
+const THEME_CYCLE = ['dark', 'light', 'viper', 'heat', 'heatrev'];
 let themeIdx = 0;
 document.getElementById('btnTheme').addEventListener('click', () => {
 	themeIdx = (themeIdx + 1) % THEME_CYCLE.length;
@@ -66,14 +67,14 @@ document.getElementById('btnTheme').addEventListener('click', () => {
 });
 function setTestTheme(name) {
 	const cls = document.documentElement.classList;
-	cls.remove('light'); cls.remove('viper');
+	cls.remove('light'); cls.remove('viper'); cls.remove('heat'); cls.remove('heatrev');
 	if (name !== 'dark') cls.add(name);
 	document.dispatchEvent(new CustomEvent('themechange', { detail: { theme: name, isLight: name === 'light' } }));
 }
 
-// Boot param for headless theme screenshots: test.html?theme=light|viper
+// Boot param for headless theme screenshots: test.html?theme=light|viper|heat|heatrev
 const bootTheme = new URLSearchParams(location.search).get('theme');
-if (bootTheme === 'light' || bootTheme === 'viper') {
+if (THEME_CYCLE.includes(bootTheme) && bootTheme !== 'dark') {
 	themeIdx = THEME_CYCLE.indexOf(bootTheme);
 	setTestTheme(bootTheme);
 }

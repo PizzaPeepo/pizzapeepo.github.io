@@ -90,6 +90,7 @@ export function createAsciiPass(gl, blit, baseVS, opts = {}) {
 		gl.uniform1f(AU.uToneMid, cfg.TONE_MID);
 		gl.uniform1f(AU.uHotWhite, cfg.HOT_WHITE);
 		gl.uniform1f(AU.uHotAmt, cfg.HOT_AMT);
+		gl.uniform1f(AU.uHeat, opts.heat ? 1.0 : 0.0);
 		text.upload();
 		gl.uniform1i(AU.uTextA, text.attachA(2));
 		gl.uniform1i(AU.uTextB, text.attachB(3));

@@ -10,6 +10,18 @@
 		#asciibgCanvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 		#hud { position: fixed; top: 10px; left: 10px; z-index: 10; font: 12px monospace; color: #888; }
 		#hud button { font: inherit; margin-right: 6px; }
+		/* heat / heatrev dye inks + field (copied from index.html; theme.css
+		   doesn't carry these trial themes). theme-palette.js reads them. */
+		html.heat {
+			--bg: #01030c;
+			--gold-hi: #00e0ff; --gold: #ffd000;
+			--coral-hi: #2a6bff; --coral: #ff3000;
+		}
+		html.heatrev {
+			--bg: #0c0200;
+			--gold-hi: #baf0ff; --gold: #00e0ff;
+			--coral-hi: #0030c0; --coral: #2a6bff;
+		}
 	</style>
 </head>
 <body>

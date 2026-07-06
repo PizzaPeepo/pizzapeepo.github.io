@@ -220,6 +220,8 @@ uniform float uCardanFloor;      // alpha above this = gimbal cell → thin ramp
 uniform float uToneMid;          // tone position where the ink sits between deep shadow and hot core
 uniform float uHotWhite;         // highlight desaturation toward white at dense cores
 uniform float uHotAmt;           // max highlight blend reached at the thickest cores
+uniform float uHeat;             // 1 = scene already thermal-colormapped (heat theme): use the
+                                 // demo's vivid coloring, skip the ink tone-shade (which pales it)
 
 float hash (vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 
@@ -249,6 +251,11 @@ void main () {
 	vec3 tone = mix(deep, hue, smoothstep(0.0, uToneMid, toneT));
 	tone = mix(tone, hot, smoothstep(uToneMid, 1.0, toneT) * uHotAmt);
 	vec3 neon = tone * clamp(0.22 + pow(lum, 0.6) * 1.5, 0.0, 0.88);
+	// Heat theme: the scene is already the thermal ramp (glsl.js heatRamp). Keep the
+	// hue at full saturation and drive brightness the demo's way — the tone-shade
+	// above washes those vivid thermal colours toward white, which is what made the
+	// index heat look pale next to the FluidSimulation demo.
+	if (uHeat > 0.5) neon = hue * clamp(pow(lum, 0.5) * 2.4, 0.0, 1.2);
 	float lr = pow(dens, 0.6);
 	lr = clamp(lr + (hash(cell) - 0.5) * uJitter * (1.0 - lr) * step(0.05, lr), 0.0, 0.9999);
 

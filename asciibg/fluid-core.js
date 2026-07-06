@@ -65,6 +65,11 @@ export function createFluid(canvas, opts = {}) {
 	const gradientSubtractProgram = new Program(gl, baseVS, fs(S.gradientSubtract));
 	const displayMaterial = new Material(gl, baseVS, S.display);
 	displayMaterial.setKeywords(cfg.SHADING ? ['SHADING'] : []);
+	// Optional thermal colormap on the display pass. 'none' = raw dye (default,
+	// matches the theme inks); 'heat'/'heatrev' compile the demo's HEATMAP /
+	// HEATMAP_REV branch so density maps across the full thermal ramp.
+	let colorMode = 'none';
+	function setColorMode(mode) { colorMode = mode; }
 
 	const blit = createBlit(gl);
 
@@ -199,6 +204,10 @@ export function createFluid(canvas, opts = {}) {
 		const width = target == null ? gl.drawingBufferWidth : target.width;
 		const height = target == null ? gl.drawingBufferHeight : target.height;
 		gl.disable(gl.BLEND);
+		const kw = cfg.SHADING ? ['SHADING'] : [];
+		if (colorMode === 'heat') kw.push('HEATMAP');
+		else if (colorMode === 'heatrev') kw.push('HEATMAP_REV');
+		displayMaterial.setKeywords(kw);   // cached per keyword-set; no-op when unchanged
 		displayMaterial.bind();
 		if (cfg.SHADING) gl.uniform2f(displayMaterial.uniforms.texelSize, 1 / width, 1 / height);
 		gl.uniform1i(displayMaterial.uniforms.uTexture, dye.read.attach(0));
@@ -212,7 +221,7 @@ export function createFluid(canvas, opts = {}) {
 
 	return {
 		gl, cfg, blit, baseVS, emptyObstacle,
-		step, splat, clearDye, drawDisplay, resize,
+		step, splat, clearDye, drawDisplay, resize, setColorMode,
 		get dye() { return dye; },
 		get velocity() { return velocity; },
 	};

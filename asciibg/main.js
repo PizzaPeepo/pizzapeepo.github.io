@@ -64,11 +64,13 @@ if (!fluid) {
 	const heroText = createHeroText(ascii);
 
 	let palette = readPalette();
-	onPalette(p => { palette = p; heroText.setPalette(p); });
+	const applyColorMode = p => fluid.setColorMode(p.isHeat ? 'heat' : p.isHeatRev ? 'heatrev' : 'none');
+	applyColorMode(palette);
+	onPalette(p => { palette = p; heroText.setPalette(p); applyColorMode(p); });
 
 	window.addEventListener('resize', () => { sizeCanvas(); fluid.resize(); ascii.resize(); cardanResize(); heroText.refresh(); });
 
-	const present = () => ascii.render(drawScene, palette, { cardanMask: gimbalOn });
+	const present = () => ascii.render(drawScene, palette, { cardanMask: gimbalOn, heat: palette.isHeat || palette.isHeatRev });
 
 	// ── ambient blob toggle (top-left pill) — persists across visits.
 	// Gates ambient dye emission only; wind+swirl always run, so interaction

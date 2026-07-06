@@ -31,6 +31,11 @@ export function readPalette() {
 	return {
 		isLight: cls.contains('light'),
 		isViper: cls.contains('viper'),
+		// heat / heatrev themes drive the fluid display through the demo's thermal
+		// colormap (glsl.js heatRamp/heatRampRev) instead of raw dye inks, so the
+		// index matches the FluidSimulation demo's vivid heat look.
+		isHeat: cls.contains('heat'),
+		isHeatRev: cls.contains('heatrev'),
 		bg: cssColor('--bg'),
 		tx: cssColor('--tx'),
 		// Ink hues for dye splats — per-theme vars already carry the right
