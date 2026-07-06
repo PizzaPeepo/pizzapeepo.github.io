@@ -154,7 +154,7 @@ function tick(now) {
 	cardan.draw(now, dt);
 	if (wantStir) cardan.stir(fluid, palette.inks);
 	readback.apply();
-	ascii.render(drawScene, palette);
+	ascii.render(drawScene, palette, { cardanMask: true });
 	frames++;
 	if (now - fpsLast >= 500) {
 		stat.textContent = Math.round(frames * 1000 / (now - fpsLast)) + ' fps · ' +

@@ -210,6 +210,10 @@ uniform sampler2D uTextA;     // text layer: rgb color, a charset index
 uniform sampler2D uTextB;     // text layer: rg sub-tile origin, b sub size, a enable
 uniform sampler2D uTextGlyphs;   // charset atlas (index = charCode-32)
 uniform float uTextGlyphCount;
+uniform sampler2D uCardanGlyphs; // thin line-art ramp for the gimbal
+uniform float uCardanGlyphCount;
+uniform float uCardanMask;       // 1 = scene alpha carries the gimbal coverage tag
+uniform float uCardanFloor;      // alpha above this = gimbal cell → thin ramp
 
 float hash (vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 
@@ -218,7 +222,11 @@ void main () {
 	vec2 cell = floor(g);
 	vec2 cuv = fract(g);
 	vec2 cc = (cell + 0.5) / uGrid;
-	vec3 col = texture2D(uScene, cc).rgb;
+	vec4 scene = texture2D(uScene, cc);
+	vec3 col = scene.rgb;
+	// Gimbal cells (alpha-tagged by cardan-scene.js compositeInto) use a separate
+	// thin ramp so the rings read as line-art arcs, not fat block glyphs.
+	bool isCardan = uCardanMask > 0.5 && scene.a > uCardanFloor;
 	float dens = max(col.r, max(col.g, col.b));   // scene max-channel drives the ramp (fluid + gimbal alike)
 	dens = clamp((dens - uFloor) / (1.0 - uFloor), 0.0, 1.0);
 	float lum = clamp(dot(col, vec3(0.299, 0.587, 0.114)), 0.0, 1.0);
@@ -243,13 +251,21 @@ void main () {
 	float lr = pow(dens, 0.6);
 	lr = clamp(lr + (hash(cell) - 0.5) * uJitter * (1.0 - lr) * step(0.05, lr), 0.0, 0.9999);
 
-	float fidx = min(lr, 0.9999) * uGlyphCount;
+	float gcount = isCardan ? uCardanGlyphCount : uGlyphCount;
+	float fidx = min(lr, 0.9999) * gcount;
 	float fi = floor(fidx);
 	float fb = fract(fidx);
-	float i1 = min(fi + 1.0, uGlyphCount - 1.0);
-	float mask = mix(
-		texture2D(uGlyphs, vec2((fi + cuv.x) / uGlyphCount, cuv.y)).r,
-		texture2D(uGlyphs, vec2((i1 + cuv.x) / uGlyphCount, cuv.y)).r, fb);
+	float i1 = min(fi + 1.0, gcount - 1.0);
+	float mask;
+	if (isCardan) {
+		mask = mix(
+			texture2D(uCardanGlyphs, vec2((fi + cuv.x) / gcount, cuv.y)).r,
+			texture2D(uCardanGlyphs, vec2((i1 + cuv.x) / gcount, cuv.y)).r, fb);
+	} else {
+		mask = mix(
+			texture2D(uGlyphs, vec2((fi + cuv.x) / gcount, cuv.y)).r,
+			texture2D(uGlyphs, vec2((i1 + cuv.x) / gcount, cuv.y)).r, fb);
+	}
 
 	vec3 gcol = neon;   // no desaturation tint — the stock gold wash read as yellow patches
 	gl_FragColor = vec4(gcol * (0.8 * mask), 1.0);

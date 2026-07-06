@@ -7,7 +7,7 @@ import * as S from '../FluidSimulation/glsl.js';
 import { Program, compileShader } from '../FluidSimulation/gl-program.js';
 import { createFBO, createDoubleFBO } from '../FluidSimulation/framebuffers.js';
 import { asciiPresentBg, asciiArtBg } from './shaders.js';
-import { ASCII_GP, ASCII_GP_X, ASCII_GP_Y, DEFAULT_RAMP, buildAtlas, loadWeb437 } from './glyph-atlas.js';
+import { ASCII_GP, ASCII_GP_X, ASCII_GP_Y, DEFAULT_RAMP, CARDAN_RAMP, buildAtlas, loadWeb437 } from './glyph-atlas.js';
 import { TEXT_CHARSET, createTextLayer } from './text-layer.js';
 
 export const asciiDefaults = {
@@ -17,6 +17,7 @@ export const asciiDefaults = {
 	GLOW: true,
 	GLOW_AMOUNT: 1.8,
 	FLOOR: 0.08,        // dye density below this renders no glyph (kills advection residue + dim carpet)
+	CARDAN_FLOOR: 0.05, // scene-alpha tag above this = gimbal cell → thin ramp
 };
 
 export function createAsciiPass(gl, blit, baseVS, opts = {}) {
@@ -28,11 +29,14 @@ export function createAsciiPass(gl, blit, baseVS, opts = {}) {
 	const presentProgram = new Program(gl, baseVS, fs(asciiPresentBg));
 
 	let glyphAtlas = buildAtlas(gl, DEFAULT_RAMP);   // monospace fallback first
+	let cardanAtlas = buildAtlas(gl, CARDAN_RAMP);   // thin line-art ramp for the gimbal
 	let textAtlas = buildAtlas(gl, TEXT_CHARSET);
 	const fontListeners = [];
 	loadWeb437(() => {
 		gl.deleteTexture(glyphAtlas.texture);
 		glyphAtlas = buildAtlas(gl, DEFAULT_RAMP);   // rebuild with the real face
+		gl.deleteTexture(cardanAtlas.texture);
+		cardanAtlas = buildAtlas(gl, CARDAN_RAMP);
 		gl.deleteTexture(textAtlas.texture);
 		textAtlas = buildAtlas(gl, TEXT_CHARSET);
 		fontListeners.forEach(fn => fn());
@@ -61,7 +65,7 @@ export function createAsciiPass(gl, blit, baseVS, opts = {}) {
 	// drawScene(target): render the combined scene (fluid display, later +cardan)
 	// into `target` — one LDR texel per glyph cell.
 	// theme: { bg:{r,g,b}, isLight } from theme-palette.js.
-	function render(drawScene, theme, target = null) {
+	function render(drawScene, theme, opts = {}, target = null) {
 		gl.disable(gl.BLEND);
 		drawScene(scene);
 
@@ -78,6 +82,10 @@ export function createAsciiPass(gl, blit, baseVS, opts = {}) {
 		gl.uniform1i(AU.uTextB, text.attachB(3));
 		gl.uniform1i(AU.uTextGlyphs, textAtlas.attach(4));
 		gl.uniform1f(AU.uTextGlyphCount, textAtlas.count);
+		gl.uniform1i(AU.uCardanGlyphs, cardanAtlas.attach(5));
+		gl.uniform1f(AU.uCardanGlyphCount, cardanAtlas.count);
+		gl.uniform1f(AU.uCardanMask, opts.cardanMask ? 1.0 : 0.0);
+		gl.uniform1f(AU.uCardanFloor, cfg.CARDAN_FLOOR);
 		blit(bitmap);
 
 		fadeProgram.bind();

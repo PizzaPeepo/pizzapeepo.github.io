@@ -13,6 +13,12 @@ const ASCII_SS = 8;             // supersample factor for the coverage threshold
 // lattice never reaches full-block brightness (USER-GPU calm pass).
 export const DEFAULT_RAMP = ' ,:;-~=+*ix-/x\\A2-rs/\\-h235A/-\\SGBMH-/\\-#B%$89@';
 
+// Thin ramp for the cardan gimbal only (its scene cells are alpha-tagged; see
+// ascii-pass.js + cardan-scene.js compositeInto). Deliberately avoids the fat
+// block glyphs ('@8BM$') that made the rings read as solid blobs — line-art
+// characters (/ \ ~ = ; : + *) keep the rings legible as thin bright arcs.
+export const CARDAN_RAMP = ' .,:;~-=+/\\*x#';
+
 export function buildAtlas(gl, RAMP, fontFamily) {
 	const n = RAMP.length;
 	const cellW = ASCII_GP_X * ASCII_SS, cellH = ASCII_GP_Y * ASCII_SS;

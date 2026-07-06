@@ -460,12 +460,18 @@ export function createCardanScene(gl, blit, baseVS) {
 	// is effectively premultiplied → ONE / ONE_MINUS_SRC_ALPHA.
 	function compositeInto(target) {
 		gl.enable(gl.BLEND);
-		gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+		// RGB: premultiplied source-over (unchanged look). ALPHA: replace the
+		// target's alpha with this gimbal's coverage (ONE, ZERO) so the ASCII pass
+		// can tag gimbal cells by scene alpha and give them a thin line-art ramp.
+		// The composite draws a fullscreen quad, so alpha is 0 wherever the gimbal
+		// texture is transparent — fluid dye keeps the default ramp.
+		gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ZERO);
 		compProgram.bind();
 		gl.activeTexture(gl.TEXTURE0);
 		gl.bindTexture(gl.TEXTURE_2D, tex);
 		gl.uniform1i(compProgram.uniforms.uTexture, 0);
 		blit(target);
+		gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);   // restore default separate=off state
 		gl.disable(gl.BLEND);
 	}
 

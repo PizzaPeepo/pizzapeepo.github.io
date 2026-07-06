@@ -64,7 +64,7 @@ if (!fluid) {
 
 	window.addEventListener('resize', () => { sizeCanvas(); fluid.resize(); ascii.resize(); cardanResize(); heroText.refresh(); });
 
-	const present = () => ascii.render(drawScene, palette);
+	const present = () => ascii.render(drawScene, palette, { cardanMask: gimbalOn });
 
 	// ── ambient blob toggle (top-left pill) — persists across visits.
 	// Gates ambient dye emission only; wind+swirl always run, so interaction
