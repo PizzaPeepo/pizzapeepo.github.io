@@ -56,6 +56,11 @@ export function createAsciiPass(gl, blit, baseVS, opts = {}) {
 		const r = Math.max(8, Math.round(visualCols * gl.canvas.height / gl.canvas.width * ASCII_GP / ASCII_GP_Y));
 		const sw = Math.max(4, gl.canvas.width >> 2 << 1), sh = Math.max(4, gl.canvas.height >> 2 << 1);
 		if (c === cols && r === rows && scene && scene.width === sw && scene.height === sh) return;
+		// free the previous grid's GL targets before reallocating — the COLS
+		// slider churns these every change, and window-resize leaked them before.
+		if (scene)  { gl.deleteTexture(scene.texture);  gl.deleteFramebuffer(scene.fbo); }
+		if (bitmap) { gl.deleteTexture(bitmap.texture); gl.deleteFramebuffer(bitmap.fbo); }
+		if (trail)  [trail.read, trail.write].forEach(t => { gl.deleteTexture(t.texture); gl.deleteFramebuffer(t.fbo); });
 		cols = c; rows = r;
 		if (text) text.dispose();
 		text = createTextLayer(gl, cols, rows);

@@ -302,6 +302,7 @@ function updateKeywords() {
 	if (config.SUNRAYS) kw.push('SUNRAYS');
 	if (config.COLOR_MODE === 'heat') kw.push('HEATMAP');
 	if (config.COLOR_MODE === 'neon') kw.push('NEONMAP');
+	if (config.COLOR_MODE === 'heatrev') kw.push('HEATMAP_REV');
 	displayMaterial.setKeywords(kw);
 }
 
@@ -322,7 +323,7 @@ function HSVtoRGB(h, s, v) {
 }
 function generateColor() {
 	// Heat mode colours by density at display time; inject neutral grey dye.
-	if (config.COLOR_MODE === 'heat' || config.COLOR_MODE === 'neon') return { r: 0.15, g: 0.15, b: 0.15 };
+	if (config.COLOR_MODE === 'heat' || config.COLOR_MODE === 'neon' || config.COLOR_MODE === 'heatrev') return { r: 0.15, g: 0.15, b: 0.15 };
 	const h = Math.random();
 	const c = HSVtoRGB(h, 1.0, 1.0);
 	c.r *= 0.15; c.g *= 0.15; c.b *= 0.15;

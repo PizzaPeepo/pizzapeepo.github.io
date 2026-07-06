@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#181210">
-  <title>Canvas Lab — Interactive Demos</title>
+  <title>21 Velvet</title>
   <script>
     document.documentElement.classList.add('js');
     /* apply the saved theme before first paint — the full toggle logic further
@@ -12,8 +12,9 @@
     (function () {
       try {
         var t = localStorage.getItem('theme');
-        if (t === 'light')     document.documentElement.classList.add('light');
-        else if (t !== 'dark') document.documentElement.classList.add('viper');
+        var C = ['light', 'viper', 'shot1', 'heat', 'heatrev'];
+        if (C.indexOf(t) !== -1)    document.documentElement.classList.add(t);
+        else if (t !== 'dark')      document.documentElement.classList.add('viper');
       } catch (err) {
         document.documentElement.classList.add('viper');
       }
@@ -147,6 +148,85 @@
       --rb-6: #9933ff;
     }
 
+    /* ─── TEST THEMES — ASCII-fluid colour trials only; feed --bg/--tx +
+       the 4 dye inks (--gold,--coral,--gold-hi,--coral-hi) read by
+       asciibg/theme-palette.js. Cycle via the theme toggle. ─── */
+
+    /* Screenshot palette: lime → green → teal → slate → navy.
+       Darkest swatch = field, other four = dye inks (lime is bright -hi). */
+    html.shot1 {
+      --bg:      #414767;
+      --bg-card: #4a5074;
+      --bg-lift: #565d84;
+
+      --gold-hi:  #a4f644;   /* lime  */
+      --gold:     #64d86b;   /* green */
+      --gold-mid: #46b04d;
+      --gold-lo:  #2c6e30;
+      --gold-tint: rgba(164,246,68,0.16);
+
+      --coral-hi:  #6e7598;  /* slate */
+      --coral:     #5ec986;  /* teal-green */
+      --coral-mid: #429a63;
+      --coral-lo:  #285c3d;
+      --coral-tint: rgba(94,201,134,0.16);
+
+      --tx:    #e6ebf5;
+      --tx-2:  #aeb4cf;
+      --tx-3:  #6e7598;
+      --tx-4:  #414767;
+    }
+
+    /* Heatmap: thermal ramp of the fluid demo (glsl.js heatRamp) —
+       cold near-black field, dye spans blue → cyan → yellow → red. */
+    html.heat {
+      --bg:      #01030c;
+      --bg-card: #05091c;
+      --bg-lift: #0a1230;
+
+      --gold-hi:  #00e0ff;   /* cyan   */
+      --gold:     #ffd000;   /* yellow */
+      --gold-mid: #d9a000;
+      --gold-lo:  #7a5a00;
+      --gold-tint: rgba(255,208,0,0.16);
+
+      --coral-hi:  #2a6bff;  /* blue */
+      --coral:     #ff3000;  /* red  */
+      --coral-mid: #cc2600;
+      --coral-lo:  #7a1600;
+      --coral-tint: rgba(255,48,0,0.16);
+
+      --tx:    #ffe8cf;
+      --tx-2:  #cdb28c;
+      --tx-3:  #7a5a3a;
+      --tx-4:  #3a2a18;
+    }
+
+    /* Heatmap reversed: ramp flipped — warm-dark field, dye leans the
+       cold half (cyan/blue dominant) so density reads inverted vs .heat. */
+    html.heatrev {
+      --bg:      #0c0200;
+      --bg-card: #1a0500;
+      --bg-lift: #260a00;
+
+      --gold-hi:  #baf0ff;   /* pale blue-white */
+      --gold:     #00e0ff;   /* cyan */
+      --gold-mid: #00a6bf;
+      --gold-lo:  #005a6b;
+      --gold-tint: rgba(0,224,255,0.16);
+
+      --coral-hi:  #0030c0;  /* deep blue */
+      --coral:     #2a6bff;  /* blue */
+      --coral-mid: #1e4dbf;
+      --coral-lo:  #10286b;
+      --coral-tint: rgba(42,107,255,0.16);
+
+      --tx:    #dceffb;
+      --tx-2:  #93b6cd;
+      --tx-3:  #4a6a80;
+      --tx-4:  #1a2a38;
+    }
+
     /* ─── BASE ─── */
     html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 
@@ -245,6 +325,30 @@
     .left-toggles .theme-toggle { position: static; }
     .theme-toggle[aria-pressed="false"] { color: var(--tx-4); }
     .theme-toggle[aria-pressed="false"] .toggle-icon { opacity: 0.4; }
+
+    /* Glyph column-count slider — asciibg control, same pill chrome, sits after
+       the gimbal toggle. Hidden in classic mode (boot loader at page end). */
+    .cols-slider {
+      display: flex; align-items: center; gap: 9px;
+      background: var(--bg-card);
+      border: 1.5px solid var(--tx-4);
+      border-radius: 40px;
+      color: var(--tx-2);
+      font-family: var(--font-mono);
+      font-size: var(--fs-mono-label);
+      letter-spacing: 0.04em;
+      padding: 8px 16px 8px 14px;
+      box-shadow: var(--shadow-sm);
+      transition: border-color 0.2s, color 0.2s, background-color 0.4s, box-shadow 0.2s;
+    }
+    .cols-slider:hover { border-color: var(--gold); color: var(--gold); box-shadow: var(--shadow-md); }
+    .cols-slider input[type="range"] { width: 96px; height: 3px; cursor: pointer; accent-color: var(--gold); }
+    .cols-slider .cols-val {
+      color: var(--gold);
+      font-size: var(--fs-mono-value);
+      min-width: 30px; text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
 
     /* ─── HEADER — Act I: full-viewport hero, content vertically centred over the plane ─── */
     header {
@@ -878,6 +982,16 @@
       <span class="toggle-icon">◎</span>
       <span class="toggle-label">Gimbal</span>
     </button>
+    <label class="cols-slider" id="colsSliderWrap" title="Glyph column count">
+      <span class="cols-cap">COLS</span>
+      <input type="range" id="colsSlider" min="30" max="400" step="1" value="110" aria-label="Glyph column count">
+      <span class="cols-val" id="colsSliderVal">110</span>
+    </label>
+    <label class="cols-slider" id="blobSliderWrap" title="Ambient blob amount">
+      <span class="cols-cap">BLOBS</span>
+      <input type="range" id="blobSlider" min="0" max="100" step="1" value="10" aria-label="Ambient blob amount">
+      <span class="cols-val" id="blobSliderVal">10</span>
+    </label>
   </div>
 
   <!-- Atmospheric background -->
@@ -1191,8 +1305,12 @@
       } else {
         var flow = document.getElementById('flowToggle');
         var gimbal = document.getElementById('gimbalToggle');
+        var colsW = document.getElementById('colsSliderWrap');
+        var blobW = document.getElementById('blobSliderWrap');
         if (flow) flow.style.display = 'none';
         if (gimbal) gimbal.style.display = 'none';
+        if (colsW) colsW.style.display = 'none';
+        if (blobW) blobW.style.display = 'none';
         load('wavegrid.js');
         load('streaks.js');
         load('cardan.js');
@@ -1514,18 +1632,22 @@
       const icon  = btn.querySelector('.toggle-icon');
       const label = btn.querySelector('.toggle-label');
 
-      const THEMES = ['viper', 'dark', 'light'];
+      const THEMES = ['viper', 'dark', 'light', 'shot1', 'heat', 'heatrev'];
       const META = {
-        viper: { icon: '❋', label: 'Viper' },
-        dark:  { icon: '☀', label: 'Ember' },
-        light: { icon: '☾', label: 'Light' },
+        viper:   { icon: '❋', label: 'Viper' },
+        dark:    { icon: '☀', label: 'Ember' },
+        light:   { icon: '☾', label: 'Light' },
+        shot1:   { icon: '✤', label: 'Lime' },
+        heat:    { icon: '♨', label: 'Heat' },
+        heatrev: { icon: '❆', label: 'Heat⁻¹' },
       };
-      const BGCOL = { viper: '#030806', dark: '#181210', light: '#faf5ee' };
+      const BGCOL = { viper: '#030806', dark: '#181210', light: '#faf5ee', shot1: '#414767', heat: '#01030c', heatrev: '#0c0200' };
+      // every theme id that maps to an html class (all but the default 'dark')
+      const CLASSED = ['viper', 'light', 'shot1', 'heat', 'heatrev'];
       let metaTheme = document.querySelector('meta[name="theme-color"]');
 
       function applyTheme(theme) {
-        root.classList.toggle('light', theme === 'light');
-        root.classList.toggle('viper', theme === 'viper');
+        CLASSED.forEach(function (c) { root.classList.toggle(c, c === theme); });
         if (metaTheme) metaTheme.content = BGCOL[theme];
         icon.textContent  = META[theme].icon;
         label.textContent = META[theme].label;

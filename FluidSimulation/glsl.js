@@ -345,8 +345,31 @@ vec3 heatRamp (float t) {
 	c = mix(c, vec3(0.0, 1.0, 1.0),   smoothstep(0.32, 0.46, t));
 	c = mix(c, vec3(0.85, 0.95, 1.0), smoothstep(0.46, 0.56, t));
 	c = mix(c, vec3(1.0, 1.0, 0.0),   smoothstep(0.56, 0.71, t));
-	c = mix(c, vec3(1.0, 0.45, 0.0),  smoothstep(0.71, 0.84, t));
-	c = mix(c, vec3(1.0, 0.0, 0.0),   smoothstep(0.84, 1.00, t));
+	c = mix(c, vec3(1.0, 0.45, 0.0),  smoothstep(0.71, 0.90, t));
+	c = mix(c, vec3(1.0, 0.0, 0.0),   smoothstep(0.90, 1.00, t));
+	return c;
+}
+
+// Reverse thermal palette (density -> colour): black -> red -> orange -> yellow -> white -> cyan -> blue.
+// Keeps black at t=0 so empty background stays transparent; dense cores read cold, sparse edges hot.
+vec3 heatRampRev (float t) {
+	t = clamp(t, 0.0, 1.0);
+	// vec3 c = mix(vec3(0.0), vec3(1.0, 0.0, 0.0),   smoothstep(0.00, 0.14, t));
+	// c = mix(c, vec3(1.0, 0.45, 0.0),  smoothstep(0.10, 0.26, t));
+	// c = mix(c, vec3(1.0, 1.0, 0.0),   smoothstep(0.22, 0.40, t));
+	// c = mix(c, vec3(0.75, 1.0, 0.6),  smoothstep(0.36, 0.50, t));   // warm->cool bridge (yellow-green)
+	// c = mix(c, vec3(0.6, 1.0, 0.95),  smoothstep(0.46, 0.60, t));   // pale cyan
+	// c = mix(c, vec3(0.0, 1.0, 1.0),   smoothstep(0.54, 0.70, t));   // cyan
+	// c = mix(c, vec3(0.0, 0.55, 1.0),  smoothstep(0.7, 0.90, t));   // azure
+	// c = mix(c, vec3(0.0, 0.12, 0.7),  smoothstep(0.90, 1.0, t));   // dark blue
+	vec3 c = mix(vec3(0.0), vec3(1.0, 0.0, 0.0),   smoothstep(0.00, 0.14, t));
+	c = mix(c, vec3(1.0, 0.45, 0.0),  smoothstep(0.10, 0.26, t));
+	c = mix(c, vec3(1.0, 1.0, 0.0),   smoothstep(0.22, 0.40, t));
+	c = mix(c, vec3(0.75, 1.0, 0.6),  smoothstep(0.36, 0.50, t));   // warm->cool bridge (yellow-green)
+	c = mix(c, vec3(0.6, 1.0, 0.95),  smoothstep(0.46, 0.60, t));   // pale cyan
+	c = mix(c, vec3(0.0, 1.0, 1.0),   smoothstep(0.54, 0.70, t));   // cyan
+	c = mix(c, vec3(0.0, 0.55, 1.0),  smoothstep(0.62, 0.84, t));   // azure
+	c = mix(c, vec3(0.55, 0.80, 1.0), smoothstep(0.74, 1.00, t));   // light blue
 	return c;
 }
 
@@ -389,6 +412,9 @@ void main () {
 #endif
 #ifdef NEONMAP
 	c = neonRamp(pow(clamp(dens * 3.0, 0.0, 1.0), 0.75));   // density -> synthwave palette
+#endif
+#ifdef HEATMAP_REV
+	c = heatRampRev(pow(clamp(dens * 0.8, 0.0, 1.0), 0.90));   // density -> reversed thermal palette (gentle spread so cores gradate, not clamp)
 #endif
 	float ob = texture2D(uObstacle, vUv).x;
 	float edge = smoothstep(0.35, 0.65, ob);

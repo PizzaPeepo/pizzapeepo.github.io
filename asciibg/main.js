@@ -43,6 +43,10 @@ if (!fluid) {
 	canvas.remove();
 	if (flowBtn) flowBtn.style.display = 'none';
 	if (gimbalBtn) gimbalBtn.style.display = 'none';
+	const colsW = document.getElementById('colsSliderWrap');
+	const blobW = document.getElementById('blobSliderWrap');
+	if (colsW) colsW.style.display = 'none';
+	if (blobW) blobW.style.display = 'none';
 } else {
 	const ascii = createAsciiPass(fluid.gl, fluid.blit, fluid.baseVS,
 		isMobile ? { COLS: 72 } : {});
@@ -94,6 +98,45 @@ if (!fluid) {
 		localStorage.setItem('asciibg-gimbal', gimbalOn ? 'on' : 'off');
 		syncGimbalBtn();
 	});
+
+	// ── glyph column-count slider (after the gimbal pill) — live-resizes the
+	// ASCII lattice and persists like the toggles. Range 30–400, default 110. ──
+	const colsSlider = document.getElementById('colsSlider');
+	const colsVal = document.getElementById('colsSliderVal');
+	if (colsSlider) {
+		const stored = parseInt(localStorage.getItem('asciibg-cols'), 10);
+		if (stored >= 30 && stored <= 400) { ascii.cfg.COLS = stored; ascii.resize(); heroText.refresh(); }
+		colsSlider.value = ascii.cfg.COLS;
+		if (colsVal) colsVal.textContent = ascii.cfg.COLS;
+		colsSlider.addEventListener('input', () => {
+			const v = Math.max(30, Math.min(400, parseInt(colsSlider.value, 10) || 110));
+			ascii.cfg.COLS = v;
+			ascii.resize();
+			heroText.refresh();
+			if (colsVal) colsVal.textContent = v;
+			localStorage.setItem('asciibg-cols', v);
+			present();
+		});
+	}
+
+	// ── ambient blob slider — scales ambient dye emission (cfg.DYE_RATE). Value
+	// 0–30 maps to DYE_RATE 0.00–0.30 (default 10 → 0.10). Live; persists. The
+	// Flow pill still gates emission on/off; this sets how much when on. ──
+	const blobSlider = document.getElementById('blobSlider');
+	const blobVal = document.getElementById('blobSliderVal');
+	if (blobSlider) {
+		const stored = parseInt(localStorage.getItem('asciibg-blob'), 10);
+		if (stored >= 0 && stored <= 100) ambient.cfg.DYE_RATE = stored / 100;
+		const cur = Math.round(ambient.cfg.DYE_RATE * 100);
+		blobSlider.value = cur;
+		if (blobVal) blobVal.textContent = cur;
+		blobSlider.addEventListener('input', () => {
+			const v = Math.max(0, Math.min(100, parseInt(blobSlider.value, 10) || 0));
+			ambient.cfg.DYE_RATE = v / 100;
+			if (blobVal) blobVal.textContent = v;
+			localStorage.setItem('asciibg-blob', v);
+		});
+	}
 
 	// Fast-forward so the page opens with a developed field, not a black slate.
 	const WARMUP = reducedMotion ? 300 : 180;
