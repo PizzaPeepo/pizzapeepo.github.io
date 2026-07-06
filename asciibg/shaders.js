@@ -210,6 +210,8 @@ uniform sampler2D uTextA;     // text layer: rgb color, a charset index
 uniform sampler2D uTextB;     // text layer: rg sub-tile origin, b sub size, a enable
 uniform sampler2D uTextGlyphs;   // charset atlas (index = charCode-32)
 uniform float uTextGlyphCount;
+uniform float uTextFloor;        // hero-title ambient opacity (still fluid)
+uniform float uTextGain;         // hero-title extra opacity per unit density (wave reveal)
 uniform sampler2D uCardanGlyphs; // thin line-art ramp for the gimbal
 uniform float uCardanGlyphCount;
 uniform float uCardanMask;       // 1 = scene alpha carries the gimbal coverage tag
@@ -234,19 +236,6 @@ void main () {
 	float mx = max(col.r, max(col.g, col.b));
 	vec3 hue = col / max(mx, 0.0001);
 
-	// Text cell (Phase 7): force this character's glyph; local dye washes its
-	// color. Scaled chars: the cell renders one sub-tile of the glyph bitmap.
-	vec4 tB = texture2D(uTextB, cc);
-	if (tB.a > 0.5) {
-		vec4 tA = texture2D(uTextA, cc);
-		float ti = floor(tA.a * 255.0 + 0.5);
-		vec2 tguv = vec2(tB.r + cuv.x * tB.b, tB.g + cuv.y * tB.b);
-		float tm = texture2D(uTextGlyphs, vec2((ti + tguv.x) / uTextGlyphCount, tguv.y)).r;
-		vec3 wash = mix(tA.rgb, hue, clamp(dens * 1.1, 0.0, 0.6));
-		gl_FragColor = vec4(wash * tm, 1.0);
-		return;
-	}
-
 	vec3 neon = hue * clamp(0.25 + pow(lum, 0.65) * 1.6, 0.0, 0.82);
 	float lr = pow(dens, 0.6);
 	lr = clamp(lr + (hash(cell) - 0.5) * uJitter * (1.0 - lr) * step(0.05, lr), 0.0, 0.9999);
@@ -268,7 +257,24 @@ void main () {
 	}
 
 	vec3 gcol = neon;   // no desaturation tint — the stock gold wash read as yellow patches
-	gl_FragColor = vec4(gcol * (0.8 * mask), 1.0);
+	vec3 fluidCol = gcol * (0.8 * mask);
+
+	// Text cell (Phase 7): translucent hero title. Ink is added over the fluid
+	// ramp with opacity driven by local density (uTextFloor = ambient visibility,
+	// uTextGain = wave response), so the title is near-invisible in still fluid
+	// and lights up only as a wave passes through it.
+	vec4 tB = texture2D(uTextB, cc);
+	if (tB.a > 0.5) {
+		vec4 tA = texture2D(uTextA, cc);
+		float ti = floor(tA.a * 255.0 + 0.5);
+		vec2 tguv = vec2(tB.r + cuv.x * tB.b, tB.g + cuv.y * tB.b);
+		float tm = texture2D(uTextGlyphs, vec2((ti + tguv.x) / uTextGlyphCount, tguv.y)).r;
+		vec3 ink = mix(tA.rgb, hue, clamp(dens * 1.1, 0.0, 0.6));
+		float reveal = clamp(uTextFloor + dens * uTextGain, 0.0, 1.0);
+		gl_FragColor = vec4(fluidCol + ink * tm * reveal, 1.0);
+		return;
+	}
+	gl_FragColor = vec4(fluidCol, 1.0);
 }
 `;
 

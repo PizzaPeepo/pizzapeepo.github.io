@@ -47,6 +47,11 @@ export function createHeroText(ascii) {
 			const rowBottom = Math.round((window.innerHeight - bottomPx) / ch);
 			// last line = the cycling verb → accent ink; leading lines → text color
 			const color = i === ls.length - 1 ? palette.inks[0] : (palette.tx || { r: 0.9, g: 0.9, b: 0.9 });
+			// Left margin: glyphs are left-aligned in their cell so the box edge
+			// falls on the first letter; pad with blank black cells to match the
+			// trailing whitespace on the right (≈0.4 of a char cell).
+			const pad = Math.max(1, Math.round(S * 0.4));
+			text.fillBg(col0 - pad, rowBottom, pad, S);
 			text.writeText(col0, rowBottom, ls[i], color, S);
 		}
 	}

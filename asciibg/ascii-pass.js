@@ -18,6 +18,8 @@ export const asciiDefaults = {
 	GLOW_AMOUNT: 1.8,
 	FLOOR: 0.08,        // dye density below this renders no glyph (kills advection residue + dim carpet)
 	CARDAN_FLOOR: 0.05, // scene-alpha tag above this = gimbal cell → thin ramp
+	TEXT_FLOOR: 0.06,   // hero title: ambient ink opacity in still fluid (near-invisible)
+	TEXT_GAIN: 1.4,     // hero title: extra opacity per unit fluid density (wave reveal)
 };
 
 export function createAsciiPass(gl, blit, baseVS, opts = {}) {
@@ -82,6 +84,8 @@ export function createAsciiPass(gl, blit, baseVS, opts = {}) {
 		gl.uniform1i(AU.uTextB, text.attachB(3));
 		gl.uniform1i(AU.uTextGlyphs, textAtlas.attach(4));
 		gl.uniform1f(AU.uTextGlyphCount, textAtlas.count);
+		gl.uniform1f(AU.uTextFloor, cfg.TEXT_FLOOR);
+		gl.uniform1f(AU.uTextGain, cfg.TEXT_GAIN);
 		gl.uniform1i(AU.uCardanGlyphs, cardanAtlas.attach(5));
 		gl.uniform1f(AU.uCardanGlyphCount, cardanAtlas.count);
 		gl.uniform1f(AU.uCardanMask, opts.cardanMask ? 1.0 : 0.0);

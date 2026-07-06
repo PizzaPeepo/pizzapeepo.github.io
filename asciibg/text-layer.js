@@ -47,7 +47,7 @@ export function createTextLayer(gl, cols, rows) {
 		const sub = Math.round(255 / scale);
 		for (let k = 0; k < str.length; k++) {
 			const idx = str.charCodeAt(k) - 32;
-			if (idx <= 0 || idx > 94) continue;   // space / non-ASCII → leave fluid
+			if (idx < 0 || idx > 94) continue;   // non-printable → leave fluid; space (idx 0) → blank black bg cell
 			const cx0 = col + k * scale;
 			for (let j = 0; j < scale; j++) {
 				const cy = rowBottom + j;
@@ -67,6 +67,23 @@ export function createTextLayer(gl, cols, rows) {
 		dirty = true;
 	}
 
+	// Enable a rectangle of blank (glyph 0 → black) cells: pads the text's black
+	// background without drawing ink. (col, rowBottom) = bottom-left, y-up grid.
+	function fillBg(col, rowBottom, wCells, hCells) {
+		for (let j = 0; j < hCells; j++) {
+			const cy = rowBottom + j;
+			if (cy < 0 || cy >= rows) continue;
+			for (let i = 0; i < wCells; i++) {
+				const cx = col + i;
+				if (cx < 0 || cx >= cols) continue;
+				const o = (cy * cols + cx) * 4;
+				a[o] = a[o + 1] = a[o + 2] = 0; a[o + 3] = 0;   // charset 0 = blank glyph
+				b[o] = b[o + 1] = 0; b[o + 2] = 255; b[o + 3] = 255;
+			}
+		}
+		dirty = true;
+	}
+
 	function upload() {
 		if (!dirty) return;
 		dirty = false;
@@ -81,5 +98,5 @@ export function createTextLayer(gl, cols, rows) {
 
 	function dispose() { gl.deleteTexture(texA); gl.deleteTexture(texB); }
 
-	return { cols, rows, clear, writeText, upload, attachA, attachB, dispose };
+	return { cols, rows, clear, writeText, fillBg, upload, attachA, attachB, dispose };
 }
