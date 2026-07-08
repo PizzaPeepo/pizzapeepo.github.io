@@ -92,9 +92,11 @@ window.addEventListener('pointermove', e => {
 	const x = (e.clientX - rect.left) / rect.width;
 	const y = 1.0 - (e.clientY - rect.top) / rect.height;
 	if (lastX >= 0) {
-		const dx = (x - lastX) * fluid.cfg.SPLAT_FORCE;
-		const dy = (y - lastY) * fluid.cfg.SPLAT_FORCE;
-		if (dx !== 0 || dy !== 0) fluid.splat(x, y, dx, dy, inkColor(0.10));
+		// Match index main.js: damp move-splats while a UI hover box is active.
+		const damp = 1.0 - 0.85 * uiLink.strength;
+		const dx = (x - lastX) * fluid.cfg.SPLAT_FORCE * damp;
+		const dy = (y - lastY) * fluid.cfg.SPLAT_FORCE * damp;
+		if (dx !== 0 || dy !== 0) fluid.splat(x, y, dx, dy, inkColor(0.10 * damp));
 	}
 	lastX = x; lastY = y;
 });

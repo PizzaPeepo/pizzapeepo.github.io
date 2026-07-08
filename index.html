@@ -505,7 +505,10 @@
     /* ─── CARD ─── */
     .card {
       position: relative;
-      background: rgba(35, 26, 17, 0.5);
+      /* bg alpha scales with the dye brightness under the card (--fluid-amt from
+         asciibg/dye-readback.js): calm fluid keeps the glass look, bright fluid
+         thickens the scrim so card text stays readable over hot ASCII glyphs */
+      background: rgb(35 26 17 / calc(0.5 + 0.38 * var(--fluid-amt, 0)));
       /* border tint follows the fluid dye under the card (asciibg/dye-readback.js
          sets --fluid-tint/--fluid-amt); --card-line is the per-theme rest color */
       --card-line: rgba(255, 255, 255, 0.13);
@@ -531,8 +534,14 @@
                   opacity 0.25s ease;
       z-index: 1;
       top: 0;
-      backdrop-filter: blur(0px) saturate(100%);
-      -webkit-backdrop-filter: blur(0px) saturate(100%);
+      /* No resting backdrop-filter: blur(0px)/saturate(100%) is a visual no-op
+         but still forces a backdrop-filter root on every card, so Chrome keeps a
+         live backdrop copy of the fixed ASCII canvas for all 20+ cards and
+         re-rasterizes it at reduced fidelity during scroll — that (not our
+         render, which is provably scroll-invariant) is the scroll dimming. The
+         blur is applied only on hover, where it's actually visible. */
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
       contain: layout;
     }
     /* Scroll-triggered entrance: hidden only when JS will reveal (no-JS keeps content) */
@@ -786,7 +795,7 @@
 
     /* ─── LIGHT MODE GLASS ─── */
     html.light .card {
-      background: rgba(255, 249, 242, 0.55);
+      background: rgb(255 249 242 / calc(0.55 + 0.35 * var(--fluid-amt, 0)));
       --card-line: rgba(0, 0, 0, 0.12);
     }
     html.light .card:hover {
@@ -795,7 +804,7 @@
 
     /* ─── VIPER ACCENTS ─── */
     html.viper .card {
-      background: rgba(6, 14, 9, 0.55);
+      background: rgb(6 14 9 / calc(0.55 + 0.35 * var(--fluid-amt, 0)));
       --card-line: rgba(120, 255, 180, 0.10);
     }
     html.viper .card:hover,

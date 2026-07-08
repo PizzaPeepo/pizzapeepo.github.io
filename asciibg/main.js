@@ -157,11 +157,16 @@ if (!fluid) {
 			const x = e.clientX / window.innerWidth;
 			const y = 1.0 - e.clientY / window.innerHeight;
 			if (lastX >= 0) {
-				const dx = (x - lastX) * fluid.cfg.SPLAT_FORCE;
-				const dy = (y - lastY) * fluid.cfg.SPLAT_FORCE;
+				// Damp move-splats while a UI hover box is active — the hover
+				// repulsion already parts the fluid there, and full-strength
+				// splats over a card pile up dye until the card is unreadable.
+				const damp = 1.0 - 0.85 * uiLink.strength;
+				const dx = (x - lastX) * fluid.cfg.SPLAT_FORCE * damp;
+				const dy = (y - lastY) * fluid.cfg.SPLAT_FORCE * damp;
 				if (dx !== 0 || dy !== 0) {
 					const ink = palette.inks[(Math.random() * palette.inks.length) | 0];
-					fluid.splat(x, y, dx, dy, { r: ink.r * 0.07, g: ink.g * 0.07, b: ink.b * 0.07 });
+					const a = 0.07 * damp;
+					fluid.splat(x, y, dx, dy, { r: ink.r * a, g: ink.g * a, b: ink.b * a });
 				}
 			}
 			lastX = x; lastY = y;
@@ -171,10 +176,20 @@ if (!fluid) {
 		const perfLog = new URLSearchParams(location.search).get('perf') === '1';
 		let perfAcc = 0, perfN = 0, perfLast = performance.now();
 
+		// __DBG__ press F to freeze/unfreeze: keeps re-presenting the SAME developed
+		// frame every rAF (constant pixels, WebGL redraw satisfied) while the sim is
+		// paused. Build up bright fluid with the mouse, press F, then scroll — if the
+		// frozen-but-redrawn frame still dims, our output is provably constant and the
+		// dimming is the compositor; if it holds, it's coupled to the sim advancing.
+		let frozen = false;
+		window.addEventListener('keydown', e => {
+			if (e.key === 'f' || e.key === 'F') { frozen = !frozen; console.log('[asciibg] frozen=' + frozen); }
+		});
 		let last = performance.now();
 		function tick(now) {
 			const dt = Math.min((now - last) / 1000, 0.016666);
 			last = now;
+			if (frozen) { present(); if (!document.hidden) requestAnimationFrame(tick); return; }
 			ambient.apply(dt, palette, ambientOn);
 			uiLink.apply(dt, palette);
 			fluid.step(dt);

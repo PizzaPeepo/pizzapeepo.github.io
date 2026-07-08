@@ -11,10 +11,11 @@ import { hoverRepulsion, hoverDye } from './shaders.js';
 export const uiLinkDefaults = {
 	SELECTOR: '.card, .filter-pill, #themeToggle, #flowToggle, #gimbalToggle',
 	FORCE: 110.0,       // peak outward velocity /s at full ease
-	DYE_RATE: 0.05,     // dye /s in the glow band at full ease — kept subtle vs ambient blobs (0.10)
+	DYE_RATE: 0.03,     // dye /s in the glow band at full ease — kept subtle vs ambient blobs (0.10)
 	EASE_IN: 0.15,      // s to reach ~full strength on enter
 	EASE_OUT: 0.30,     // s to decay on leave
 	MIN_RANGE: 0.22,    // uv floor for the falloff reach
+	MAX_RANGE: 0.35,    // uv cap — keeps the repulsion a local halo, not a screen-wide piston
 };
 
 export function createUiLink(gl, blit, baseVS, fluid, opts = {}) {
@@ -45,8 +46,11 @@ export function createUiLink(gl, blit, baseVS, fluid, opts = {}) {
 		box.cy = 1.0 - (r.top + r.height * 0.5) / window.innerHeight;   // y-flip
 		box.hx = r.width * 0.5 / window.innerWidth;
 		box.hy = r.height * 0.5 / window.innerHeight;
-		// Reference range heuristic: max(w*0.8, h*5, 0.22) in uv units.
-		box.range = Math.max(box.hx * 1.6, box.hy * 10.0, cfg.MIN_RANGE);
+		// Local halo around the rect. The old heuristic (max(w*0.8, h*5, 0.22))
+		// hit ~1.1 uv for a card — a near-fullscreen piston that shoved the dye
+		// field off the open domain edges on every scroll (cards sweep under the
+		// cursor → hover stays active) and visibly drained the whole sim.
+		box.range = Math.min(Math.max(box.hx * 1.6, box.hy * 2.5, cfg.MIN_RANGE), cfg.MAX_RANGE);
 	}
 
 	function apply(dt, palette) {
