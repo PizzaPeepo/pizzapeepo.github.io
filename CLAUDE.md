@@ -93,8 +93,11 @@ These are IIFE-style (not ES6 modules), loaded only by `index.html`:
 |------|---------|
 | `cardpreviews.js` | Animated canvas micro-previews on each demo card |
 
-Classic-background scripts `wavegrid.js`, `streaks.js`, `cardan.js`: loaded only when
-the ASCII toggle is off (see below) — the pre-ASCII index background.
+Classic-background scripts `wavegrid.js`, `streaks.js`, `cardan.js`: the pre-ASCII
+index background. Loaded when the Fluid master toggle is off (no fluid at all), and
+also under the raw-fluid mode where the dye layers between them (see below). Their
+canvases now use explicit z-index (`wavegrid` −3, its tint −2) so the raw fluid can
+sit at −1 above the wavegrid but below streaks/cardan (0).
 
 ### Index ASCII Background (`asciibg/`)
 ES6 modules, single WebGL2 context — the whole index background is one ASCII glyph
@@ -107,11 +110,19 @@ cards/pills parts the fluid (`ui-link.js`), dye readback tints card borders via
 `--fluid-tint`/`--fluid-amt` CSS vars (`dye-readback.js`). Standalone harness:
 `asciibg/test.html` with boot params `?theme=light|viper`, `&splats=0`, `&stir=1`
 (ring→fluid stir off by default, matches index),
-`&hover=1`, `&text=1`, `&rb=1`, `&warmup=N`; index takes `?perf=1` and `?ascii=0|1`.
-ASCII pill (`#asciiToggle`, top-left stack) picks the engine via localStorage
-`asciibg-ascii` + page reload: on = asciibg, off = classic wavegrid/streaks/cardan
-(boot loader at the bottom of `index.html`; Flow/Gimbal pills hidden in classic mode).
-Plan + worklog: `ASCII_REDESIGN_PLAN.md` (root).
+`&hover=1`, `&text=1`, `&rb=1`, `&warmup=N`; index takes `?perf=1`, `?ascii=0|1`, `?fluid=0|1`.
+Two top-left pills pick the mode via localStorage + page reload (engines self-mount,
+don't tear down cleanly): Fluid master (`#fluidToggle`, `asciibg-fluid`) and ASCII
+glyphs (`#asciiToggle`, `asciibg-ascii`). Three modes (boot loader at the bottom of
+`index.html`): (1) Fluid off → classic wavegrid/streaks/cardan, no fluid; (2) Fluid
+on + ASCII on → `asciibg/main.js` glyph lattice (default); (3) Fluid on + ASCII off →
+`asciibg/main.js` raw dye (`window.__ASCIIBG_GLYPHS__=false`, canvas z-index −1)
+layered over the classic wavegrid, below streaks/cardan. In raw mode `main.js` skips
+the ASCII pass / cardan-scene / hero-text and blits the dye straight to screen (its
+`display` shader outputs `alpha=max(rgb)`, so it's transparent where dark → wavegrid
+shows through). Pills hide per mode: Gimbal + COLS are glyph-only; the Ambient Fluid
+(was "Flow") + BLOBS pills work in both fluid modes; all fluid pills hide with the
+master off. Plan + worklog: `ASCII_REDESIGN_PLAN.md` (root).
 
 ### Demo Structure
 ```

@@ -48,31 +48,50 @@ if (!fluid) {
 	if (colsW) colsW.style.display = 'none';
 	if (blobW) blobW.style.display = 'none';
 } else {
-	const ascii = createAsciiPass(fluid.gl, fluid.blit, fluid.baseVS,
-		isMobile ? { COLS: 72 } : {});
+	// Glyph lattice vs raw dye: the boot loader sets __ASCIIBG_GLYPHS__=false for
+	// the ASCII-off page, where the dye renders straight to screen (transparent
+	// where dark) and layers between the classic wavegrid and streaks/cardan.
+	const glyphs = window.__ASCIIBG_GLYPHS__ !== false;
+	if (!glyphs) canvas.style.zIndex = '-1';   // above wavegrid (-3) + its tint (-2), below streaks/cardan (0)
+
 	const ambient = createAmbient(fluid.gl, fluid.blit, fluid.baseVS, fluid);
-	const cardan = createCardanScene(fluid.gl, fluid.blit, fluid.baseVS);
 	const uiLink = createUiLink(fluid.gl, fluid.blit, fluid.baseVS, fluid);
 	const readback = createDyeReadback(fluid.gl, fluid.blit, fluid.baseVS, fluid);
-	const cardanResize = () => cardan.resize(Math.max(4, canvas.width >> 1), Math.max(4, canvas.height >> 1));
-	cardanResize();
+
+	// ── glyph-only pipeline: ASCII pass, cardan gimbal, in-lattice hero text.
+	// In raw mode the classic cardan.js/streaks.js provide those layers instead. ──
+	let ascii = null, cardan = null, heroText = null, gimbalOn = false;
+	let cardanResize = () => {};
+	if (glyphs) {
+		ascii = createAsciiPass(fluid.gl, fluid.blit, fluid.baseVS, isMobile ? { COLS: 72 } : {});
+		cardan = createCardanScene(fluid.gl, fluid.blit, fluid.baseVS);
+		cardanResize = () => cardan.resize(Math.max(4, canvas.width >> 1), Math.max(4, canvas.height >> 1));
+		cardanResize();
+		heroText = createHeroText(ascii);
+		gimbalOn = localStorage.getItem('asciibg-gimbal') !== 'off';
+	}
+
 	const drawScene = target => {
 		fluid.drawDisplay(target);
-		if (gimbalOn) cardan.compositeInto(target);
+		if (glyphs && gimbalOn) cardan.compositeInto(target);
 	};
-
-	const heroText = createHeroText(ascii);
 
 	let palette = readPalette();
 	const applyColorMode = p => fluid.setColorMode(p.isHeat ? 'heat' : p.isHeatRev ? 'heatrev' : 'none');
 	applyColorMode(palette);
-	onPalette(p => { palette = p; heroText.setPalette(p); applyColorMode(p); });
+	onPalette(p => { palette = p; if (heroText) heroText.setPalette(p); applyColorMode(p); });
 
-	window.addEventListener('resize', () => { sizeCanvas(); fluid.resize(); ascii.resize(); cardanResize(); heroText.refresh(); });
+	window.addEventListener('resize', () => {
+		sizeCanvas(); fluid.resize();
+		if (glyphs) { ascii.resize(); cardanResize(); heroText.refresh(); }
+	});
 
-	const present = () => ascii.render(drawScene, palette, { cardanMask: gimbalOn, heat: palette.isHeat || palette.isHeatRev });
+	// Present: glyph mode runs the ASCII pass; raw mode blits the dye to screen.
+	const present = glyphs
+		? () => ascii.render(drawScene, palette, { cardanMask: gimbalOn, heat: palette.isHeat || palette.isHeatRev })
+		: () => drawScene(null);
 
-	// ── ambient blob toggle (top-left pill) — persists across visits.
+	// ── ambient fluid toggle (top-left pill) — persists across visits.
 	// Gates ambient dye emission only; wind+swirl always run, so interaction
 	// dye keeps drifting right→left even when off. ──
 	let ambientOn = localStorage.getItem('asciibg-flow') !== 'off';
@@ -80,7 +99,7 @@ if (!fluid) {
 		if (!flowBtn) return;
 		flowBtn.setAttribute('aria-pressed', ambientOn ? 'true' : 'false');
 		const lbl = flowBtn.querySelector('.toggle-label');
-		if (lbl) lbl.textContent = ambientOn ? 'Flow' : 'Still';
+		if (lbl) lbl.textContent = ambientOn ? 'Ambient Fluid' : 'Still';
 	};
 	syncFlowBtn();
 	if (flowBtn) flowBtn.addEventListener('click', () => {
@@ -89,36 +108,39 @@ if (!fluid) {
 		syncFlowBtn();
 	});
 
-	// ── gimbal toggle (below the flow pill) — same persistence pattern ──
-	let gimbalOn = localStorage.getItem('asciibg-gimbal') !== 'off';
-	const syncGimbalBtn = () => {
-		if (gimbalBtn) gimbalBtn.setAttribute('aria-pressed', gimbalOn ? 'true' : 'false');
-	};
-	syncGimbalBtn();
-	if (gimbalBtn) gimbalBtn.addEventListener('click', () => {
-		gimbalOn = !gimbalOn;
-		localStorage.setItem('asciibg-gimbal', gimbalOn ? 'on' : 'off');
+	// ── gimbal toggle — glyph mode only (drives the ASCII cardan-scene). ──
+	if (glyphs) {
+		const syncGimbalBtn = () => {
+			if (gimbalBtn) gimbalBtn.setAttribute('aria-pressed', gimbalOn ? 'true' : 'false');
+		};
 		syncGimbalBtn();
-	});
-
-	// ── glyph column-count slider (after the gimbal pill) — live-resizes the
-	// ASCII lattice and persists like the toggles. Range 30–400, default 110. ──
-	const colsSlider = document.getElementById('colsSlider');
-	const colsVal = document.getElementById('colsSliderVal');
-	if (colsSlider) {
-		const stored = parseInt(localStorage.getItem('asciibg-cols'), 10);
-		if (stored >= 30 && stored <= 400) { ascii.cfg.COLS = stored; ascii.resize(); heroText.refresh(); }
-		colsSlider.value = ascii.cfg.COLS;
-		if (colsVal) colsVal.textContent = ascii.cfg.COLS;
-		colsSlider.addEventListener('input', () => {
-			const v = Math.max(30, Math.min(400, parseInt(colsSlider.value, 10) || 110));
-			ascii.cfg.COLS = v;
-			ascii.resize();
-			heroText.refresh();
-			if (colsVal) colsVal.textContent = v;
-			localStorage.setItem('asciibg-cols', v);
-			present();
+		if (gimbalBtn) gimbalBtn.addEventListener('click', () => {
+			gimbalOn = !gimbalOn;
+			localStorage.setItem('asciibg-gimbal', gimbalOn ? 'on' : 'off');
+			syncGimbalBtn();
 		});
+	}
+
+	// ── glyph column-count slider (after the gimbal pill) — glyph mode only;
+	// live-resizes the ASCII lattice and persists. Range 30–400, default 110. ──
+	if (glyphs) {
+		const colsSlider = document.getElementById('colsSlider');
+		const colsVal = document.getElementById('colsSliderVal');
+		if (colsSlider) {
+			const stored = parseInt(localStorage.getItem('asciibg-cols'), 10);
+			if (stored >= 30 && stored <= 400) { ascii.cfg.COLS = stored; ascii.resize(); heroText.refresh(); }
+			colsSlider.value = ascii.cfg.COLS;
+			if (colsVal) colsVal.textContent = ascii.cfg.COLS;
+			colsSlider.addEventListener('input', () => {
+				const v = Math.max(30, Math.min(400, parseInt(colsSlider.value, 10) || 110));
+				ascii.cfg.COLS = v;
+				ascii.resize();
+				heroText.refresh();
+				if (colsVal) colsVal.textContent = v;
+				localStorage.setItem('asciibg-cols', v);
+				present();
+			});
+		}
 	}
 
 	// ── ambient blob slider — scales ambient dye emission (cfg.DYE_RATE). Value
@@ -146,7 +168,7 @@ if (!fluid) {
 		ambient.apply(1 / 60, palette, ambientOn);
 		fluid.step(1 / 60);
 	}
-	if (gimbalOn) cardan.draw(performance.now(), 1 / 60);
+	if (glyphs && gimbalOn) cardan.draw(performance.now(), 1 / 60);
 	present();
 	setTimeout(() => { canvas.style.opacity = '1'; }, 300);
 
@@ -193,7 +215,7 @@ if (!fluid) {
 			ambient.apply(dt, palette, ambientOn);
 			uiLink.apply(dt, palette);
 			fluid.step(dt);
-			if (gimbalOn) cardan.draw(now, dt);
+			if (glyphs && gimbalOn) cardan.draw(now, dt);
 			readback.apply();
 			present();
 			if (perfLog) {

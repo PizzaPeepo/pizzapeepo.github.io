@@ -979,13 +979,17 @@
        horizontally. Flow/gimbal hidden when the background is static
        (no WebGL2 / reduced motion, or classic-mode fallback) -->
   <div class="left-toggles">
-    <button class="theme-toggle ascii-toggle" id="asciiToggle" aria-pressed="true" aria-label="Toggle ASCII background">
+    <button class="theme-toggle fluid-toggle" id="fluidToggle" aria-pressed="true" aria-label="Toggle fluid simulation">
+      <span class="toggle-icon">≈</span>
+      <span class="toggle-label">Fluid</span>
+    </button>
+    <button class="theme-toggle ascii-toggle" id="asciiToggle" aria-pressed="true" aria-label="Toggle ASCII glyph rendering">
       <span class="toggle-icon">▦</span>
       <span class="toggle-label">ASCII</span>
     </button>
-    <button class="theme-toggle flow-toggle" id="flowToggle" aria-pressed="true" aria-label="Toggle ambient fluid blobs">
+    <button class="theme-toggle flow-toggle" id="flowToggle" aria-pressed="true" aria-label="Toggle ambient fluid emission">
       <span class="toggle-icon">≋</span>
-      <span class="toggle-label">Flow</span>
+      <span class="toggle-label">Ambient Fluid</span>
     </button>
     <button class="theme-toggle gimbal-toggle" id="gimbalToggle" aria-pressed="true" aria-label="Toggle cardan gimbal">
       <span class="toggle-icon">◎</span>
@@ -1284,43 +1288,64 @@
   </footer>
 
   <script>
-    /* ASCII background toggle — localStorage 'asciibg-ascii' picks the engine.
-       on  (default): asciibg/main.js — ASCII fluid lattice + gimbal + hero text.
-       off: the classic pre-ASCII background — wavegrid + streaks + cardan.
-       Both engines self-mount and neither tears down cleanly, so flipping the
-       toggle reloads the page. Flow/Gimbal pills are asciibg controls — hidden
-       in classic mode. index.html?ascii=0|1 overrides the stored choice
-       (headless verify). */
+    /* Background engine boot — two persisted prefs pick the mode:
+         asciibg-fluid  (master): off => no fluid at all, classic wavegrid.
+         asciibg-ascii  (glyphs): on  => ASCII fluid lattice (default);
+                                  off => raw dye, no glyph pass.
+       Three resulting modes:
+         1. fluid off              -> wavegrid + streaks + cardan (no fluid).
+         2. fluid on, ASCII on     -> asciibg/main.js glyph lattice + gimbal + hero.
+         3. fluid on, ASCII off    -> asciibg/main.js raw dye (__ASCIIBG_GLYPHS__=false),
+                                      layered below streaks + cardan (no wavegrid).
+       Engines self-mount and don't tear down cleanly, so toggles reload the page.
+       Pills hide per mode (Gimbal + COLS are glyph-only; all fluid pills hide with
+       the master off). index.html?fluid=0|1 & ?ascii=0|1 override the stored
+       choice (headless verify). */
     (function () {
-      var qp = new URLSearchParams(location.search).get('ascii');
-      var asciiOn = qp !== null ? qp !== '0'
-        : localStorage.getItem('asciibg-ascii') !== 'off';
-      var btn = document.getElementById('asciiToggle');
-      if (btn) {
-        btn.setAttribute('aria-pressed', asciiOn ? 'true' : 'false');
-        btn.addEventListener('click', function () {
-          localStorage.setItem('asciibg-ascii', asciiOn ? 'off' : 'on');
+      var params = new URLSearchParams(location.search);
+      function pref(qpKey, lsKey) {
+        var qp = params.get(qpKey);
+        return qp !== null ? qp !== '0' : localStorage.getItem(lsKey) !== 'off';
+      }
+      var fluidOn = pref('fluid', 'asciibg-fluid');
+      var asciiOn = pref('ascii', 'asciibg-ascii');
+
+      function wireToggle(id, lsKey, on) {
+        var b = document.getElementById(id);
+        if (!b) return;
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        b.addEventListener('click', function () {
+          localStorage.setItem(lsKey, on ? 'off' : 'on');
           location.reload();
         });
       }
+      wireToggle('fluidToggle', 'asciibg-fluid', fluidOn);
+      wireToggle('asciiToggle', 'asciibg-ascii', asciiOn);
+
+      function hide(id) { var e = document.getElementById(id); if (e) e.style.display = 'none'; }
       function load(src, isModule) {
         var s = document.createElement('script');
         if (isModule) s.type = 'module';
         s.src = src;
         document.body.appendChild(s);
       }
-      if (asciiOn) {
+
+      if (!fluidOn) {
+        // Master off — classic wavegrid/streaks/cardan, no fluid. Fluid pills go away.
+        ['asciiToggle', 'flowToggle', 'gimbalToggle', 'colsSliderWrap', 'blobSliderWrap'].forEach(hide);
+        load('wavegrid.js');
+        load('streaks.js');
+        load('cardan.js');
+      } else if (asciiOn) {
+        // Fluid + ASCII glyph lattice (default). main.js owns the fluid pills.
         load('asciibg/main.js', true);
       } else {
-        var flow = document.getElementById('flowToggle');
-        var gimbal = document.getElementById('gimbalToggle');
-        var colsW = document.getElementById('colsSliderWrap');
-        var blobW = document.getElementById('blobSliderWrap');
-        if (flow) flow.style.display = 'none';
-        if (gimbal) gimbal.style.display = 'none';
-        if (colsW) colsW.style.display = 'none';
-        if (blobW) blobW.style.display = 'none';
-        load('wavegrid.js');
+        // Fluid without glyphs — raw dye layered below streaks + cardan
+        // (above). Gimbal + COLS are glyph-only.
+        window.__ASCIIBG_GLYPHS__ = false;
+        hide('gimbalToggle');
+        hide('colsSliderWrap');
+        load('asciibg/main.js', true);
         load('streaks.js');
         load('cardan.js');
       }

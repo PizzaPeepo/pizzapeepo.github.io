@@ -3,7 +3,10 @@
   'use strict';
 
   var canvas = document.createElement('canvas');
-  canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;display:block;';
+  // z-index -3: base plane. When the raw-fluid engine layers over the classic
+  // background (ASCII off), the dye sits at z -1 above this and its tint (-2),
+  // below streaks/cardan (0). Alone (fluid off) it's still the bottom-most layer.
+  canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:-3;pointer-events:none;display:block;';
   document.body.insertBefore(canvas, document.body.firstChild);
 
   var gl = canvas.getContext('webgl2');
@@ -179,10 +182,11 @@
   // Remove opaque body bg so backdrop-filter on cards sees the canvas
   document.body.style.background = 'transparent';
 
-  // Warm tint overlay — sits above canvas (z:0, after canvas in DOM) but below .wrap (z:1)
-  // Dims the raw dot grid back to the original calm/warm look
+  // Warm tint overlay — dims the raw dot grid back to the calm/warm look. Sits
+  // at z -2, directly above the wavegrid canvas (-3) and below the raw fluid (-1),
+  // so the dye glows over the tinted grid rather than being dimmed by it.
   var tint = document.createElement('div');
-  tint.style.cssText = 'position:fixed;inset:0;z-index:0;pointer-events:none;transition:background 0.3s;';
+  tint.style.cssText = 'position:fixed;inset:0;z-index:-2;pointer-events:none;transition:background 0.3s;';
   canvas.insertAdjacentElement('afterend', tint);
 
   function updateTint() {
