@@ -1339,7 +1339,10 @@
         load('cardan.js');
       } else if (asciiOn) {
         // Fluid + ASCII glyph lattice (default). main.js owns the fluid pills.
+        // streaks.js adds the diagonal glow on card hover (its canvas sits at
+        // z-index 0 above the glyph canvas, below cards).
         load('asciibg/main.js', true);
+        load('streaks.js');
       } else {
         // Fluid without glyphs — raw dye layered below streaks + cardan
         // (above). Gimbal + COLS are glyph-only.
