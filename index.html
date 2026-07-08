@@ -237,6 +237,8 @@
       min-height: 100vh;
       overflow-x: hidden;
       transition: background-color 0.4s ease, color 0.4s ease;
+      -webkit-user-select: none;
+      user-select: none;
     }
 
     /* ─── BACKGROUND BLOBS ─── */
@@ -262,8 +264,8 @@
       opacity: 0.11;
     }
     .blob-3 {
-      width: 300px; height: 260px;
-      top: 45%; left: 55%;
+      width: 400px; height: 320px;
+      top: 40%; left: 40%;
       background: var(--gold-hi);
       opacity: 0.07;
     }
@@ -848,8 +850,7 @@
     /* keep black truly black — calm the blobs */
     html.viper .blob-1 { opacity: 0.26; }
     html.viper .blob-2 { opacity: 0.22; }
-    html.viper .blob-3 { opacity: 0.16; }
-
+    html.viper .blob-3 { opacity: 0.14; }
     /* teal shift for the green tag family so it reads against all the venom */
     html.viper .card-tag.green        { background: rgba(80,230,190,0.10); color: #5ce8c8; }
     html.viper .filter-pill.green:hover  { border-color: #5ce8c8; color: #5ce8c8; }
