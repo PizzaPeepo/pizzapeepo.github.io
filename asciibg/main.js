@@ -7,7 +7,6 @@ import { createFluid } from './fluid-core.js';
 import { createAsciiPass } from './ascii-pass.js';
 import { createAmbient } from './ambient.js';
 import { createCardanScene } from './cardan-scene.js';
-import { createUiLink } from './ui-link.js';
 import { createDyeReadback } from './dye-readback.js';
 import { createHeroText } from './hero-text.js';
 import { readPalette, onPalette } from './theme-palette.js';
@@ -55,7 +54,6 @@ if (!fluid) {
 	if (!glyphs) canvas.style.zIndex = '-1';   // above wavegrid (-3) + its tint (-2), below streaks/cardan (0)
 
 	const ambient = createAmbient(fluid.gl, fluid.blit, fluid.baseVS, fluid);
-	const uiLink = createUiLink(fluid.gl, fluid.blit, fluid.baseVS, fluid);
 	const readback = createDyeReadback(fluid.gl, fluid.blit, fluid.baseVS, fluid);
 
 	// ── glyph-only pipeline: ASCII pass, cardan gimbal, in-lattice hero text.
@@ -179,15 +177,11 @@ if (!fluid) {
 			const x = e.clientX / window.innerWidth;
 			const y = 1.0 - e.clientY / window.innerHeight;
 			if (lastX >= 0) {
-				// Damp move-splats while a UI hover box is active — the hover
-				// repulsion already parts the fluid there, and full-strength
-				// splats over a card pile up dye until the card is unreadable.
-				const damp = 1.0 - 0.85 * uiLink.strength;
-				const dx = (x - lastX) * fluid.cfg.SPLAT_FORCE * damp;
-				const dy = (y - lastY) * fluid.cfg.SPLAT_FORCE * damp;
+				const dx = (x - lastX) * fluid.cfg.SPLAT_FORCE;
+				const dy = (y - lastY) * fluid.cfg.SPLAT_FORCE;
 				if (dx !== 0 || dy !== 0) {
 					const ink = palette.inks[(Math.random() * palette.inks.length) | 0];
-					const a = 0.07 * damp;
+					const a = 0.07;
 					fluid.splat(x, y, dx, dy, { r: ink.r * a, g: ink.g * a, b: ink.b * a });
 				}
 			}
@@ -213,7 +207,6 @@ if (!fluid) {
 			last = now;
 			if (frozen) { present(); if (!document.hidden) requestAnimationFrame(tick); return; }
 			ambient.apply(dt, palette, ambientOn);
-			uiLink.apply(dt, palette);
 			fluid.step(dt);
 			if (glyphs && gimbalOn) cardan.draw(now, dt);
 			readback.apply();
