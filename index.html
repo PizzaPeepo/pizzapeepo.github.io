@@ -1331,6 +1331,11 @@
         document.body.appendChild(s);
       }
 
+      // Hero RGB prism bands — additive ribbons behind the title, white
+      // knot follows the cursor. Hero-contained + scroll-faded, rides every
+      // background mode. Self-guards WebGL2 + reduced-motion.
+      load('herobands.js');
+
       if (!fluidOn) {
         // Master off — classic wavegrid/streaks/cardan, no fluid. Fluid pills go away.
         ['asciiToggle', 'flowToggle', 'gimbalToggle', 'colsSliderWrap', 'blobSliderWrap'].forEach(hide);
@@ -2002,6 +2007,8 @@
       var inner = document.querySelector('.hdr-inner');
       var cue   = document.querySelector('.scroll-cue');
       if (!inner) return;
+      var _py = parseInt(new URLSearchParams(location.search).get('y'), 10);   // headless scroll preview
+      if (_py > 0) { document.documentElement.style.scrollBehavior = 'auto'; window.scrollTo(0, _py); }
 
       var raf = 0;
       var cueFired = false;
