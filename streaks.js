@@ -21,6 +21,22 @@
   var streaks = [];
   var hovered = null;
 
+  // ASCII glyph mode (index boot loader sets the flag before loading this
+  // script): render streaks as a comet of Web437 density glyphs instead of the
+  // smooth glow line, so they read as part of the lattice. COLS is exposed by
+  // asciibg/main.js so the glyph pitch tracks the live lattice.
+  var asciiMode  = window.__STREAKS_ASCII__ === true;
+  // Sparkle glyphs, faint → bright. Star chars fall back to the system monospace
+  // where Web437 lacks them — that's fine, they read as sparkles either way.
+  var SPARKLE    = ['.', ',', "'", '`', '´', '°', ':', ';', '^', '/', '+', '*'];
+
+  // Stable per-glyph pseudo-random (hash of index + streak seed) so the jitter
+  // holds still across frames and the glyphs twinkle in place instead of buzzing.
+  function rnd(i, seed) {
+    var v = Math.sin(i * 12.9898 + seed * 78.233) * 43758.5453;
+    return v - Math.floor(v);
+  }
+
   function easeOutBack(t) {
     var c1 = 1.2, c3 = c1 + 1;
     return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
@@ -42,6 +58,7 @@
       wc:  0.4 + Math.random() * 1.1,
       as:  0.35 + Math.random() * 0.65,
       hue: Math.floor(Math.random() * 360),
+      seed: Math.random() * 100,
       t: 0, dur: IN_DUR,
       state: 'in',
       alpha: 0,
@@ -73,6 +90,66 @@
       exitAll();
     });
   });
+
+  function cellPitch() {
+    var cols = window.__ASCIIBG_COLS__ || 110;
+    return Math.max(10, Math.min(28, cvs.width / cols));
+  }
+
+  // Scatter of twinkling sparkle glyphs along the streak. Each glyph gets a
+  // stable seeded jitter (position, size, char) so it sits still, plus a smooth
+  // per-glyph sine twinkle on brightness. Denser/brighter/bigger toward the head;
+  // a stable random subset drops out so the trail stays sparse and sparkly.
+  var SP = SPARKLE.length;
+  function drawGlyphStreak(s, a, gold, hot, isViper) {
+    var pitch = cellPitch();
+    var step  = pitch * 0.45;                   // tight spacing → a line of glyphs
+    var count = 6 + Math.round(rnd(0, s.seed) * 7);   // ~6–12 glyphs per trail
+    var px = -DIR_Y, py = DIR_X;                // perpendicular unit
+    var now = performance.now() * 0.006;
+    var tailN = 1 + Math.floor(rnd(7.7, s.seed) * 3);   // last 1–3 glyphs flicker like fire
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (var i = 0; i < count; i++) {
+      var r1 = rnd(i, s.seed), r2 = rnd(i, s.seed + 1.7), r3 = rnd(i, s.seed + 4.3);
+      var f     = count > 1 ? i / (count - 1) : 0;
+      var tailI = count - 1 - i;                // 0 = last glyph
+      var flick = tailI < tailN;                // tail glyphs = flickering embers
+      if (!flick && r3 < 0.08) continue;        // stable dropout (embers never drop)
+      var base, tw, along, perp;
+      if (flick) {
+        // per-frame randomness → fire flicker; floor keeps the embers visible
+        base  = a * (0.2 + tailI * 0.12);
+        var ph = tailI * 1.7 + r3 * 6.283;
+        tw    = 0.55 + 0.3 * Math.sin(now * 1.2 + ph) + (Math.random() - 0.5) * 0.08;
+        along = Math.sin(now * 1.4 + ph) * step * 0.6;         // slow glide along the diagonal
+        perp  = Math.sin(now * 1.1 + ph * 1.3) * pitch * 0.1;  // barely off the line
+      } else {
+        base  = a * Math.pow(1 - f, 1.3);
+        tw    = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(now + r3 * 6.283));  // smooth twinkle
+        along = (r1 - 0.5) * step * 0.6;
+        perp  = (r2 - 0.5) * pitch * 0.15;      // tight to the streak line
+      }
+      var ga = Math.min(1, base * tw * 1.4);
+      if (ga <= 0.02) continue;
+      var gx = Math.round(s.x - DIR_X * step * i + DIR_X * along + px * perp);
+      var gy = Math.round(s.y - DIR_Y * step * i + DIR_Y * along + py * perp);
+      var bi = flick
+        ? Math.floor(Math.random() * SP * 0.55)
+        : Math.max(0, Math.min(SP - 1, Math.round((1 - f) * (SP - 1) * (0.55 + r2 * 0.7))));
+      var size = Math.max(5, Math.round(pitch * (0.45 + (flick ? Math.random() : r1) * 0.3)));
+      var col = isViper
+        ? 'hsla(108,100%,' + Math.round(60 + tw * 25) + '%,'
+        : 'rgba(' + (((flick && tw > 0.7) || tw > 0.82 || f < 0.3) ? hot : gold) + ',';
+      ctx.font = size + "px 'Web437_ATI_9x16', monospace";
+      ctx.shadowBlur  = 3 + ga * 8;
+      ctx.shadowColor = col + '0.9)';
+      ctx.fillStyle   = col + ga.toFixed(3) + ')';
+      ctx.fillText(SPARKLE[bi], gx, gy);
+    }
+    ctx.restore();
+  }
 
   var prevNow = performance.now();
 
@@ -112,6 +189,8 @@
 
       var a = s.alpha * s.as;
       if (a <= 0) continue;
+
+      if (asciiMode) { drawGlyphStreak(s, a, gold, hot, isViper); continue; }
 
       var fLen = s.state === 'parked' ? s.len * (0.91 + Math.random() * 0.18) : s.len;
       var tx   = s.x - DIR_X * fLen;

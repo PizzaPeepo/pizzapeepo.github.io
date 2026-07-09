@@ -129,9 +129,11 @@ if (!fluid) {
 			if (stored >= 30 && stored <= 400) { ascii.cfg.COLS = stored; ascii.resize(); heroText.refresh(); }
 			colsSlider.value = ascii.cfg.COLS;
 			if (colsVal) colsVal.textContent = ascii.cfg.COLS;
+			window.__ASCIIBG_COLS__ = ascii.cfg.COLS;   // streaks.js reads this for glyph pitch
 			colsSlider.addEventListener('input', () => {
 				const v = Math.max(30, Math.min(400, parseInt(colsSlider.value, 10) || 110));
 				ascii.cfg.COLS = v;
+				window.__ASCIIBG_COLS__ = v;
 				ascii.resize();
 				heroText.refresh();
 				if (colsVal) colsVal.textContent = v;
@@ -142,7 +144,7 @@ if (!fluid) {
 	}
 
 	// ── ambient blob slider — scales ambient dye emission (cfg.DYE_RATE). Value
-	// 0–30 maps to DYE_RATE 0.00–0.30 (default 10 → 0.10). Live; persists. The
+	// 0–100 maps to DYE_RATE 0.00–1.00 (default 3 → 0.03). Live; persists. The
 	// Flow pill still gates emission on/off; this sets how much when on. ──
 	const blobSlider = document.getElementById('blobSlider');
 	const blobVal = document.getElementById('blobSliderVal');

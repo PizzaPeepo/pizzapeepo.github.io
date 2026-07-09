@@ -1003,8 +1003,8 @@
     </label>
     <label class="cols-slider" id="blobSliderWrap" title="Ambient blob amount">
       <span class="cols-cap">BLOBS</span>
-      <input type="range" id="blobSlider" min="0" max="100" step="1" value="10" aria-label="Ambient blob amount">
-      <span class="cols-val" id="blobSliderVal">10</span>
+      <input type="range" id="blobSlider" min="0" max="100" step="1" value="3" aria-label="Ambient blob amount">
+      <span class="cols-val" id="blobSliderVal">3</span>
     </label>
   </div>
 
@@ -1340,7 +1340,9 @@
       } else if (asciiOn) {
         // Fluid + ASCII glyph lattice (default). main.js owns the fluid pills.
         // streaks.js adds the diagonal glow on card hover (its canvas sits at
-        // z-index 0 above the glyph canvas, below cards).
+        // z-index 0 above the glyph canvas, below cards). The flag switches it to
+        // Web437 density-glyph streaks so they read as part of the lattice.
+        window.__STREAKS_ASCII__ = true;
         load('asciibg/main.js', true);
         load('streaks.js');
       } else {

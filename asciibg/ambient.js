@@ -10,8 +10,8 @@ export const ambientDefaults = {
 	FORCE_SCALE: 1.5,   // spatial frequency of the swirl field
 	WIND_X: -2.0,       // uniform accel /s: field enters right, exits left (open edges)
 	WIND_Y: -0.5,
-	DYE_RATE: 0.10,   // ambient blob emission — Flow pill gates it via apply()'s emitDye arg.
-	                  // Equilibrium: core dens ≈ RATE/DENSITY_DISSIPATION (0.10/0.5 = 0.20) vs shader floor 0.08
+	DYE_RATE: 0.03,   // ambient blob emission — Flow pill gates it via apply()'s emitDye arg.
+	                  // Equilibrium: core dens ≈ RATE/DENSITY_DISSIPATION (0.03/0.5 = 0.06) vs shader floor 0.08
 	DYE_SCALE: 1.6,     // spatial frequency of the blob field (lower = bigger patches)
 	DYE_THRESH: 0.34,   // blob start level; snoise rarely exceeds ~0.6 → sparse isolated patches
 	DYE_DRIFT: 0.32,    // emission-pattern translation ≈ wind terminal speed WIND_X/VEL_DISS = 10 texels/s (uTime already runs at TIME_SCALE)
