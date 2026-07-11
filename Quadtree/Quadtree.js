@@ -19,10 +19,10 @@ export class Quadtree {
 		let y = this.boundary.y;
 		let h = this.boundary.h;
 		let w = this.boundary.w;
-		this.NW = new Quadtree(new Rectangle(x, y, h / 2, w / 2), this.capacity);
-		this.NE = new Quadtree(new Rectangle(x + w / 2, y, h / 2, w / 2), this.capacity);
-		this.SW = new Quadtree(new Rectangle(x, y + h / 2, h / 2, w / 2), this.capacity);
-		this.SE = new Quadtree(new Rectangle(x + w / 2, y + h / 2, h / 2, w / 2), this.capacity);
+		this.NW = new Quadtree(new Rectangle(x, y, w / 2, h / 2), this.capacity);
+		this.NE = new Quadtree(new Rectangle(x + w / 2, y, w / 2, h / 2), this.capacity);
+		this.SW = new Quadtree(new Rectangle(x, y + h / 2, w / 2, h / 2), this.capacity);
+		this.SE = new Quadtree(new Rectangle(x + w / 2, y + h / 2, w / 2, h / 2), this.capacity);
 	}
 
 	// Insert a point into the QuadTree
