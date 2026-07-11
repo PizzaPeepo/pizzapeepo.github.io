@@ -20,6 +20,8 @@ var growSpeed = 1;    // px per frame
 var growFill = 1;     // territory tint fade (1 -> 0 after completion)
 var donePulse = 0;    // wall flash when growth completes (1 -> 0)
 var asciiField = true; // render flooded territory as an ASCII glyph field
+var runners = [];      // data packets riding finished walls (ASCII mode)
+var asciiSegs = null;  // cached in-canvas wall geometry for the runners
 
 var sites = [];        // {x, y, vx, vy}
 
@@ -31,20 +33,37 @@ var isViper = document.documentElement.classList.contains("viper");
 var backgroundCanvas = document.getElementById("backgroundCanvas");
 var ctx = backgroundCanvas.getContext("2d");
 
+// phosphor persistence buffers — ping-pong pair per the CLAUDE.md canvas-fade
+// notes (drawImage decay truncates to a clean zero; destination-out ghosts)
+var trailA = document.createElement("canvas");
+var trailB = document.createElement("canvas");
+var trailACtx = trailA.getContext("2d");
+var trailBCtx = trailB.getContext("2d");
+
+// quarter-res buffer for the cheap downscale bloom
+var bloomCanvas = document.createElement("canvas");
+var bloomCtx = bloomCanvas.getContext("2d");
+
 function applyCanvasSize() {
 	backgroundCanvas.width = canvasWidth;
 	backgroundCanvas.height = canvasHeight;
 	backgroundCanvas.style.width = canvasWidth + "px";
 	backgroundCanvas.style.height = canvasHeight + "px";
+	// glow-only layers don't need full resolution: trail at 1/2, bloom at 1/4
+	trailA.width = trailB.width = Math.max(1, canvasWidth >> 1);
+	trailA.height = trailB.height = Math.max(1, canvasHeight >> 1);
+	bloomCanvas.width = Math.max(1, canvasWidth >> 2);
+	bloomCanvas.height = Math.max(1, canvasHeight >> 2);
+	bloomCtx.filter = "blur(2px)"; // ctx state resets on resize — reapply
 }
 // #endregion
 
 // Theme palette (mirrors CSS tokens in CSS/theme.css: --bg, --gold, --coral, --tx)
 // additive: emissive effects may use "lighter" compositing (dark backgrounds only)
 function themePalette() {
-	if (isViper) return { bgCss: "#030806", edge: [40, 255, 69], coral: [107, 255, 40], point: "#e8ffe0", additive: true };
-	if (isLight) return { bgCss: "#faf5ee", edge: [192, 120, 0], coral: [200, 56, 32], point: "#1a1008", additive: false };
-	return { bgCss: "#181210", edge: [245, 166, 35], coral: [255, 107, 71], point: "#f5e8d4", additive: true };
+	if (isViper) return { bgCss: "#030806", edge: [40, 255, 69], coral: [107, 255, 40], point: "#e8ffe0", pointRgb: [232, 255, 224], additive: true };
+	if (isLight) return { bgCss: "#faf5ee", edge: [192, 120, 0], coral: [200, 56, 32], point: "#1a1008", pointRgb: [26, 16, 8], additive: false };
+	return { bgCss: "#181210", edge: [245, 166, 35], coral: [255, 107, 71], point: "#f5e8d4", pointRgb: [245, 232, 212], additive: true };
 }
 
 // Faint graph-paper dot grid under everything (cached pattern per theme)
@@ -71,6 +90,7 @@ function makeSite() {
 		y: Math.random() * canvasHeight,
 		vx: Math.cos(a),
 		vy: Math.sin(a),
+		gr: 0, // per-site flood radius (ASCII mode; invaders start at 0)
 	};
 }
 
@@ -79,6 +99,8 @@ function buildSites() {
 	for (let i = 0; i < siteCount; i++) sites.push(makeSite());
 	growR = 0;
 	growing = false;
+	asciiSegs = null;
+	runners.length = 0;
 }
 
 applyCanvasSize();
@@ -146,13 +168,22 @@ function renderCells() {
 // #region grow mode (flood fill)
 function startGrow() {
 	growR = 0;
+	for (const s of sites) s.gr = 0;
 	growing = true;
 	growFill = 1;
+	asciiSegs = null;
+	runners.length = 0;
 }
 
-// Advance the front radius; growth completes once every canvas corner is
-// claimed and every in-view Voronoi vertex is reached.
-function advanceGrow(segs) {
+function segInCanvas(s) {
+	const pad = 50;
+	return s.x1 > -pad && s.x1 < canvasWidth + pad && s.y1 > -pad && s.y1 < canvasHeight + pad
+		&& s.x2 > -pad && s.x2 < canvasWidth + pad && s.y2 > -pad && s.y2 < canvasHeight + pad;
+}
+
+// Radius at which every canvas corner is claimed and every in-view Voronoi
+// vertex is reached -> growth is visually complete.
+function needRadius(segs) {
 	let need = 0;
 	const pad = 100;
 	const corners = [[0, 0], [canvasWidth, 0], [0, canvasHeight], [canvasWidth, canvasHeight]];
@@ -165,9 +196,26 @@ function advanceGrow(segs) {
 		if (s.x1 < -pad || s.x1 > canvasWidth + pad || s.y1 < -pad || s.y1 > canvasHeight + pad) continue;
 		need = Math.max(need, Math.hypot(s.x1 - s.px, s.y1 - s.py));
 	}
+	return need;
+}
+
+function advanceGrow(segs) {
 	if (growing && !paused) {
+		const need = needRadius(segs);
 		growR += growSpeed;
 		if (growR >= need + 12) { growR = need + 12; growing = false; donePulse = 1; }
+	}
+	donePulse *= 0.95;
+}
+
+// ASCII mode advances every site's own radius, so late-added sites (invaders)
+// flood from zero into the standing map while the rest holds its ground.
+function advanceAsciiGrow(segs) {
+	if (growing && !paused) {
+		const need = needRadius(segs);
+		let minGr = Infinity;
+		for (const s of sites) { s.gr += growSpeed; if (s.gr < minGr) minGr = s.gr; }
+		if (minGr >= need + 12) { growing = false; donePulse = 1; asciiSegs = segs.filter(segInCanvas); }
 	}
 	donePulse *= 0.95;
 }
@@ -237,11 +285,44 @@ function ensureGlyphLUT(pal) {
 	glyphLUTKey = pal.bgCss;
 }
 
+// Glyph atlas: each (char, style, weight) combination is rasterized once into
+// a sprite sheet and stamped with drawImage afterwards — thousands of
+// per-frame fillText calls were the ASCII mode's dominant cost.
+var atlasCanvas = document.createElement("canvas");
+atlasCanvas.width = 512;
+atlasCanvas.height = 512;
+var atlasCtx = atlasCanvas.getContext("2d");
+var atlasMap = new Map();
+var atlasNext = 0;
+var ATLAS_COLS = 32, ATLAS_SLOT = 16;
+function atlasReset() {
+	atlasMap.clear();
+	atlasNext = 0;
+	atlasCtx.clearRect(0, 0, atlasCanvas.width, atlasCanvas.height);
+}
+// rebake once the real webfont arrives (early frames cache fallback glyphs)
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(atlasReset);
+
+function atlasStamp(tctx, ch, style, bold, x, y, size) {
+	const key = (bold ? "B" : "n") + style + ch;
+	let idx = atlasMap.get(key);
+	if (idx === undefined) {
+		if (atlasNext >= 1024) atlasReset();
+		idx = atlasNext++;
+		const bx = (idx % ATLAS_COLS) * ATLAS_SLOT, by = ((idx / ATLAS_COLS) | 0) * ATLAS_SLOT;
+		atlasCtx.font = bold ? "600 13px 'IBM Plex Mono', monospace" : "12px 'IBM Plex Mono', monospace";
+		atlasCtx.textAlign = "center";
+		atlasCtx.textBaseline = "middle";
+		atlasCtx.fillStyle = style;
+		atlasCtx.fillText(ch, bx + 8, by + 8);
+		atlasMap.set(key, idx);
+	}
+	const ax = (idx % ATLAS_COLS) * ATLAS_SLOT, ay = ((idx / ATLAS_COLS) | 0) * ATLAS_SLOT;
+	tctx.drawImage(atlasCanvas, ax, ay, ATLAS_SLOT, ATLAS_SLOT, x - size * 0.5, y - size * 0.5, size, size);
+}
+
 function drawGlyphField(pal, R, now) {
 	ensureGlyphLUT(pal);
-	ctx.font = "12px 'IBM Plex Mono', monospace";
-	ctx.textAlign = "center";
-	ctx.textBaseline = "middle";
 	const gs = 15;
 	const n = sites.length;
 	const boost = 1 + donePulse * 0.8;
@@ -267,8 +348,7 @@ function drawGlyphField(pal, R, now) {
 			}
 			if (lvl < 1) continue;
 			if (lvl > 9) lvl = 9;
-			ctx.fillStyle = glyphLUT[own % 2][lvl];
-			ctx.fillText(GLYPH_RAMP[lvl], gx, gy);
+			atlasStamp(ctx, GLYPH_RAMP[lvl], glyphLUT[own % 2][lvl], false, gx, gy, ATLAS_SLOT);
 		}
 	}
 }
@@ -369,111 +449,272 @@ function renderGrow(now) {
 	if (built.sparks.length) drawSparks(pal, built.sparks);
 }
 
-// Dedicated all-ASCII flood: territory, walls, wavefronts, weld sparks and
-// site markers are all glyphs on one lattice — no vector strokes at all.
+// Dedicated all-ASCII flood: territory, walls, wavefronts and site markers
+// are all glyphs on one lattice — no vector strokes at all. Each site owns a
+// letter; its territory spells it. Fresh wall cells run white-hot ("ember")
+// and cool into the theme accent. The cursor heats nearby glyphs.
 var FRONT_RAMP = [":", "+", "*", "@"];
+var SITE_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+var emberLUTKey = "";
+var emberLUT = null; // hot -> settled wall styles
+function ensureEmberLUT(pal) {
+	if (emberLUTKey === pal.bgCss) return;
+	emberLUT = !pal.additive
+		? ["rgba(122,31,10,0.95)", "rgba(200,56,32,0.92)", "rgba(196,88,16,0.9)", "rgba(192,120,0,0.88)"]
+		: isViper
+			? ["rgba(255,255,255,0.95)", "rgba(210,255,220,0.95)", "rgba(140,255,150,0.92)", "rgba(40,255,69,0.88)"]
+			: ["rgba(255,255,255,0.95)", "rgba(255,233,190,0.95)", "rgba(253,216,122,0.92)", "rgba(245,166,35,0.88)"];
+	emberLUTKey = pal.bgCss;
+}
+
 function renderAsciiFlood(now) {
 	const pal = themePalette();
 	ctx.fillStyle = pal.bgCss;
 	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 	ensureGlyphLUT(pal);
+	ensureEmberLUT(pal);
 	const n = sites.length;
 
-	let sparks = null;
 	if (n > 0 && growing) {
-		const segs = computeSegs();
-		advanceGrow(segs);
-		sparks = revealedSubSegs(segs, growR).sparks;
+		advanceAsciiGrow(computeSegs());
 	} else {
 		donePulse *= 0.95;
 	}
 
-	const R = growR;
 	const gs = 15;
 	const e = pal.edge;
-	const wallStyle = "rgba(" + e[0] + "," + e[1] + "," + e[2] + "," + Math.min(1, 0.85 + 0.3 * donePulse).toFixed(3) + ")";
 	const paperStyle = "rgba(" + e[0] + "," + e[1] + "," + e[2] + ",0.07)";
 	const band = gs * 0.7;
 	const boost = 1 + donePulse * 0.8;
-	ctx.font = "12px 'IBM Plex Mono', monospace";
-	ctx.textAlign = "center";
-	ctx.textBaseline = "middle";
-	const wallCells = [];
+	const pr = pal.pointRgb;
+	// quantized styles so every draw goes through the glyph atlas
+	const frontStyles = [
+		"rgba(" + pr[0] + "," + pr[1] + "," + pr[2] + ",0.5)",
+		"rgba(" + pr[0] + "," + pr[1] + "," + pr[2] + ",0.65)",
+		"rgba(" + pr[0] + "," + pr[1] + "," + pr[2] + ",0.8)",
+		"rgba(" + pr[0] + "," + pr[1] + "," + pr[2] + ",0.95)",
+	];
+	const paperHotStyles = [
+		"rgba(" + e[0] + "," + e[1] + "," + e[2] + ",0.17)",
+		"rgba(" + e[0] + "," + e[1] + "," + e[2] + ",0.27)",
+		"rgba(" + e[0] + "," + e[1] + "," + e[2] + ",0.37)",
+		"rgba(" + e[0] + "," + e[1] + "," + e[2] + ",0.47)",
+	];
+
+	// per-site tables: squared radii + front-ring bounds keep the hot cell
+	// loop in squared space (sqrt only for the few winners per cell)
+	const sxA = new Float64Array(n), syA = new Float64Array(n), sgA = new Float64Array(n);
+	const sg2A = new Float64Array(n), fInA = new Float64Array(n), fOutA = new Float64Array(n);
+	for (let i = 0; i < n; i++) {
+		const st = sites[i];
+		sxA[i] = st.x;
+		syA[i] = st.y;
+		sgA[i] = st.gr;
+		sg2A[i] = st.gr * st.gr;
+		const inn = Math.max(0, st.gr - band);
+		fInA[i] = inn * inn;
+		fOutA[i] = (st.gr + band) * (st.gr + band);
+	}
+
+	const wallCells = []; // x, y, ember-bucket triples
+	const frontEmits = []; // x, y, style-bucket triples for the persistence trail
 	let iy = 0;
 	for (let gy = gs * 0.5; gy < canvasHeight; gy += gs, iy++) {
 		let ix = 0;
 		for (let gx = gs * 0.5; gx < canvasWidth; gx += gs, ix++) {
-			let d1 = Infinity, d2 = Infinity, own = 0, s2 = 0;
+			// nearest / second-nearest among sites whose flood reached the cell,
+			// plus the wavefront ring passing closest to it
+			let own = -1, sec = -1, D1 = Infinity, D2 = Infinity;
+			let fI = -1, fDd = 0, fRel = Infinity;
 			for (let s = 0; s < n; s++) {
-				const dx = gx - sites[s].x, dy = gy - sites[s].y;
+				const dx = gx - sxA[s], dy = gy - syA[s];
 				const d = dx * dx + dy * dy;
-				if (d < d1) { d2 = d1; s2 = own; own = s; d1 = d; }
-				else if (d < d2) { d2 = d; s2 = s; }
+				if (d <= sg2A[s]) {
+					if (d < D1) { D2 = D1; sec = own; D1 = d; own = s; }
+					else if (d < D2) { D2 = d; sec = s; }
+				}
+				if (d > fInA[s] && d < fOutA[s]) {
+					const rel = d > sg2A[s] ? d - sg2A[s] : sg2A[s] - d;
+					if (rel < fRel) { fRel = rel; fI = s; fDd = d; }
+				}
 			}
-			const r1 = Math.sqrt(d1), r2 = Math.sqrt(d2);
-			let isWall = false;
-			if (n >= 2 && r2 <= R && r2 - r1 < gs * 2.5) {
-				// true distance to the cell border: the gap normalized by its
-				// gradient |u2-u1|, else walls bloat far from their sites
-				const ux = (gx - sites[s2].x) / (r2 || 1) - (gx - sites[own].x) / (r1 || 1);
-				const uy = (gy - sites[s2].y) / (r2 || 1) - (gy - sites[own].y) / (r1 || 1);
-				const grad = Math.max(Math.sqrt(ux * ux + uy * uy), 0.2);
-				isWall = (r2 - r1) / grad < gs * 0.62;
+
+			// cursor heat: nearby glyphs brighten and their ripple agitates
+			let heat = 0;
+			const hdx = gx - mouseX, hdy = gy - mouseY;
+			const hd2 = hdx * hdx + hdy * hdy;
+			if (hd2 < 22500) heat = 1 - Math.sqrt(hd2) / 150;
+
+			let isWall = false, ember = 3;
+			let d1 = 0;
+			if (own >= 0) {
+				d1 = Math.sqrt(D1);
+				if (sec >= 0) {
+					const d2 = Math.sqrt(D2);
+					if (d2 - d1 < gs * 2.5) {
+						// true distance to the cell border: the gap normalized by
+						// its gradient |u2-u1|, else walls bloat far from sites
+						const ux = (gx - sxA[sec]) / (d2 || 1) - (gx - sxA[own]) / (d1 || 1);
+						const uy = (gy - syA[sec]) / (d2 || 1) - (gy - syA[own]) / (d1 || 1);
+						const grad = Math.max(Math.sqrt(ux * ux + uy * uy), 0.2);
+						if ((d2 - d1) / grad < gs * 0.62) {
+							isWall = true;
+							// wall age = arrival of the later of the two fronts
+							const wa = Math.min(sgA[own] - d1, sgA[sec] - d2);
+							ember = Math.min(3, Math.floor(wa / 12));
+						}
+					}
+				}
 			}
 			if (isWall) {
-				wallCells.push(gx, gy);
-			} else if (r1 <= R + band && r1 > R - band && r2 > R) {
-				// wavefront ring, brightest at the exact radius
-				const t = 1 - Math.abs(r1 - R) / band;
-				ctx.fillStyle = pal.point;
-				ctx.globalAlpha = 0.45 + 0.55 * t;
-				ctx.fillText(FRONT_RAMP[Math.min(3, Math.floor(t * 4))], gx, gy);
-				ctx.globalAlpha = 1;
-			} else if (r1 <= R) {
-				// interior kept dimmer than in the hybrid mode so walls dominate
-				const age = R - r1;
+				wallCells.push(gx, gy, ember);
+			} else if (fI >= 0 && (own === -1 || own === fI)) {
+				// wavefront ring, brightest at the exact radius; hidden where a
+				// closer site already owns the cell (fronts annihilate there)
+				const fT = 1 - Math.abs(Math.sqrt(fDd) - sgA[fI]) / band;
+				if (fT > 0) {
+					const fb = Math.min(3, (fT * 4) | 0);
+					atlasStamp(ctx, FRONT_RAMP[fb], frontStyles[fb], false, gx, gy, ATLAS_SLOT);
+					if (fT > 0.55) frontEmits.push(gx, gy, fb);
+				}
+			} else if (own >= 0) {
+				// interior: claim-age ripple + a heartbeat radiating from the
+				// owner site forever; bright cells spell the owner's letter
+				const age = sgA[own] - d1;
 				const base = Math.max(0.24, 1 - age / 1000);
-				const rip = 0.55 + 0.45 * Math.sin(age * 0.045 - now * 0.002);
-				let lvl = Math.round(base * rip * boost * 5.5);
+				const rip = 0.5 + 0.3 * Math.sin(age * 0.045 - now * 0.002 + heat * 3)
+					+ 0.2 * Math.sin(d1 * 0.06 - now * 0.004);
+				let lvl = Math.round(base * rip * boost * 6.5 + heat * 3);
+				// completion shockwave: one bright ring sweeps out of every site
+				if (donePulse > 0.02) {
+					const ring = (1 - donePulse) * 1400;
+					const rw = 1 - Math.abs(d1 - ring) / 50;
+					if (rw > 0) lvl += Math.round(rw * 4);
+				}
 				if (lvl < 1) continue;
 				if (lvl > 9) lvl = 9;
-				ctx.fillStyle = glyphLUT[own % 2][lvl];
-				ctx.fillText(GLYPH_RAMP[lvl], gx, gy);
+				atlasStamp(ctx, lvl >= 4 ? SITE_LETTERS[own % 26] : GLYPH_RAMP[lvl], glyphLUT[own % 2][lvl], false, gx, gy, ATLAS_SLOT);
 			} else if (((ix + iy) & 1) === 0) {
-				// unclaimed: sparse dotted paper
-				ctx.fillStyle = paperStyle;
-				ctx.fillText(".", gx, gy);
+				// unclaimed: sparse dotted paper, warming under the cursor
+				const ps = heat > 0.02 ? paperHotStyles[Math.min(3, (heat * 4) | 0)] : paperStyle;
+				atlasStamp(ctx, ".", ps, false, gx, gy, ATLAS_SLOT);
 			}
 		}
 	}
 
-	// walls in a bold pass so they read above the field
-	if (wallCells.length) {
-		ctx.font = "600 13px 'IBM Plex Mono', monospace";
-		ctx.fillStyle = wallStyle;
-		for (let i = 0; i < wallCells.length; i += 2) {
-			ctx.fillText("#", wallCells[i], wallCells[i + 1]);
-		}
+	// walls in a bold pass so they read above the field; freshly welded
+	// cells strobe as white-hot asterisks, then cool into # embers
+	for (let i = 0; i < wallCells.length; i += 3) {
+		const em = wallCells[i + 2];
+		atlasStamp(ctx, em === 0 ? "*" : "#", emberLUT[em], true, wallCells[i], wallCells[i + 1], ATLAS_SLOT);
 	}
 
-	// site markers, snapped onto the lattice
+	// site markers: each site's letter, snapped onto the lattice
 	if (showPoints) {
-		ctx.font = "600 13px 'IBM Plex Mono', monospace";
-		ctx.fillStyle = pal.point;
-		for (const s of sites) {
-			ctx.fillText("@", (Math.floor(s.x / gs) + 0.5) * gs, (Math.floor(s.y / gs) + 0.5) * gs);
+		for (let i = 0; i < n; i++) {
+			atlasStamp(ctx, SITE_LETTERS[i % 26], pal.point, true, (Math.floor(sites[i].x / gs) + 0.5) * gs, (Math.floor(sites[i].y / gs) + 0.5) * gs, ATLAS_SLOT);
 		}
 	}
 
-	// weld sparks as strobing asterisks
-	if (sparks && sparks.length) {
-		ctx.font = "600 14px 'IBM Plex Mono', monospace";
-		ctx.fillStyle = pal.additive ? "#ffffff" : pal.point;
-		for (const [x, y] of sparks) {
-			if (Math.random() < 0.35) continue;
-			ctx.fillText("*", (Math.floor(x / gs) + 0.5) * gs, (Math.floor(y / gs) + 0.5) * gs);
+	// data packets riding the finished walls, leaving trails behind them
+	if (!growing && asciiSegs && asciiSegs.length && n >= 2) {
+		if (runners.length < 4 && Math.random() < 0.03) {
+			const sg = asciiSegs[Math.floor(Math.random() * asciiSegs.length)];
+			const len = Math.hypot(sg.x2 - sg.x1, sg.y2 - sg.y1);
+			const dir = Math.random() < 0.5 ? 1 : -1;
+			if (len > 40) runners.push({ seg: sg, t: dir > 0 ? 0 : 1, sp: (2 + Math.random() * 2) / len, dir: dir });
 		}
+		const runStyle = pal.additive ? "#ffffff" : pal.point;
+		for (let i = runners.length - 1; i >= 0; i--) {
+			const r = runners[i];
+			if (!paused) r.t += r.sp * r.dir;
+			if (r.t < 0 || r.t > 1) { runners.splice(i, 1); continue; }
+			const x = r.seg.x1 + (r.seg.x2 - r.seg.x1) * r.t;
+			const y = r.seg.y1 + (r.seg.y2 - r.seg.y1) * r.t;
+			const cx = (Math.floor(x / gs) + 0.5) * gs, cy = (Math.floor(y / gs) + 0.5) * gs;
+			atlasStamp(ctx, "+", runStyle, true, cx, cy, ATLAS_SLOT);
+			frontEmits.push(cx, cy, 3);
+		}
+	} else if (runners.length) {
+		runners.length = 0;
 	}
+
+	// phosphor persistence at half resolution: decay the trail buffer, stamp
+	// this frame's emissions (bright fronts + hot wall cells), composite up
+	if (!paused) {
+		trailBCtx.clearRect(0, 0, trailB.width, trailB.height);
+		trailBCtx.globalAlpha = 0.86;
+		trailBCtx.drawImage(trailA, 0, 0);
+		trailBCtx.globalAlpha = 0.5;
+		for (let i = 0; i < frontEmits.length; i += 3) {
+			atlasStamp(trailBCtx, "+", frontStyles[frontEmits[i + 2]], false, frontEmits[i] * 0.5, frontEmits[i + 1] * 0.5, 8);
+		}
+		trailBCtx.globalAlpha = 0.55;
+		for (let i = 0; i < wallCells.length; i += 3) {
+			if (wallCells[i + 2] > 1) continue;
+			atlasStamp(trailBCtx, "#", emberLUT[wallCells[i + 2]], true, wallCells[i] * 0.5, wallCells[i + 1] * 0.5, 8);
+		}
+		trailBCtx.globalAlpha = 1;
+		const swapC = trailA; trailA = trailB; trailB = swapC;
+		const swapX = trailACtx; trailACtx = trailBCtx; trailBCtx = swapX;
+	}
+	ctx.save();
+	ctx.globalCompositeOperation = pal.additive ? "lighter" : "source-over";
+	ctx.globalAlpha = pal.additive ? 0.7 : 0.3;
+	ctx.drawImage(trailA, 0, 0, canvasWidth, canvasHeight);
+	ctx.restore();
+
+	applyBloom(pal);
+	drawScanlines(pal);
+	drawVignette(pal);
+}
+
+// CRT phosphor bloom, the cheap way: downscale the frame to quarter res
+// (lightly blurred), then composite it back up additively. Full-res
+// blur(10px) each frame was a major cost. Dark themes only.
+function applyBloom(pal) {
+	if (!pal.additive) return;
+	bloomCtx.drawImage(backgroundCanvas, 0, 0, bloomCanvas.width, bloomCanvas.height);
+	ctx.save();
+	ctx.globalCompositeOperation = "lighter";
+	ctx.globalAlpha = 0.5;
+	ctx.drawImage(bloomCanvas, 0, 0, canvasWidth, canvasHeight);
+	ctx.restore();
+}
+
+// CRT scanlines: every 3rd row dimmed via a cached 1x3 repeating pattern
+var scanPatternKey = "";
+var scanPattern = null;
+function drawScanlines(pal) {
+	if (scanPatternKey !== pal.bgCss) {
+		const tile = document.createElement("canvas");
+		tile.width = 1;
+		tile.height = 3;
+		const tctx = tile.getContext("2d");
+		tctx.fillStyle = pal.additive ? "rgba(0,0,0,0.16)" : "rgba(90,56,32,0.05)";
+		tctx.fillRect(0, 2, 1, 1);
+		scanPattern = ctx.createPattern(tile, "repeat");
+		scanPatternKey = pal.bgCss;
+	}
+	ctx.fillStyle = scanPattern;
+	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+}
+
+// CRT vignette: cached radial gradient, clear centre into shaded corners
+var vignetteKey = "";
+var vignette = null;
+function drawVignette(pal) {
+	const key = pal.bgCss + canvasWidth + "x" + canvasHeight;
+	if (vignetteKey !== key) {
+		const cx = canvasWidth / 2, cy = canvasHeight / 2;
+		const rOut = Math.hypot(cx, cy);
+		vignette = ctx.createRadialGradient(cx, cy, rOut * 0.45, cx, cy, rOut);
+		vignette.addColorStop(0, "rgba(0,0,0,0)");
+		vignette.addColorStop(1, pal.additive ? "rgba(0,0,0,0.34)" : "rgba(60,35,15,0.12)");
+		vignetteKey = key;
+	}
+	ctx.fillStyle = vignette;
+	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 }
 // #endregion
 
@@ -581,6 +822,9 @@ document.querySelectorAll('input[name="mode"]').forEach(function (radio) {
 		mode = this.value;
 		growR = 0;
 		growing = false;
+		for (const s of sites) s.gr = 0;
+		asciiSegs = null;
+		runners.length = 0;
 		growButton.style.display = mode === "drift" ? "none" : "";
 		hintLabel.textContent = mode === "drift"
 			? "Click to add a site · right-click removes the nearest"
@@ -593,6 +837,8 @@ document.getElementById("clearButton").onclick = function () {
 	siteCount = 0;
 	growR = 0;
 	growing = false;
+	asciiSegs = null;
+	runners.length = 0;
 	document.getElementById("countValue").textContent = 0;
 };
 
@@ -625,6 +871,18 @@ window.addEventListener("keydown", function (e) {
 // #endregion
 
 // #region mouse
+// cursor position for the ASCII-mode heat effect
+var mouseX = -1e9, mouseY = -1e9;
+backgroundCanvas.addEventListener("mousemove", function (e) {
+	const rect = backgroundCanvas.getBoundingClientRect();
+	mouseX = e.clientX - rect.left;
+	mouseY = e.clientY - rect.top;
+});
+backgroundCanvas.addEventListener("mouseleave", function () {
+	mouseX = -1e9;
+	mouseY = -1e9;
+});
+
 function nearestSite(x, y) {
 	let best = -1, bestD = 1e9;
 	for (let i = 0; i < sites.length; i++) {
@@ -642,13 +900,23 @@ backgroundCanvas.addEventListener("mousedown", function (e) {
 		if (n.i >= 0 && n.d < 40) sites.splice(n.i, 1);
 	} else {
 		const a = Math.random() * Math.PI * 2;
-		sites.push({ x, y, vx: Math.cos(a), vy: Math.sin(a) });
+		sites.push({ x, y, vx: Math.cos(a), vy: Math.sin(a), gr: 0 });
 	}
 	siteCount = sites.length;
 	document.getElementById("countSlider").value = Math.min(120, siteCount);
 	document.getElementById("countValue").textContent = siteCount;
-	// editing sites mid/post-growth replays the flood with the new layout
-	if (mode !== "drift" && (growing || growR > 0)) startGrow();
+	if (mode === "grow" && (growing || growR > 0)) {
+		// editing sites mid/post-growth replays the flood with the new layout
+		startGrow();
+	} else if (mode === "ascii") {
+		// invasion: a new site floods from zero and steals what lies closer to
+		// it; removals resume growth so neighbours close the abandoned ground
+		asciiSegs = null;
+		runners.length = 0;
+		for (const s of sites) {
+			if (s.gr > 0) { growing = true; break; }
+		}
+	}
 });
 backgroundCanvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 // #endregion
