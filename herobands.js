@@ -4,9 +4,10 @@
    copies (B leads, R trails), so every line reads as dispersed light — RGB
    fanned along the whole curve — wrapped in a soft bloom halo. Slightly
    different drift speed per wave slides the trio from nested to fanned and
-   back within seconds; a shared signed-sine breath collapses all bands through
-   one flat white line ~every 5s, alternating cycles: all equal, then staggered
-   1 / 1.25 / 1.5. The trio
+   back within seconds; a shared signed-sine breath collapses the two larger
+   bands through one flat white line ~every 5s (the smallest band keeps constant
+   amplitude as a steady carrier), alternating cycles: equal, then staggered
+   1.25 / 1.5. The trio
    also rides a physical plucked wire: left-button drag grabs the string, and on
    release the deformation keeps travelling, reflecting off the screen edges and
    slowly damping (CPU 1D wave equation, uploaded as an RG32F texture; its
@@ -71,19 +72,19 @@
     '  // Three bands sharing one 2.8-screen wavelength (no visible period), drifting',
     '  // at slightly different speeds so they slide from nested (one fat rainbow',
     '  // wave) to fanned-out and back within a few seconds. Signed-sine breathing',
-    '  // makes each band collapse through a flat white line and regrow, and all',
-    '  // three peak at the same height (~0.14 of the viewport).',
+    '  // makes bands 1-2 collapse through a flat white line and regrow; band 0',
+    '  // keeps constant amplitude (~0.14 of the viewport peak).',
     '  float k  = 6.2831853 / (uRes.x * 2.8);', // Wavelength = 2.8 * screenlength
     '  float ph0 = px * k + uTime * 0.8;',
     '  float ph1 = px * k + uTime * 1.25 + 2.5;',
     '  float ph2 = px * k + uTime * 1.55 + 4.4;',
-    '  // Shared breathing: all three bands swell and collapse together (one',
+    '  // Shared breathing: bands 1-2 swell and collapse together (one',
     '  // "cycle" = one hump of |sin|, ~5s). Cycles alternate: even cycle all',
     '  // equal, odd cycle staggered 1 / 1.25 / 1.5. The pattern switches at the',
     '  // zero crossing (all bands flat), so the handover is pop-free.',
     '  float br  = sin(uTime * 0.63);',
     '  float cyc = mod(floor(uTime * 0.63 / 3.14159265), 2.0);',
-    '  float a0 = vh * 14.0 * br;',
+    '  float a0 = vh * 14.0;',            // smallest band opts out of the breath — constant-amplitude carrier
     '  float a1 = vh * 14.0 * (1.0 + 0.25 * cyc) * br;',
     '  float a2 = vh * 14.0 * (1.0 + 0.50 * cyc) * br;',
     '  float s0 = sin(ph0), s1 = sin(ph1), s2 = sin(ph2);',
