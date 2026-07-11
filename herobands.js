@@ -9,8 +9,9 @@
    amplitude as a steady carrier), repeating 4-cycle pattern: three calm, then
    one gently staggered (1.25 / 1.45). The trio
    also rides a physical plucked wire: left-button drag grabs the string, and on
-   release the deformation keeps travelling, reflecting off the screen edges and
-   slowly damping (CPU 1D wave equation, uploaded as an RG32F texture; its
+   release the deformation keeps travelling and runs off past the screen edges,
+   where sponge zones absorb it — no reflected pulses re-entering the view
+   (CPU 1D wave equation, uploaded as an RG32F texture; its
    acceleration feeds the dispersion so velocity *changes* flash rainbow). Faded out
    on scroll in lockstep with the hero, so it rides every background mode:
    classic wavegrid, fluid lattice, or raw dye.
@@ -194,7 +195,7 @@
     uWire:    gl.getUniformLocation(prog, 'uWire'),
   };
 
-  /* ── Physical wire: 1D plucked string, simulated on the CPU and uploaded as an
+/* ── Physical wire: 1D plucked string, simulated on the CPU and uploaded as an
      N×1 RG32F texture (R = displacement in device px, G = vertical acceleration
      in px/s² — frame-level dv/dt through a peak-hold envelope, so a held-static
      grab decays to zero but a passing pulse leaves a readable wake). While the
@@ -235,9 +236,13 @@
     var h = dt / steps;
     wireVprev.set(wireV);
     var basePx = centerFrac * canvas.height;
-    var gi = -1, targetDisp = 0;
+    var giF = -1, targetDisp = 0;
     if (dragCur > 0.001) {
-      gi = Math.round(Math.min(Math.max((gxCur / window.innerWidth + PAD) / EXT, 0), 1) * (N - 1));
+      // Fractional grab centre — rounding to a whole node made the imposed bell
+      // hop in node-sized steps (~10 CSS px), each hop re-targeting the flanks
+      // by ~1.3% of targetDisp: invisible near the band centre, a hard vertical
+      // snap when the cursor is high above it.
+      giF = Math.min(Math.max((gxCur / window.innerWidth + PAD) / EXT, 0), 1) * (N - 1);
       targetDisp = gyCur * pr - basePx;
     }
     for (var s = 0; s < steps; s++) {
@@ -249,12 +254,20 @@
       }
       for (var j = 1; j < N - 1; j++) wireU[j] += wireV[j] * h;
       wireU[0] = 0; wireU[N - 1] = 0; wireV[0] = 0; wireV[N - 1] = 0;
-      if (gi >= 0) {
-        var lo = Math.max(1, gi - GRABR), hi = Math.min(N - 2, gi + GRABR);
+      if (giF >= 0) {
+        var lo = Math.max(1, Math.ceil(giF - GRABR)), hi = Math.min(N - 2, Math.floor(giF + GRABR));
         for (var g = lo; g <= hi; g++) {
-          var dn = (g - gi) / GRABSG;
-          var bell = Math.exp(-0.5 * dn * dn);
-          var wt = dragCur * bell;
+          var dn = (g - giF) / GRABSG;
+          // Compensated gaussian: subtract the 3-sigma floor so the bell reaches
+          // exactly zero at the loop cutoff — otherwise the truncation leaves a
+          // sustained forcing step (a kink the wave stiffness reads as huge
+          // acceleration → phantom rainbow flare ~0.75 screens from the grab).
+          var bell = Math.max(0, (Math.exp(-0.5 * dn * dn) - 0.011109) / (1 - 0.011109));
+          // Grab strength normalized to substep length (reference: the 60fps
+          // 2-substep h ≈ 1/120s) — a raw per-substep wt let frame-time jitter
+          // flip the substep count and shift the flank equilibrium by a visible
+          // step. wt=1 at the bell centre survives the pow → still a hard pin.
+          var wt = 1.0 - Math.pow(1.0 - dragCur * bell, h * 120.0);
           wireU[g] += (targetDisp * bell - wireU[g]) * wt;
           wireV[g] *= (1.0 - wt);
         }
