@@ -10,11 +10,13 @@
   <style>
     html, body { margin: 0; padding: 0; overflow: hidden; }
     #backgroundCanvas { position: fixed; top: 0; left: 0; z-index: 0; cursor: crosshair; }
+    #glCanvas { position: fixed; top: 0; left: 0; z-index: 1; cursor: crosshair; display: none; }
   </style>
 </head>
 <body>
 
   <canvas id="backgroundCanvas"></canvas>
+  <canvas id="glCanvas"></canvas>
 
   <!-- Top-left navigation pill -->
   <div class="hud hud-nav">

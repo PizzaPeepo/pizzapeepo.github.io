@@ -1,4 +1,5 @@
 import { triangulate, voronoiEdges } from "./Delaunay.js";
+import { createAsciiGL } from "./asciiGL.js";
 
 // Voronoi edges as crisp vector lines (dual of the Delaunay triangulation),
 // Delaunay mesh via Bowyer-Watson. Sites drift and bounce.
@@ -44,6 +45,13 @@ var trailBCtx = trailB.getContext("2d");
 var bloomCanvas = document.createElement("canvas");
 var bloomCtx = bloomCanvas.getContext("2d");
 
+// ASCII-flood mode runs on the GPU (see asciiGL.js) over a second, layered
+// WebGL2 canvas; the 2D canvas above drives every other mode. GL is created
+// lazily on first entry into ASCII mode so non-ASCII visitors never pay for it.
+var glCanvas = document.getElementById("glCanvas");
+var asciiGLR = null;      // renderer instance; { available:false } if WebGL2/float-RT missing
+var asciiGLReady = false; // usable this session
+
 function applyCanvasSize() {
 	backgroundCanvas.width = canvasWidth;
 	backgroundCanvas.height = canvasHeight;
@@ -55,6 +63,9 @@ function applyCanvasSize() {
 	bloomCanvas.width = Math.max(1, canvasWidth >> 2);
 	bloomCanvas.height = Math.max(1, canvasHeight >> 2);
 	bloomCtx.filter = "blur(2px)"; // ctx state resets on resize — reapply
+	glCanvas.style.width = canvasWidth + "px";
+	glCanvas.style.height = canvasHeight + "px";
+	if (asciiGLReady) asciiGLR.resize(canvasWidth, canvasHeight);
 }
 // #endregion
 
@@ -64,6 +75,30 @@ function themePalette() {
 	if (isViper) return { bgCss: "#030806", edge: [40, 255, 69], coral: [107, 255, 40], point: "#e8ffe0", pointRgb: [232, 255, 224], additive: true };
 	if (isLight) return { bgCss: "#faf5ee", edge: [192, 120, 0], coral: [200, 56, 32], point: "#1a1008", pointRgb: [26, 16, 8], additive: false };
 	return { bgCss: "#181210", edge: [245, 166, 35], coral: [255, 107, 71], point: "#f5e8d4", pointRgb: [245, 232, 212], additive: true };
+}
+
+// Theme colours for the GL ASCII renderer, normalized to 0..1 Float32Arrays.
+// Mirrors themePalette() + the ensureEmberLUT() ramps; rebuilt only on theme change.
+var glThemeCache = null, glThemeKey = "";
+function hex3(h) {
+	const v = parseInt(h.slice(1), 16);
+	return new Float32Array([((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255]);
+}
+function rgb3(a) { return new Float32Array([a[0] / 255, a[1] / 255, a[2] / 255]); }
+function glTheme() {
+	const pal = themePalette();
+	if (glThemeCache && glThemeKey === pal.bgCss) return glThemeCache;
+	const ember = !pal.additive
+		? [[122, 31, 10], [200, 56, 32], [196, 88, 16], [192, 120, 0]]
+		: isViper
+			? [[255, 255, 255], [210, 255, 220], [140, 255, 150], [40, 255, 69]]
+			: [[255, 255, 255], [255, 233, 190], [253, 216, 122], [245, 166, 35]];
+	glThemeCache = {
+		bg: hex3(pal.bgCss), edge: rgb3(pal.edge), coral: rgb3(pal.coral),
+		point: rgb3(pal.pointRgb), ember: ember.map(rgb3), additive: pal.additive,
+	};
+	glThemeKey = pal.bgCss;
+	return glThemeCache;
 }
 
 // Faint graph-paper dot grid under everything (cached pattern per theme)
@@ -543,6 +578,40 @@ function ensureEmberLUT(pal) {
 	emberLUTKey = pal.bgCss;
 }
 
+// GPU path: create the renderer on first use; falls back to the CPU version
+// below if WebGL2 or float render targets are unavailable.
+function ensureAsciiGL() {
+	if (asciiGLR) return asciiGLReady;
+	asciiGLR = createAsciiGL(glCanvas);
+	asciiGLReady = asciiGLR.available;
+	if (asciiGLReady) asciiGLR.resize(canvasWidth, canvasHeight);
+	return asciiGLReady;
+}
+function showAsciiCanvas() {
+	if (glCanvas.style.display === "block") return;
+	glCanvas.style.display = "block";
+	backgroundCanvas.style.visibility = "hidden";
+}
+function hideAsciiCanvas() {
+	if (glCanvas.style.display === "none") return;
+	glCanvas.style.display = "none";
+	backgroundCanvas.style.visibility = "";
+}
+
+function renderAsciiFloodGL(now) {
+	const n = sites.length;
+	let hoverI = -1;
+	if (n >= 2 && mouseX >= 0 && mouseX <= canvasWidth && mouseY >= 0 && mouseY <= canvasHeight) hoverI = nearestSite(mouseX, mouseY).i;
+	// growth + wall geometry stay on the CPU: cheap (O(n log n), growth only)
+	if (n > 0 && growing) advanceAsciiGrow(computeSegs());
+	else donePulse *= 0.95;
+	asciiGLR.render({
+		sites: sites, n: n, now: now, hoverI: hoverI,
+		donePulse: donePulse, mouseX: mouseX, mouseY: mouseY,
+		showPoints: showPoints, paused: paused, theme: glTheme(),
+	});
+}
+
 function renderAsciiFlood(now) {
 	const pal = themePalette();
 	ctx.fillStyle = pal.bgCss;
@@ -674,7 +743,7 @@ function renderAsciiFlood(now) {
 				if (lvl < 1) continue;
 				if (lvl > 9) lvl = 9;
 				atlasStamp(ctx, lvl >= 4 ? SITE_LETTERS[own % 26] : GLYPH_RAMP[lvl], glyphLUT[own % 2][lvl], false, gx, gy, ATLAS_SLOT);
-			} else if (((ix + iy) & 1) === 0) {
+			} else if (n > 0 && ((ix + iy) & 1) === 0) {
 				// unclaimed: sparse dotted paper, warming under the cursor
 				const ps = heat > 0.02 ? paperHotStyles[Math.min(3, (heat * 4) | 0)] : paperStyle;
 				atlasStamp(ctx, ".", ps, false, gx, gy, ATLAS_SLOT);
@@ -832,14 +901,24 @@ function drawPoints() {
 
 function render(now) {
 	if (mode === "grow") {
+		hideAsciiCanvas();
 		renderGrow(now);
 	} else if (mode === "ascii") {
-		renderAsciiFlood(now);
+		if (ensureAsciiGL()) {
+			showAsciiCanvas();
+			renderAsciiFloodGL(now);
+		} else {
+			hideAsciiCanvas();
+			renderAsciiFlood(now); // CPU fallback on the 2D canvas
+		}
 	} else if (view === "cells") {
+		hideAsciiCanvas();
 		renderCells();
 	} else if (view === "delaunay") {
+		hideAsciiCanvas();
 		renderDelaunay(false);
 	} else {
+		hideAsciiCanvas();
 		renderCells();
 		renderDelaunay(true);
 	}
@@ -851,6 +930,7 @@ function render(now) {
 document.addEventListener("themechange", function (e) {
 	isLight = e.detail.isLight;
 	isViper = e.detail.theme === "viper";
+	if (asciiGLReady) asciiGLR.clearTrail(); // drop phosphor in the old palette
 });
 // #endregion
 
@@ -905,6 +985,7 @@ document.querySelectorAll('input[name="mode"]').forEach(function (radio) {
 		for (const s of sites) s.gr = 0;
 		asciiSegs = null;
 		runners.length = 0;
+		if (asciiGLReady) asciiGLR.clearTrail();
 		growButton.style.display = mode === "drift" ? "none" : "";
 		hintLabel.textContent = mode === "drift"
 			? "Click to add a site · right-click removes the nearest"
@@ -919,6 +1000,7 @@ document.getElementById("clearButton").onclick = function () {
 	growing = false;
 	asciiSegs = null;
 	runners.length = 0;
+	if (asciiGLReady) asciiGLR.clearTrail();
 	document.getElementById("countValue").textContent = 0;
 };
 
@@ -951,14 +1033,19 @@ window.addEventListener("keydown", function (e) {
 // #endregion
 
 // #region mouse
-// cursor position for the ASCII-mode heat effect
+// cursor position for the ASCII-mode heat effect. Handlers bind to both the 2D
+// canvas and the GL canvas (whichever is on top intercepts pointer events).
+function onBoth(type, fn) {
+	backgroundCanvas.addEventListener(type, fn);
+	glCanvas.addEventListener(type, fn);
+}
 var mouseX = -1e9, mouseY = -1e9;
-backgroundCanvas.addEventListener("mousemove", function (e) {
+onBoth("mousemove", function (e) {
 	const rect = backgroundCanvas.getBoundingClientRect();
 	mouseX = e.clientX - rect.left;
 	mouseY = e.clientY - rect.top;
 });
-backgroundCanvas.addEventListener("mouseleave", function () {
+onBoth("mouseleave", function () {
 	mouseX = -1e9;
 	mouseY = -1e9;
 });
@@ -972,7 +1059,7 @@ function nearestSite(x, y) {
 	}
 	return { i: best, d: Math.sqrt(bestD) };
 }
-backgroundCanvas.addEventListener("mousedown", function (e) {
+onBoth("mousedown", function (e) {
 	const rect = backgroundCanvas.getBoundingClientRect();
 	const x = e.clientX - rect.left, y = e.clientY - rect.top;
 	if (e.button === 2) {
@@ -998,7 +1085,7 @@ backgroundCanvas.addEventListener("mousedown", function (e) {
 		}
 	}
 });
-backgroundCanvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+onBoth("contextmenu", function (e) { e.preventDefault(); });
 // #endregion
 
 // debug boot params: ?grow=1 (or ?ascii=1 for the all-ASCII mode) jumps
