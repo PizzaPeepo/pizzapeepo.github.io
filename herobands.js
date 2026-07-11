@@ -10,7 +10,7 @@
    also rides a physical plucked wire: left-button drag grabs the string, and on
    release the deformation keeps travelling, reflecting off the screen edges and
    slowly damping (CPU 1D wave equation, uploaded as an RG32F texture; its
-   velocity feeds the dispersion so the running pulse flashes rainbow). Faded out
+   acceleration feeds the dispersion so velocity *changes* flash rainbow). Faded out
    on scroll in lockstep with the hero, so it rides every background mode:
    classic wavegrid, fluid lattice, or raw dye.
 
@@ -62,20 +62,20 @@
     '  float base  = uCenter * uRes.y;',
     '',
     '  // Physical wire: a plucked 1D string simulated on the CPU. R displaces all',
-    '  // three curves as one taut wire; G is its vertical speed, folded into the',
-    '  // dispersion below so a travelling pulse flashes rainbow as it runs.',
-    '  vec2 wire = texture(uWire, vec2(px / uRes.x, 0.5)).rg;',
+    '  // three curves as one taut wire; G is its vertical acceleration, folded',
+    '  // into the dispersion below so velocity changes flash rainbow.',
+    '  vec2 wire = texture(uWire, vec2((px / uRes.x + 0.5) / 2.0, 0.5)).rg;',   // wire spans 2 screen widths (PAD 0.5 each side, matches JS)
     '  float wDisp = wire.r;',
-    '  float wVel  = wire.g;',
+    '  float wAcc  = wire.g;',
     '',
     '  // Three bands sharing one 2.8-screen wavelength (no visible period), drifting',
     '  // at slightly different speeds so they slide from nested (one fat rainbow',
     '  // wave) to fanned-out and back within a few seconds. Signed-sine breathing',
     '  // makes each band collapse through a flat white line and regrow, and all',
     '  // three peak at the same height (~0.14 of the viewport).',
-    '  float k  = 6.2831853 / (uRes.x * 2.8);',
-    '  float ph0 = px * k + uTime * 0.90;',
-    '  float ph1 = px * k + uTime * 1.25 + 2.1;',
+    '  float k  = 6.2831853 / (uRes.x * 2.8);', // Wavelength = 2.8 * screenlength
+    '  float ph0 = px * k + uTime * 0.8;',
+    '  float ph1 = px * k + uTime * 1.25 + 2.5;',
     '  float ph2 = px * k + uTime * 1.55 + 4.4;',
     '  // Shared breathing: all three bands swell and collapse together (one',
     '  // "cycle" = one hump of |sin|, ~5s). Cycles alternate: even cycle all',
@@ -105,21 +105,29 @@
     '',
     '  // RGB separation: constant horizontal phase offset per channel (B leads',
     '  // left, R trails right) — reads as dispersed light along the whole band,',
-    '  // not only at crossings. Wire velocity adds a vertical rainbow flash on',
-    '  // flicks. Focus (1-f) re-fuses the channels to white at the grab point.',
-    '  float sep  = k * uRes.x * 0.022 * (1.0 - f);',  // phase for a fixed ~2.2%-of-width horizontal RGB offset, independent of wavelength
-    '  float cap  = 1.0 * vh;',
-    '  float dspW = cap * tanh(0.039 * wVel / cap) * (1.0 - f);',
+    '  // not only at crossings. Wire acceleration adds a vertical rainbow flash',
+    '  // on flicks. Focus (1-f) re-fuses the channels to white at the grab point.',
+    '  float sep  = k * uRes.x * 0.0055 * (1.0 - f);',  // phase for a fixed ~0.55%-of-width horizontal RGB offset, independent of wavelength
+    '  float cap  = 1.5 * vh;',
+    '  // Per-band vertical acceleration: shared wire dv/dt plus per-band procedural',
+    '  // motion |d2/dt2[a*sin(ph)]| = |a*w^2*sin| — magnitude only, so the ambient',
+    '  // undulation disperses at crests (faster-drifting bands more) but the RGB',
+    '  // order never flips at wave nodes / breath sign changes. One shared tanh cap.',
+    '  float pga = 0.025;', // SPREAD: dial how much the spread during ambient waves is
+    '  float dwA = 0.026 * wAcc;',
+    '  float dw0 = cap * tanh((dwA + pga * abs(a0 * 0.81   * s0)) / cap) * (1.0 - f);',
+    '  float dw1 = cap * tanh((dwA + pga * abs(a1 * 1.5625 * s1)) / cap) * (1.0 - f);',
+    '  float dw2 = cap * tanh((dwA + pga * abs(a2 * 2.4025 * s2)) / cap) * (1.0 - f);',
     '  float yc = base + wDisp;',
-    '  float d0r = (py - (yc + a0 * sin(ph0 - sep) - dspW)) * w0;',
+    '  float d0r = (py - (yc + a0 * sin(ph0 - sep) - dw0)) * w0;',
     '  float d0g = (py - (yc + a0 * s0)) * w0;',
-    '  float d0b = (py - (yc + a0 * sin(ph0 + sep) + dspW)) * w0;',
-    '  float d1r = (py - (yc + a1 * sin(ph1 - sep) - dspW)) * w1;',
+    '  float d0b = (py - (yc + a0 * sin(ph0 + sep) + dw0)) * w0;',
+    '  float d1r = (py - (yc + a1 * sin(ph1 - sep) - dw1)) * w1;',
     '  float d1g = (py - (yc + a1 * s1)) * w1;',
-    '  float d1b = (py - (yc + a1 * sin(ph1 + sep) + dspW)) * w1;',
-    '  float d2r = (py - (yc + a2 * sin(ph2 - sep) - dspW)) * w2;',
+    '  float d1b = (py - (yc + a1 * sin(ph1 + sep) + dw1)) * w1;',
+    '  float d2r = (py - (yc + a2 * sin(ph2 - sep) - dw2)) * w2;',
     '  float d2g = (py - (yc + a2 * s2)) * w2;',
-    '  float d2b = (py - (yc + a2 * sin(ph2 + sep) + dspW)) * w2;',
+    '  float d2b = (py - (yc + a2 * sin(ph2 + sep) + dw2)) * w2;',
     '  float B    = 0.17 * vh * vh;',                    // line energy (1/d^2 core)
     '  float eps2 = 0.007 * vh * vh;',                   // core softness floor — smaller = crisper sub-band edges
     '  float hI   = 1.0 / (18.0 * vh * vh);',            // halo 1/(2*sigma^2), sigma = 3vh
@@ -179,22 +187,28 @@
   };
 
   /* ── Physical wire: 1D plucked string, simulated on the CPU and uploaded as an
-     N×1 RG32F texture (R = displacement in device px, G = vertical velocity in
-     px/s). While the left button is held, the node under the cursor is driven to
+     N×1 RG32F texture (R = displacement in device px, G = vertical acceleration
+     in px/s² — frame-level dv/dt through a peak-hold envelope, so a held-static
+     grab decays to zero but a passing pulse leaves a readable wake). While the
+     left button is held, the node under the cursor is driven to
      the cursor's offset from the band centre — dragging along the wire leaves a
      wake of travelling waves (finger-on-a-string). On release the node is freed,
      so the existing waves keep propagating, reflect off the screen edges, and
-     slowly damp. G feeds the shader's velocity-coupled dispersion. */
-  var N = 256;
+     slowly damp. G feeds the shader's acceleration-coupled dispersion. */
+  var N = 384;
+  var PAD = 0.5;                          // wire extends this fraction of the screen width beyond each edge
+  var EXT = 1 + 2 * PAD;                  // total wire span, screen widths — pinned ends sit offscreen, invisible when grabbing
   var wireU = new Float32Array(N);      // displacement, device px
   var wireV = new Float32Array(N);      // vertical velocity, px/s
   var wireVtmp = new Float32Array(N);   // per-substep velocity snapshot (KV damping needs old v)
+  var wireVprev = new Float32Array(N);  // frame-start velocity — acceleration = (v - vprev) / dt
+  var wireA = new Float32Array(N);      // peak-hold acceleration envelope: instant attack, ~0.25s release — raw dv/dt only lasts 2-3 frames as a pulse sweeps by, too brief to read
   var wireData = new Float32Array(N * 2);
-  var SPEED = 95.0;                       // pulse propagation, nodes/sec
+  var SPEED = 71.0;                       // pulse propagation, nodes/sec (~same visible px/s as the old 256-node screen-wide wire)
   var STIFF = SPEED * SPEED;              // wave-equation stiffness (c^2)
   var WDAMP = 0.6;                        // uniform velocity damping, /sec — overall settle (~6-8s)
   var VDAMP = 15.0;                       // Kelvin-Voigt (lap-of-velocity) damping — kills flick jitter, spares the pulse
-  var GRABSG = 64.0;                      // grab gaussian half-width, nodes — very wide pluck (~half the wire), launches only long wavelengths
+  var GRABSG = 48.0;                      // grab gaussian half-width, nodes — very wide pluck (~1/4 of visible width sigma)
   var GRABR  = Math.ceil(GRABSG * 3);     // grab loop radius, nodes (±3 sigma)
 
   var wireTex = gl.createTexture();
@@ -211,10 +225,11 @@
     dt = Math.min(dt, 0.033);
     var steps = Math.max(1, Math.ceil(dt * SPEED / 0.8));   // Courant-safe substepping
     var h = dt / steps;
+    wireVprev.set(wireV);
     var basePx = centerFrac * canvas.height;
     var gi = -1, targetDisp = 0;
     if (dragCur > 0.001) {
-      gi = Math.round(Math.min(Math.max(gxCur / window.innerWidth, 0), 1) * (N - 1));
+      gi = Math.round(Math.min(Math.max((gxCur / window.innerWidth + PAD) / EXT, 0), 1) * (N - 1));
       targetDisp = gyCur * pr - basePx;
     }
     for (var s = 0; s < steps; s++) {
@@ -237,7 +252,16 @@
         }
       }
     }
-    for (var m = 0; m < N; m++) { wireData[2 * m] = wireU[m]; wireData[2 * m + 1] = wireV[m]; }
+    var accInv = 1.0 / dt;
+    var rel = Math.min(1, dt * 4.0);
+    for (var m = 0; m < N; m++) {
+      var raw = (wireV[m] - wireVprev[m]) * accInv;
+      var sm  = wireA[m];
+      sm += (raw - sm) * (Math.abs(raw) > Math.abs(sm) ? 1.0 : rel);
+      wireA[m] = sm;
+      wireData[2 * m] = wireU[m];
+      wireData[2 * m + 1] = sm;
+    }
     gl.bindTexture(gl.TEXTURE_2D, wireTex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, N, 1, gl.RG, gl.FLOAT, wireData);
   }
@@ -273,6 +297,7 @@
   var mxTgt = window.innerWidth * 0.5, myTgt = window.innerHeight * centerFrac;
   var mxCur = mxTgt, myCur = myTgt, focusCur = 0, focusTgt = 0;
   var gx = mxTgt, gy = myTgt, gxCur = gx, gyCur = gy, dragCur = 0, dragTgt = 0;
+  var gxV = 0, gyV = 0;                   // grab-point spring velocity (px/s)
   if (knotDemo) { focusTgt = 1; dragTgt = 1; gx = window.innerWidth * 0.5; gy = window.innerHeight * (centerFrac - 0.12); }
   if (!reduced) {
     window.addEventListener('pointerdown', function (e) {
@@ -280,8 +305,9 @@
       gx = mxTgt = e.clientX; gy = myTgt = e.clientY; gxCur = gx; focusTgt = 1; dragTgt = 1;
       // Start the grab target at the wire's current height under the cursor and
       // let it glide to the mouse — no instant yank on click.
-      var gi0 = Math.round(Math.min(Math.max(gx / window.innerWidth, 0), 1) * (N - 1));
+      var gi0 = Math.round(Math.min(Math.max((gx / window.innerWidth + PAD) / EXT, 0), 1) * (N - 1));
       gyCur = (centerFrac * canvas.height + wireU[gi0]) / pr;
+      gxV = 0; gyV = 0;                   // fresh grab starts from rest — spring accelerates in
     }, { passive: true });
     window.addEventListener('pointermove', function (e) {
       if (!(e.buttons & 1)) return;                     // follow only while LMB held
@@ -313,8 +339,14 @@
 
     mxCur += (mxTgt - mxCur) * 0.08;
     myCur += (myTgt - myCur) * 0.08;
-    gxCur += (gx - gxCur) * 0.006;        // sim grab point — slow glide both axes: wire drifts to the mouse over ~5s
-    gyCur += (gy - gyCur) * 0.006;
+    // Sim grab point — critically-damped spring toward the mouse (not an exp
+    // lerp, whose approach starts at max speed and reads as a hickup on grab):
+    // velocity builds from zero, peaks ~1.2s in, settles on the old ~3s scale.
+    var gsW = 0.8, gdt = Math.min(dt, 0.05);
+    gxV += ((gx - gxCur) * gsW * gsW - 2.0 * gsW * gxV) * gdt;
+    gyV += ((gy - gyCur) * gsW * gsW - 2.0 * gsW * gyV) * gdt;
+    gxCur += gxV * gdt;
+    gyCur += gyV * gdt;
     focusCur += (focusTgt - focusCur) * 0.06;
     dragCur += (dragTgt - dragCur) * 0.1;
 
