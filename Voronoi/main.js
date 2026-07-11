@@ -150,6 +150,28 @@ function startGrow() {
 	growFill = 1;
 }
 
+// Advance the front radius; growth completes once every canvas corner is
+// claimed and every in-view Voronoi vertex is reached.
+function advanceGrow(segs) {
+	let need = 0;
+	const pad = 100;
+	const corners = [[0, 0], [canvasWidth, 0], [0, canvasHeight], [canvasWidth, canvasHeight]];
+	for (const [cx, cy] of corners) {
+		let d1 = Infinity;
+		for (const s of sites) d1 = Math.min(d1, Math.hypot(s.x - cx, s.y - cy));
+		need = Math.max(need, d1);
+	}
+	for (const s of segs) {
+		if (s.x1 < -pad || s.x1 > canvasWidth + pad || s.y1 < -pad || s.y1 > canvasHeight + pad) continue;
+		need = Math.max(need, Math.hypot(s.x1 - s.px, s.y1 - s.py));
+	}
+	if (growing && !paused) {
+		growR += growSpeed;
+		if (growR >= need + 12) { growR = need + 12; growing = false; donePulse = 1; }
+	}
+	donePulse *= 0.95;
+}
+
 // Portion of each Voronoi edge already reached by both fronts: points p on the
 // segment with |p - site| <= R (both generating sites are equidistant there).
 // Unclamped roots inside (0,1) are the live collision points where two fronts
@@ -202,18 +224,21 @@ function drawSparks(pal, sparks) {
 var GLYPH_RAMP = [" ", ".", "·", ":", "-", "=", "+", "*", "#", "@"];
 var glyphLUTKey = "";
 var glyphLUT = null; // [2 colors][10 levels] fill styles
-function drawGlyphField(pal, R, now) {
-	if (glyphLUTKey !== pal.bgCss) {
-		glyphLUT = [[], []];
-		const cols = [pal.edge, pal.coral];
-		for (let ci = 0; ci < 2; ci++) {
-			for (let l = 0; l < 10; l++) {
-				const al = (0.05 + 0.075 * l).toFixed(3);
-				glyphLUT[ci].push("rgba(" + cols[ci][0] + "," + cols[ci][1] + "," + cols[ci][2] + "," + al + ")");
-			}
+function ensureGlyphLUT(pal) {
+	if (glyphLUTKey === pal.bgCss) return;
+	glyphLUT = [[], []];
+	const cols = [pal.edge, pal.coral];
+	for (let ci = 0; ci < 2; ci++) {
+		for (let l = 0; l < 10; l++) {
+			const al = (0.05 + 0.075 * l).toFixed(3);
+			glyphLUT[ci].push("rgba(" + cols[ci][0] + "," + cols[ci][1] + "," + cols[ci][2] + "," + al + ")");
 		}
-		glyphLUTKey = pal.bgCss;
 	}
+	glyphLUTKey = pal.bgCss;
+}
+
+function drawGlyphField(pal, R, now) {
+	ensureGlyphLUT(pal);
 	ctx.font = "12px 'IBM Plex Mono', monospace";
 	ctx.textAlign = "center";
 	ctx.textBaseline = "middle";
@@ -323,25 +348,7 @@ function renderGrow(now) {
 		return;
 	}
 
-	// radius at which every canvas corner is claimed and every in-view
-	// Voronoi vertex is reached -> growth is visually complete
-	let need = 0;
-	const pad = 100;
-	const corners = [[0, 0], [canvasWidth, 0], [0, canvasHeight], [canvasWidth, canvasHeight]];
-	for (const [cx, cy] of corners) {
-		let d1 = Infinity;
-		for (const s of sites) d1 = Math.min(d1, Math.hypot(s.x - cx, s.y - cy));
-		need = Math.max(need, d1);
-	}
-	for (const s of segs) {
-		if (s.x1 < -pad || s.x1 > canvasWidth + pad || s.y1 < -pad || s.y1 > canvasHeight + pad) continue;
-		need = Math.max(need, Math.hypot(s.x1 - s.px, s.y1 - s.py));
-	}
-
-	if (growing && !paused) {
-		growR += growSpeed;
-		if (growR >= need + 12) { growR = need + 12; growing = false; donePulse = 1; }
-	}
+	advanceGrow(segs);
 	if (growR <= 0) return;
 
 	// flooded territory: the union of discs equals the union of claimed cells
@@ -352,7 +359,6 @@ function renderGrow(now) {
 		ctx.fill();
 	}
 	if (!growing && !paused) growFill = Math.max(0, growFill - 0.015);
-	donePulse *= 0.95;
 
 	if (asciiField) drawGlyphField(pal, growR, now);
 
@@ -361,6 +367,113 @@ function renderGrow(now) {
 
 	drawFronts(pal, growR);
 	if (built.sparks.length) drawSparks(pal, built.sparks);
+}
+
+// Dedicated all-ASCII flood: territory, walls, wavefronts, weld sparks and
+// site markers are all glyphs on one lattice — no vector strokes at all.
+var FRONT_RAMP = [":", "+", "*", "@"];
+function renderAsciiFlood(now) {
+	const pal = themePalette();
+	ctx.fillStyle = pal.bgCss;
+	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+	ensureGlyphLUT(pal);
+	const n = sites.length;
+
+	let sparks = null;
+	if (n > 0 && growing) {
+		const segs = computeSegs();
+		advanceGrow(segs);
+		sparks = revealedSubSegs(segs, growR).sparks;
+	} else {
+		donePulse *= 0.95;
+	}
+
+	const R = growR;
+	const gs = 15;
+	const e = pal.edge;
+	const wallStyle = "rgba(" + e[0] + "," + e[1] + "," + e[2] + "," + Math.min(1, 0.85 + 0.3 * donePulse).toFixed(3) + ")";
+	const paperStyle = "rgba(" + e[0] + "," + e[1] + "," + e[2] + ",0.07)";
+	const band = gs * 0.7;
+	const boost = 1 + donePulse * 0.8;
+	ctx.font = "12px 'IBM Plex Mono', monospace";
+	ctx.textAlign = "center";
+	ctx.textBaseline = "middle";
+	const wallCells = [];
+	let iy = 0;
+	for (let gy = gs * 0.5; gy < canvasHeight; gy += gs, iy++) {
+		let ix = 0;
+		for (let gx = gs * 0.5; gx < canvasWidth; gx += gs, ix++) {
+			let d1 = Infinity, d2 = Infinity, own = 0, s2 = 0;
+			for (let s = 0; s < n; s++) {
+				const dx = gx - sites[s].x, dy = gy - sites[s].y;
+				const d = dx * dx + dy * dy;
+				if (d < d1) { d2 = d1; s2 = own; own = s; d1 = d; }
+				else if (d < d2) { d2 = d; s2 = s; }
+			}
+			const r1 = Math.sqrt(d1), r2 = Math.sqrt(d2);
+			let isWall = false;
+			if (n >= 2 && r2 <= R && r2 - r1 < gs * 2.5) {
+				// true distance to the cell border: the gap normalized by its
+				// gradient |u2-u1|, else walls bloat far from their sites
+				const ux = (gx - sites[s2].x) / (r2 || 1) - (gx - sites[own].x) / (r1 || 1);
+				const uy = (gy - sites[s2].y) / (r2 || 1) - (gy - sites[own].y) / (r1 || 1);
+				const grad = Math.max(Math.sqrt(ux * ux + uy * uy), 0.2);
+				isWall = (r2 - r1) / grad < gs * 0.62;
+			}
+			if (isWall) {
+				wallCells.push(gx, gy);
+			} else if (r1 <= R + band && r1 > R - band && r2 > R) {
+				// wavefront ring, brightest at the exact radius
+				const t = 1 - Math.abs(r1 - R) / band;
+				ctx.fillStyle = pal.point;
+				ctx.globalAlpha = 0.45 + 0.55 * t;
+				ctx.fillText(FRONT_RAMP[Math.min(3, Math.floor(t * 4))], gx, gy);
+				ctx.globalAlpha = 1;
+			} else if (r1 <= R) {
+				// interior kept dimmer than in the hybrid mode so walls dominate
+				const age = R - r1;
+				const base = Math.max(0.24, 1 - age / 1000);
+				const rip = 0.55 + 0.45 * Math.sin(age * 0.045 - now * 0.002);
+				let lvl = Math.round(base * rip * boost * 5.5);
+				if (lvl < 1) continue;
+				if (lvl > 9) lvl = 9;
+				ctx.fillStyle = glyphLUT[own % 2][lvl];
+				ctx.fillText(GLYPH_RAMP[lvl], gx, gy);
+			} else if (((ix + iy) & 1) === 0) {
+				// unclaimed: sparse dotted paper
+				ctx.fillStyle = paperStyle;
+				ctx.fillText(".", gx, gy);
+			}
+		}
+	}
+
+	// walls in a bold pass so they read above the field
+	if (wallCells.length) {
+		ctx.font = "600 13px 'IBM Plex Mono', monospace";
+		ctx.fillStyle = wallStyle;
+		for (let i = 0; i < wallCells.length; i += 2) {
+			ctx.fillText("#", wallCells[i], wallCells[i + 1]);
+		}
+	}
+
+	// site markers, snapped onto the lattice
+	if (showPoints) {
+		ctx.font = "600 13px 'IBM Plex Mono', monospace";
+		ctx.fillStyle = pal.point;
+		for (const s of sites) {
+			ctx.fillText("@", (Math.floor(s.x / gs) + 0.5) * gs, (Math.floor(s.y / gs) + 0.5) * gs);
+		}
+	}
+
+	// weld sparks as strobing asterisks
+	if (sparks && sparks.length) {
+		ctx.font = "600 14px 'IBM Plex Mono', monospace";
+		ctx.fillStyle = pal.additive ? "#ffffff" : pal.point;
+		for (const [x, y] of sparks) {
+			if (Math.random() < 0.35) continue;
+			ctx.fillText("*", (Math.floor(x / gs) + 0.5) * gs, (Math.floor(y / gs) + 0.5) * gs);
+		}
+	}
 }
 // #endregion
 
@@ -399,6 +512,8 @@ function drawPoints() {
 function render(now) {
 	if (mode === "grow") {
 		renderGrow(now);
+	} else if (mode === "ascii") {
+		renderAsciiFlood(now);
 	} else if (view === "cells") {
 		renderCells();
 	} else if (view === "delaunay") {
@@ -407,7 +522,8 @@ function render(now) {
 		renderCells();
 		renderDelaunay(true);
 	}
-	if (showPoints) drawPoints();
+	// ascii mode draws its own lattice-snapped site markers
+	if (showPoints && mode !== "ascii") drawPoints();
 }
 
 // #region theme
@@ -465,10 +581,10 @@ document.querySelectorAll('input[name="mode"]').forEach(function (radio) {
 		mode = this.value;
 		growR = 0;
 		growing = false;
-		growButton.style.display = mode === "grow" ? "" : "none";
-		hintLabel.textContent = mode === "grow"
-			? "Click to place sites, then Grow (G) floods until the walls meet"
-			: "Click to add a site · right-click removes the nearest";
+		growButton.style.display = mode === "drift" ? "none" : "";
+		hintLabel.textContent = mode === "drift"
+			? "Click to add a site · right-click removes the nearest"
+			: "Click to place sites, then Grow (G) floods until the walls meet";
 	});
 });
 
@@ -504,7 +620,7 @@ document.getElementById("resetButton").onclick = buildSites;
 window.addEventListener("keydown", function (e) {
 	if (e.code === "Space") { e.preventDefault(); togglePause(); }
 	if (e.key === "r" || e.key === "R") buildSites();
-	if ((e.key === "g" || e.key === "G") && mode === "grow") startGrow();
+	if ((e.key === "g" || e.key === "G") && mode !== "drift") startGrow();
 });
 // #endregion
 
@@ -532,16 +648,17 @@ backgroundCanvas.addEventListener("mousedown", function (e) {
 	document.getElementById("countSlider").value = Math.min(120, siteCount);
 	document.getElementById("countValue").textContent = siteCount;
 	// editing sites mid/post-growth replays the flood with the new layout
-	if (mode === "grow" && (growing || growR > 0)) startGrow();
+	if (mode !== "drift" && (growing || growR > 0)) startGrow();
 });
 backgroundCanvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 // #endregion
 
-// debug boot params: ?grow=1 jumps straight into flood-fill growth,
-// &gspd=N overrides growth speed (headless verification)
+// debug boot params: ?grow=1 (or ?ascii=1 for the all-ASCII mode) jumps
+// straight into flood-fill growth, &gspd=N overrides growth speed
 var bootParams = new URLSearchParams(location.search);
-if (bootParams.get("grow") === "1") {
-	const radio = document.querySelector('input[name="mode"][value="grow"]');
+var bootMode = bootParams.get("ascii") === "1" ? "ascii" : bootParams.get("grow") === "1" ? "grow" : "";
+if (bootMode) {
+	const radio = document.querySelector('input[name="mode"][value="' + bootMode + '"]');
 	radio.checked = true;
 	radio.dispatchEvent(new Event("change"));
 	startGrow();
