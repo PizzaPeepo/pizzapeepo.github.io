@@ -41,7 +41,13 @@
     </div>
 
     <div class="hud-section">
-      <span class="ctrl-label">Click to add a site · right-click removes the nearest</span>
+      <span class="ctrl-label" id="hintLabel">Click to add a site · right-click removes the nearest</span>
+    </div>
+
+    <div class="hud-section">
+      <span class="ctrl-label">Mode</span>
+      <label><input type="radio" name="mode" value="drift" checked> Drifting sites</label>
+      <label><input type="radio" name="mode" value="grow"> Flood fill</label>
     </div>
 
 
@@ -58,8 +64,8 @@
       </div>
 
       <div class="hud-section">
-        <span class="ctrl-label">Cell resolution: <span id="resValue"></span></span>
-        <input type="range" min="100" max="360" step="20" class="slider" id="resSlider">
+        <span class="ctrl-label">Growth speed: <span id="growValue"></span></span>
+        <input type="range" min="0.05" max="2" step="0.05" class="slider" id="growSlider">
       </div>
     </details>
 
@@ -74,12 +80,6 @@
       </div>
 
       <div class="hud-section">
-        <span class="ctrl-label">Cell colour</span>
-        <label><input type="radio" name="color" value="hue" checked> By site (hue)</label>
-        <label><input type="radio" name="color" value="dist"> By distance</label>
-      </div>
-
-      <div class="hud-section">
         <span class="ctrl-label">Options</span>
         <label><input type="checkbox" id="pointsCheckbox" checked> Show site points</label>
       </div>
@@ -89,6 +89,8 @@
     <div class="hud-section">
       <span class="ctrl-label">Actions</span>
       <button id="resetButton">Reset (R)</button>
+      <button id="growButton">Grow (G)</button>
+      <button id="clearButton">Clear</button>
       <button id="pauseButton">Pause (Space)</button>
     </div>
 

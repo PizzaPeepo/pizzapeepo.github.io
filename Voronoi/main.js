@@ -1,6 +1,6 @@
-import { triangulate } from "./Delaunay.js";
+import { triangulate, voronoiEdges } from "./Delaunay.js";
 
-// Voronoi cells via per-pixel nearest-site (low-res buffer, scaled up),
+// Voronoi edges as crisp vector lines (dual of the Delaunay triangulation),
 // Delaunay mesh via Bowyer-Watson. Sites drift and bounce.
 
 // #region globals
@@ -9,14 +9,17 @@ var canvasHeight = window.innerHeight;
 
 var siteCount = 28;
 var motion = 0.8;
-var sampleW = 220;
 var view = "cells";   // cells | delaunay | both
-var colorMode = "hue"; // hue | dist
+var mode = "drift";   // drift | grow (flood fill)
 var showPoints = true;
 var paused = false;
 
-var sites = [];        // {x, y, vx, vy, hue}
-var sampleH = 1;
+var growR = 0;        // current flood-fill front radius
+var growing = false;
+var growSpeed = 1;    // px per frame
+var growFill = 1;     // territory tint fade (1 -> 0 after completion)
+
+var sites = [];        // {x, y, vx, vy}
 
 var isLight = document.documentElement.classList.contains("light");
 var isViper = document.documentElement.classList.contains("viper");
@@ -26,47 +29,19 @@ var isViper = document.documentElement.classList.contains("viper");
 var backgroundCanvas = document.getElementById("backgroundCanvas");
 var ctx = backgroundCanvas.getContext("2d");
 
-var buffer = document.createElement("canvas");
-var bctx = buffer.getContext("2d");
-var imageData = null, pixels = null;
-
-// Precomputed site colours (parallel to sites)
-var siteR = [], siteG = [], siteB = [];
-
 function applyCanvasSize() {
 	backgroundCanvas.width = canvasWidth;
 	backgroundCanvas.height = canvasHeight;
 	backgroundCanvas.style.width = canvasWidth + "px";
 	backgroundCanvas.style.height = canvasHeight + "px";
-	ctx.imageSmoothingEnabled = false;
-	allocBuffer();
-}
-
-function allocBuffer() {
-	sampleH = Math.max(1, Math.round(sampleW * canvasHeight / canvasWidth));
-	buffer.width = sampleW;
-	buffer.height = sampleH;
-	imageData = bctx.createImageData(sampleW, sampleH);
-	pixels = imageData.data;
 }
 // #endregion
 
-function hslToRgb(h, s, l) {
-	h /= 360;
-	const a = s * Math.min(l, 1 - l);
-	const f = (n) => {
-		const k = (n + h * 12) % 12;
-		return l - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
-	};
-	return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
-}
-
-function refreshColors() {
-	siteR = []; siteG = []; siteB = [];
-	for (let i = 0; i < sites.length; i++) {
-		const [r, g, b] = hslToRgb(sites[i].hue, isViper ? 0.75 : 0.6, isLight ? 0.6 : 0.5);
-		siteR.push(r); siteG.push(g); siteB.push(b);
-	}
+// Theme palette (mirrors CSS tokens in CSS/theme.css: --bg, --gold, --coral, --tx)
+function themePalette() {
+	if (isViper) return { bgCss: "#030806", edge: [40, 255, 69], mesh: "rgba(107,255,40,", point: "#e8ffe0" };
+	if (isLight) return { bgCss: "#faf5ee", edge: [192, 120, 0], mesh: "rgba(200,56,32,", point: "#1a1008" };
+	return { bgCss: "#181210", edge: [245, 166, 35], mesh: "rgba(255,107,71,", point: "#f5e8d4" };
 }
 
 function makeSite() {
@@ -76,14 +51,14 @@ function makeSite() {
 		y: Math.random() * canvasHeight,
 		vx: Math.cos(a),
 		vy: Math.sin(a),
-		hue: Math.random() * 360,
 	};
 }
 
 function buildSites() {
 	sites = [];
 	for (let i = 0; i < siteCount; i++) sites.push(makeSite());
-	refreshColors();
+	growR = 0;
+	growing = false;
 }
 
 applyCanvasSize();
@@ -104,58 +79,191 @@ function moveSites() {
 // #endregion
 
 // #region render cells
-function renderCells() {
-	const n = sites.length;
-	if (n === 0) { ctx.fillStyle = isLight ? "#eee" : isViper ? "#030806" : "#111"; ctx.fillRect(0, 0, canvasWidth, canvasHeight); return; }
-	const sx = canvasWidth / sampleW;
-	const sy = canvasHeight / sampleH;
-	// site positions in buffer space
-	const px = new Float32Array(n), py = new Float32Array(n);
-	for (let i = 0; i < n; i++) { px[i] = sites[i].x / sx; py[i] = sites[i].y / sy; }
+function strokeSegs(segs) {
+	ctx.beginPath();
+	for (const s of segs) { ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); }
+	ctx.stroke();
+}
 
-	let p = 0;
-	for (let j = 0; j < sampleH; j++) {
-		for (let i = 0; i < sampleW; i++) {
-			let best = 0, bestD = Infinity;
-			for (let s = 0; s < n; s++) {
-				const dx = i - px[s], dy = j - py[s];
-				const d = dx * dx + dy * dy;
-				if (d < bestD) { bestD = d; best = s; }
+function computeSegs() {
+	const n = sites.length;
+	if (n < 2) return [];
+	const rayLength = (canvasWidth + canvasHeight) * 2; // long enough to leave the canvas
+	if (n === 2) {
+		// Voronoi of two sites: their perpendicular bisector
+		const a = sites[0], b = sites[1];
+		const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+		let dx = -(b.y - a.y), dy = b.x - a.x;
+		const len = Math.hypot(dx, dy) || 1;
+		dx = dx / len * rayLength; dy = dy / len * rayLength;
+		return [{ x1: mx - dx, y1: my - dy, x2: mx + dx, y2: my + dy, px: a.x, py: a.y }];
+	}
+	return voronoiEdges(sites, triangulate(sites), rayLength);
+}
+
+function strokeWalls(segs, pal) {
+	ctx.lineCap = "round";
+	// soft halo pass under a crisp core line
+	ctx.strokeStyle = "rgba(" + pal.edge[0] + "," + pal.edge[1] + "," + pal.edge[2] + ",0.28)";
+	ctx.lineWidth = 3.5;
+	strokeSegs(segs);
+	ctx.strokeStyle = "rgb(" + pal.edge[0] + "," + pal.edge[1] + "," + pal.edge[2] + ")";
+	ctx.lineWidth = 1.25;
+	strokeSegs(segs);
+}
+
+function renderCells() {
+	const pal = themePalette();
+	ctx.fillStyle = pal.bgCss;
+	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+	const segs = computeSegs();
+	if (segs.length) strokeWalls(segs, pal);
+}
+// #endregion
+
+// #region grow mode (flood fill)
+function startGrow() {
+	growR = 0;
+	growing = true;
+	growFill = 1;
+}
+
+// Portion of each Voronoi edge already reached by both fronts: points p on the
+// segment with |p - site| <= R (both generating sites are equidistant there).
+function revealedSubSegs(segs, R) {
+	const out = [];
+	for (const s of segs) {
+		const ax = s.x1 - s.px, ay = s.y1 - s.py;
+		const dx = s.x2 - s.x1, dy = s.y2 - s.y1;
+		const a = dx * dx + dy * dy;
+		if (a < 1e-12) continue;
+		const b = 2 * (dx * ax + dy * ay);
+		const c = ax * ax + ay * ay - R * R;
+		const disc = b * b - 4 * a * c;
+		if (disc <= 0) continue;
+		const sq = Math.sqrt(disc);
+		let t0 = (-b - sq) / (2 * a), t1 = (-b + sq) / (2 * a);
+		if (t0 < 0) t0 = 0;
+		if (t1 > 1) t1 = 1;
+		if (t1 - t0 <= 0) continue;
+		out.push({ x1: s.x1 + dx * t0, y1: s.y1 + dy * t0, x2: s.x1 + dx * t1, y2: s.y1 + dy * t1 });
+	}
+	return out;
+}
+
+// Expanding wavefronts: each site's circle of radius R, minus the angular
+// spans that already collided with a neighbour's front (past the bisector,
+// half-angle acos(h/R) toward that neighbour).
+function drawFronts(pal, R) {
+	const TAU = Math.PI * 2;
+	const n = sites.length;
+	ctx.globalAlpha = 0.8;
+	ctx.strokeStyle = pal.point;
+	ctx.lineWidth = 1;
+	ctx.beginPath();
+	for (let i = 0; i < n; i++) {
+		const s = sites[i];
+		if (s.x + R < 0 || s.x - R > canvasWidth || s.y + R < 0 || s.y - R > canvasHeight) continue;
+		const blocked = [];
+		let covered = false;
+		for (let j = 0; j < n; j++) {
+			if (j === i) continue;
+			const dx = sites[j].x - s.x, dy = sites[j].y - s.y;
+			const h = Math.hypot(dx, dy) / 2;
+			if (h >= R) continue;
+			if (h < 1e-6) { covered = true; break; } // coincident sites
+			const phi = Math.acos(h / R);
+			let a0 = (Math.atan2(dy, dx) - phi) % TAU;
+			if (a0 < 0) a0 += TAU;
+			let a1 = a0 + 2 * phi;
+			if (a1 > TAU) { blocked.push([0, a1 - TAU]); a1 = TAU; }
+			blocked.push([a0, a1]);
+		}
+		if (covered) continue;
+		let arcs;
+		if (blocked.length === 0) {
+			arcs = [[0, TAU]];
+		} else {
+			blocked.sort(function (p, q) { return p[0] - q[0]; });
+			arcs = [];
+			let cur = 0;
+			for (const [b0, b1] of blocked) {
+				if (b0 > cur) arcs.push([cur, b0]);
+				if (b1 > cur) cur = b1;
 			}
-			if (colorMode === "dist") {
-				const t = Math.min(Math.sqrt(bestD) / (sampleW * 0.18), 1);
-				const c = Math.round((isLight ? 235 : isViper ? 20 : 30) + (isLight ? -180 : isViper ? 230 : 200) * (1 - t));
-				if (isViper) { pixels[p] = Math.round(c * 0.05); pixels[p + 1] = c; pixels[p + 2] = Math.round(c * 0.2); }
-				else { pixels[p] = c; pixels[p + 1] = c; pixels[p + 2] = Math.round(c * (isLight ? 0.95 : 1.1)); }
-			} else {
-				// slight darkening toward cell edge for depth
-				const shade = Math.max(0.55, 1 - Math.sqrt(bestD) / (sampleW * 0.5));
-				pixels[p] = siteR[best] * shade;
-				pixels[p + 1] = siteG[best] * shade;
-				pixels[p + 2] = siteB[best] * shade;
-			}
-			pixels[p + 3] = 255;
-			p += 4;
+			if (cur < TAU) arcs.push([cur, TAU]);
+		}
+		for (const [a0, a1] of arcs) {
+			ctx.moveTo(s.x + R * Math.cos(a0), s.y + R * Math.sin(a0));
+			ctx.arc(s.x, s.y, R, a0, a1);
 		}
 	}
-	bctx.putImageData(imageData, 0, 0);
-	ctx.imageSmoothingEnabled = true;
-	ctx.drawImage(buffer, 0, 0, sampleW, sampleH, 0, 0, canvasWidth, canvasHeight);
+	ctx.stroke();
+	ctx.globalAlpha = 1;
+}
+
+function renderGrow() {
+	const pal = themePalette();
+	ctx.fillStyle = pal.bgCss;
+	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+	const n = sites.length;
+	if (n === 0) return;
+	const segs = computeSegs();
+
+	// growth finished and tint faded out: just the completed diagram
+	if (!growing && growR > 0 && growFill <= 0.005) {
+		if (segs.length) strokeWalls(segs, pal);
+		return;
+	}
+
+	// radius at which every canvas corner is claimed and every in-view
+	// Voronoi vertex is reached -> growth is visually complete
+	let need = 0;
+	const pad = 100;
+	const corners = [[0, 0], [canvasWidth, 0], [0, canvasHeight], [canvasWidth, canvasHeight]];
+	for (const [cx, cy] of corners) {
+		let d1 = Infinity;
+		for (const s of sites) d1 = Math.min(d1, Math.hypot(s.x - cx, s.y - cy));
+		need = Math.max(need, d1);
+	}
+	for (const s of segs) {
+		if (s.x1 < -pad || s.x1 > canvasWidth + pad || s.y1 < -pad || s.y1 > canvasHeight + pad) continue;
+		need = Math.max(need, Math.hypot(s.x1 - s.px, s.y1 - s.py));
+	}
+
+	if (growing && !paused) {
+		growR += growSpeed;
+		if (growR >= need + 12) { growR = need + 12; growing = false; }
+	}
+	if (growR <= 0) return;
+
+	// flooded territory: the union of discs equals the union of claimed cells
+	if (growFill > 0.005) {
+		ctx.fillStyle = "rgba(" + pal.edge[0] + "," + pal.edge[1] + "," + pal.edge[2] + "," + (0.09 * growFill).toFixed(3) + ")";
+		ctx.beginPath();
+		for (const s of sites) { ctx.moveTo(s.x + growR, s.y); ctx.arc(s.x, s.y, growR, 0, Math.PI * 2); }
+		ctx.fill();
+	}
+	if (!growing && !paused) growFill = Math.max(0, growFill - 0.015);
+
+	const built = revealedSubSegs(segs, growR);
+	if (built.length) strokeWalls(built, pal);
+
+	drawFronts(pal, growR);
 }
 // #endregion
 
 // #region render mesh
 function renderDelaunay(overlay) {
+	const pal = themePalette();
 	if (!overlay) {
-		ctx.fillStyle = isLight ? "#f2efe8" : isViper ? "#030806" : "#0e0e12";
+		ctx.fillStyle = pal.bgCss;
 		ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 	}
 	if (sites.length < 3) return;
 	const tris = triangulate(sites);
 	ctx.lineWidth = 1;
-	ctx.strokeStyle = overlay
-		? (isLight ? "rgba(20,20,20,0.5)" : isViper ? "rgba(40,255,69,0.4)" : "rgba(255,255,255,0.5)")
-		: (isLight ? "rgba(40,40,40,0.7)" : isViper ? "rgba(40,255,69,0.6)" : "rgba(230,220,200,0.7)");
+	ctx.strokeStyle = pal.mesh + (overlay ? "0.45)" : "0.7)");
 	ctx.beginPath();
 	for (const tr of tris) {
 		const a = sites[tr.a], b = sites[tr.b], c = sites[tr.c];
@@ -167,17 +275,19 @@ function renderDelaunay(overlay) {
 // #endregion
 
 function drawPoints() {
+	ctx.fillStyle = themePalette().point;
 	for (let i = 0; i < sites.length; i++) {
 		const s = sites[i];
 		ctx.beginPath();
 		ctx.arc(s.x, s.y, 3, 0, Math.PI * 2);
-		ctx.fillStyle = isLight ? "#1a1a1a" : isViper ? "#28ff45" : "#fff";
 		ctx.fill();
 	}
 }
 
 function render() {
-	if (view === "cells") {
+	if (mode === "grow") {
+		renderGrow();
+	} else if (view === "cells") {
 		renderCells();
 	} else if (view === "delaunay") {
 		renderDelaunay(false);
@@ -192,7 +302,6 @@ function render() {
 document.addEventListener("themechange", function (e) {
 	isLight = e.detail.isLight;
 	isViper = e.detail.theme === "viper";
-	refreshColors();
 });
 // #endregion
 
@@ -228,16 +337,39 @@ bindSlider("speedSlider", "speedValue", parseFloat, Object.assign(function (v) {
 	motion = v;
 }, { initial: motion }), (v) => v.toFixed(2));
 
-bindSlider("resSlider", "resValue", parseInt, Object.assign(function (v) {
-	sampleW = v;
-	allocBuffer();
-}, { initial: sampleW }));
+bindSlider("growSlider", "growValue", parseFloat, Object.assign(function (v) {
+	growSpeed = v;
+}, { initial: growSpeed }), (v) => v.toFixed(2));
+
+var growButton = document.getElementById("growButton");
+growButton.onclick = startGrow;
+growButton.style.display = "none"; // drift mode at boot
+
+var hintLabel = document.getElementById("hintLabel");
+
+document.querySelectorAll('input[name="mode"]').forEach(function (radio) {
+	radio.addEventListener("change", function () {
+		if (!this.checked) return;
+		mode = this.value;
+		growR = 0;
+		growing = false;
+		growButton.style.display = mode === "grow" ? "" : "none";
+		hintLabel.textContent = mode === "grow"
+			? "Click to place sites, then Grow (G) floods until the walls meet"
+			: "Click to add a site · right-click removes the nearest";
+	});
+});
+
+document.getElementById("clearButton").onclick = function () {
+	sites = [];
+	siteCount = 0;
+	growR = 0;
+	growing = false;
+	document.getElementById("countValue").textContent = 0;
+};
 
 document.querySelectorAll('input[name="view"]').forEach(function (radio) {
 	radio.addEventListener("change", function () { if (this.checked) view = this.value; });
-});
-document.querySelectorAll('input[name="color"]').forEach(function (radio) {
-	radio.addEventListener("change", function () { if (this.checked) colorMode = this.value; });
 });
 
 var pointsCheckbox = document.getElementById("pointsCheckbox");
@@ -256,6 +388,7 @@ document.getElementById("resetButton").onclick = buildSites;
 window.addEventListener("keydown", function (e) {
 	if (e.code === "Space") { e.preventDefault(); togglePause(); }
 	if (e.key === "r" || e.key === "R") buildSites();
+	if ((e.key === "g" || e.key === "G") && mode === "grow") startGrow();
 });
 // #endregion
 
@@ -277,15 +410,24 @@ backgroundCanvas.addEventListener("mousedown", function (e) {
 		if (n.i >= 0 && n.d < 40) sites.splice(n.i, 1);
 	} else {
 		const a = Math.random() * Math.PI * 2;
-		sites.push({ x, y, vx: Math.cos(a), vy: Math.sin(a), hue: Math.random() * 360 });
+		sites.push({ x, y, vx: Math.cos(a), vy: Math.sin(a) });
 	}
 	siteCount = sites.length;
 	document.getElementById("countSlider").value = Math.min(120, siteCount);
 	document.getElementById("countValue").textContent = siteCount;
-	refreshColors();
+	// editing sites mid/post-growth replays the flood with the new layout
+	if (mode === "grow" && (growing || growR > 0)) startGrow();
 });
 backgroundCanvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 // #endregion
+
+// debug boot param: ?grow=1 jumps straight into flood-fill growth
+if (new URLSearchParams(location.search).get("grow") === "1") {
+	const radio = document.querySelector('input[name="mode"][value="grow"]');
+	radio.checked = true;
+	radio.dispatchEvent(new Event("change"));
+	startGrow();
+}
 
 // #region loop
 var fpsBadge = document.getElementById("fpsBadge");
@@ -296,7 +438,7 @@ function draw(now) {
 	window.requestAnimationFrame(draw);
 	if (document.hidden) return;
 
-	if (!paused) moveSites();
+	if (!paused && mode === "drift") moveSites();
 	render();
 
 	frameCount++;
