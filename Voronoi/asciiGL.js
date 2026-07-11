@@ -142,9 +142,11 @@ void main(){
 	} else if (code >= 0.0){                          // wall
 		float hov = code >= 10.0 ? 1.0 : 0.0;
 		float bucket = code - hov * 10.0;
-		glyph = bucket < 0.5 ? 7.0 : 8.0;             // fresh weld '*' else '#'
-		col = hov > 0.5 ? uColPoint : ember(bucket);
-		alpha = 0.92;
+		// hover: dense '@' + warm-bright ember (not flat white) so the present-pass
+		// glow blooms a warm halo along the cell border instead of recoloring it
+		glyph = hov > 0.5 ? 9.0 : (bucket < 0.5 ? 7.0 : 8.0);
+		col = hov > 0.5 ? mix(ember(bucket), uColPoint, 0.25) : ember(bucket);
+		alpha = hov > 0.5 ? 1.0 : 0.92;
 	} else if (frontT > 0.0){                         // wavefront ring
 		float fb = min(3.0, floor(frontT * 4.0));
 		glyph = fb < 0.5 ? 3.0 : fb < 1.5 ? 6.0 : fb < 2.5 ? 7.0 : 9.0;  // ":+*@"
