@@ -1,13 +1,13 @@
 /* herobands.js — hero "prism" spectral wave layer.
-   Three razor-thin 1/d^2 "laser" lines sharing one >1-screen wavelength (2.8
-   screens — no visible period); R and B channels are horizontally phase-offset
-   copies (B leads, R trails), so every line reads as dispersed light — RGB
-   fanned along the whole curve — wrapped in a soft bloom halo. Slightly
-   different drift speed per wave slides the trio from nested to fanned and
-   back within seconds; a shared signed-sine breath collapses the two larger
-   bands through one flat white line ~every 5s (the smallest band keeps constant
-   amplitude as a steady carrier), alternating cycles: equal, then staggered
-   1.25 / 1.5. The trio
+   Three razor-thin 1/d^2 "laser" lines, each with its own >1-screen wavelength
+   (3.6 / 2.6 / 1.9 screens — no visible period) and its own slow drift
+   (vertical periods ~12.6 / 9.7 / 7.4s), interleaving like ocean swell; R and B
+   channels are horizontally phase-offset copies (B leads, R trails), so every
+   line reads as dispersed light — RGB fanned along the whole curve — wrapped in
+   a soft bloom halo. A shared signed-sine breath (~7s humps) collapses the two
+   larger bands through one flat white line (the smallest band keeps constant
+   amplitude as a steady carrier), repeating 4-cycle pattern: three calm, then
+   one gently staggered (1.25 / 1.45). The trio
    also rides a physical plucked wire: left-button drag grabs the string, and on
    release the deformation keeps travelling, reflecting off the screen edges and
    slowly damping (CPU 1D wave equation, uploaded as an RG32F texture; its
@@ -69,24 +69,27 @@
     '  float wDisp = wire.r;',
     '  float wAcc  = wire.g;',
     '',
-    '  // Three bands sharing one 2.8-screen wavelength (no visible period), drifting',
-    '  // at slightly different speeds so they slide from nested (one fat rainbow',
-    '  // wave) to fanned-out and back within a few seconds. Signed-sine breathing',
-    '  // makes bands 1-2 collapse through a flat white line and regrow; band 0',
-    '  // keeps constant amplitude (~0.14 of the viewport peak).',
-    '  float k  = 6.2831853 / (uRes.x * 2.8);', // Wavelength = 2.8 * screenlength
-    '  float ph0 = px * k + uTime * 0.8;',
-    '  float ph1 = px * k + uTime * 1.25 + 2.5;',
-    '  float ph2 = px * k + uTime * 1.55 + 4.4;',
-    '  // Shared breathing: bands 1-2 swell and collapse together (one',
-    '  // "cycle" = one hump of |sin|, ~5s). Cycles alternate: even cycle all',
-    '  // equal, odd cycle staggered 1 / 1.25 / 1.5. The pattern switches at the',
-    '  // zero crossing (all bands flat), so the handover is pop-free.',
-    '  float br  = sin(uTime * 0.63);',
-    '  float cyc = mod(floor(uTime * 0.63 / 3.14159265), 2.0);',
-    '  float a0 = vh * 14.0;',            // smallest band opts out of the breath — constant-amplitude carrier
-    '  float a1 = vh * 14.0 * (1.0 + 0.25 * cyc) * br;',
-    '  float a2 = vh * 14.0 * (1.0 + 0.50 * cyc) * br;',
+    '  // Three bands, each with its own wavelength (3.6 / 2.6 / 1.9 screens,',
+    '  // ~geometric spacing) and its own slow drift — different spatial and',
+    '  // temporal scales interleave like ocean swell instead of parallel copies.',
+    '  // Vertical periods ~12.6 / 9.7 / 7.4s; relative rates are small and',
+    '  // near-incommensurate, so the arrangement evolves without ever cycling',
+    '  // visibly. Signed-sine breathing collapses bands 1-2 through a flat white',
+    '  // line; band 0 keeps constant amplitude as a steady carrier.',
+    '  float k0 = 6.2831853 / (uRes.x * 3.6);',
+    '  float k1 = 6.2831853 / (uRes.x * 2.6);',
+    '  float k2 = 6.2831853 / (uRes.x * 1.9);',
+    '  float ph0 = px * k0 + uTime * 0.5;',
+    '  float ph1 = px * k1 + uTime * 0.65 + 2.1;',
+    '  float ph2 = px * k2 + uTime * 0.85 + 4.2;',
+    '  // Breathing slowed to match (~7s humps, full 4-cycle pattern ~28s): three',
+    '  // calm humps (all equal), then one gently staggered hump (1.25 / 1.45).',
+    '  // The switch lands on the zero crossing (bands 1-2 flat), so it is pop-free.',
+    '  float br  = sin(uTime * 0.45);',
+    '  float cyc = step(3.0, mod(floor(uTime * 0.45 / 3.14159265), 4.0));',
+    '  float a0 = vh * 8.0;',            // smallest band opts out of the breath — constant-amplitude carrier
+    '  float a1 = vh * 8.0 * (1.0 + 0.25 * cyc) * br;',
+    '  float a2 = vh * 8.0 * (1.0 + 0.45 * cyc) * br;',
     '  float s0 = sin(ph0), s1 = sin(ph1), s2 = sin(ph2);',
     '',
     '  // Grab fuse: while the wire is held, the pinch point reads clean white',
@@ -97,9 +100,9 @@
     '',
     '  // Slope-corrected (≈perpendicular) distance keeps line thickness uniform.',
     '  float c0 = cos(ph0), c1 = cos(ph1), c2 = cos(ph2);',
-    '  float sl0 = a0 * k * c0 * (1.0 - f);',
-    '  float sl1 = a1 * k * c1 * (1.0 - f);',
-    '  float sl2 = a2 * k * c2 * (1.0 - f);',
+    '  float sl0 = a0 * k0 * c0 * (1.0 - f);',
+    '  float sl1 = a1 * k1 * c1 * (1.0 - f);',
+    '  float sl2 = a2 * k2 * c2 * (1.0 - f);',
     '  float w0 = inversesqrt(1.0 + sl0 * sl0);',
     '  float w1 = inversesqrt(1.0 + sl1 * sl1);',
     '  float w2 = inversesqrt(1.0 + sl2 * sl2);',
@@ -108,27 +111,31 @@
     '  // left, R trails right) — reads as dispersed light along the whole band,',
     '  // not only at crossings. Wire acceleration adds a vertical rainbow flash',
     '  // on flicks. Focus (1-f) re-fuses the channels to white at the grab point.',
-    '  float sep  = k * uRes.x * 0.0055 * (1.0 - f);',  // phase for a fixed ~0.55%-of-width horizontal RGB offset, independent of wavelength
+    '  // Per-band phase for the same fixed ~0.55%-of-width horizontal RGB offset',
+    '  // (each band has its own k now).',
+    '  float sep0 = k0 * uRes.x * 0.0055 * (1.0 - f);',
+    '  float sep1 = k1 * uRes.x * 0.0055 * (1.0 - f);',
+    '  float sep2 = k2 * uRes.x * 0.0055 * (1.0 - f);',
     '  float cap  = 1.5 * vh;',
     '  // Per-band vertical acceleration: shared wire dv/dt plus per-band procedural',
     '  // motion |d2/dt2[a*sin(ph)]| = |a*w^2*sin| — magnitude only, so the ambient',
     '  // undulation disperses at crests (faster-drifting bands more) but the RGB',
     '  // order never flips at wave nodes / breath sign changes. One shared tanh cap.',
-    '  float pga = 0.025;', // SPREAD: dial how much the spread during ambient waves is
+    '  float pga = 0.06;', // SPREAD: dial how much the spread during ambient waves is (raised to offset the slower drift's smaller w^2)
     '  float dwA = 0.026 * wAcc;',
-    '  float dw0 = cap * tanh((dwA + pga * abs(a0 * 0.81   * s0)) / cap) * (1.0 - f);',
-    '  float dw1 = cap * tanh((dwA + pga * abs(a1 * 1.5625 * s1)) / cap) * (1.0 - f);',
-    '  float dw2 = cap * tanh((dwA + pga * abs(a2 * 2.4025 * s2)) / cap) * (1.0 - f);',
+    '  float dw0 = cap * tanh((dwA + pga * abs(a0 * 0.25 * s0)) / cap) * (1.0 - f);',  // w^2 = 0.5^2 / 0.65^2 / 0.85^2
+    '  float dw1 = cap * tanh((dwA + pga * abs(a1 * 0.42 * s1)) / cap) * (1.0 - f);',
+    '  float dw2 = cap * tanh((dwA + pga * abs(a2 * 0.72 * s2)) / cap) * (1.0 - f);',
     '  float yc = base + wDisp;',
-    '  float d0r = (py - (yc + a0 * sin(ph0 - sep) - dw0)) * w0;',
+    '  float d0r = (py - (yc + a0 * sin(ph0 - sep0) - dw0)) * w0;',
     '  float d0g = (py - (yc + a0 * s0)) * w0;',
-    '  float d0b = (py - (yc + a0 * sin(ph0 + sep) + dw0)) * w0;',
-    '  float d1r = (py - (yc + a1 * sin(ph1 - sep) - dw1)) * w1;',
+    '  float d0b = (py - (yc + a0 * sin(ph0 + sep0) + dw0)) * w0;',
+    '  float d1r = (py - (yc + a1 * sin(ph1 - sep1) - dw1)) * w1;',
     '  float d1g = (py - (yc + a1 * s1)) * w1;',
-    '  float d1b = (py - (yc + a1 * sin(ph1 + sep) + dw1)) * w1;',
-    '  float d2r = (py - (yc + a2 * sin(ph2 - sep) - dw2)) * w2;',
+    '  float d1b = (py - (yc + a1 * sin(ph1 + sep1) + dw1)) * w1;',
+    '  float d2r = (py - (yc + a2 * sin(ph2 - sep2) - dw2)) * w2;',
     '  float d2g = (py - (yc + a2 * s2)) * w2;',
-    '  float d2b = (py - (yc + a2 * sin(ph2 + sep) + dw2)) * w2;',
+    '  float d2b = (py - (yc + a2 * sin(ph2 + sep2) + dw2)) * w2;',
     '  float B    = 0.17 * vh * vh;',                    // line energy (1/d^2 core)
     '  float eps2 = 0.007 * vh * vh;',                   // core softness floor — smaller = crisper sub-band edges
     '  float hI   = 1.0 / (18.0 * vh * vh);',            // halo 1/(2*sigma^2), sigma = 3vh
