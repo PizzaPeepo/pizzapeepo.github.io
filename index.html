@@ -1331,14 +1331,13 @@
         document.body.appendChild(s);
       }
 
-      // Hero RGB prism bands — additive ribbons behind the title, white
-      // knot follows the cursor. Hero-contained + scroll-faded, rides every
-      // background mode. Self-guards WebGL2 + reduced-motion.
-      load('herobands.js');
-
       if (!fluidOn) {
         // Master off — classic wavegrid/streaks/cardan, no fluid. Fluid pills go away.
         ['asciiToggle', 'flowToggle', 'gimbalToggle', 'colsSliderWrap', 'blobSliderWrap'].forEach(hide);
+        // Hero RGB prism bands — additive ribbons behind the title, white
+        // knot follows the cursor. Hero-contained + scroll-faded; no-fluid
+        // mode only. Self-guards WebGL2 + reduced-motion.
+        load('herobands.js');
         load('wavegrid.js');
         load('streaks.js');
         load('cardan.js');
