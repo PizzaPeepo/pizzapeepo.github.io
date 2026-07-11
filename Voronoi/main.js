@@ -155,6 +155,71 @@ function strokeWalls(segs, pal) {
 	strokeSegs(segs);
 }
 
+// Polygon of site i's cell: the canvas rect clipped by the bisector
+// half-plane against every other site (Sutherland-Hodgman).
+function cellPolygon(i) {
+	const s = sites[i];
+	let poly = [[0, 0], [canvasWidth, 0], [canvasWidth, canvasHeight], [0, canvasHeight]];
+	for (let j = 0; j < sites.length && poly.length; j++) {
+		if (j === i) continue;
+		const o = sites[j];
+		const mx = (s.x + o.x) / 2, my = (s.y + o.y) / 2;
+		const nx = s.x - o.x, ny = s.y - o.y;
+		const next = [];
+		for (let k = 0; k < poly.length; k++) {
+			const a = poly[k], b = poly[(k + 1) % poly.length];
+			const da = (a[0] - mx) * nx + (a[1] - my) * ny;
+			const db = (b[0] - mx) * nx + (b[1] - my) * ny;
+			if (da >= 0) next.push(a);
+			if ((da >= 0) !== (db >= 0)) {
+				const t = da / (da - db);
+				next.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+			}
+		}
+		poly = next;
+	}
+	return poly;
+}
+
+// Border of the cell under the cursor as wall segments (px/py = owner site,
+// same shape revealedSubSegs expects). Canvas-boundary edges are dropped so
+// only true Voronoi walls light up.
+function hoverCellSegs() {
+	if (sites.length < 2) return null;
+	if (mouseX < 0 || mouseX > canvasWidth || mouseY < 0 || mouseY > canvasHeight) return null;
+	const near = nearestSite(mouseX, mouseY);
+	if (near.i < 0) return null;
+	const s = sites[near.i];
+	const poly = cellPolygon(near.i);
+	if (poly.length < 3) return null;
+	const out = [];
+	for (let k = 0; k < poly.length; k++) {
+		const a = poly[k], b = poly[(k + 1) % poly.length];
+		if ((a[0] < 1 && b[0] < 1) || (a[0] > canvasWidth - 1 && b[0] > canvasWidth - 1)
+			|| (a[1] < 1 && b[1] < 1) || (a[1] > canvasHeight - 1 && b[1] > canvasHeight - 1)) continue;
+		out.push({ x1: a[0], y1: a[1], x2: b[0], y2: b[1], px: s.x, py: s.y });
+	}
+	return out.length ? out : null;
+}
+
+// Hovered cell's edges burn brighter than the rest of the diagram: wide halo,
+// full-strength accent, then a white-hot core (additive on dark themes).
+function strokeHoverSegs(segs, pal) {
+	if (pal.additive) ctx.globalCompositeOperation = "lighter";
+	ctx.lineCap = "round";
+	const e = pal.edge;
+	ctx.strokeStyle = "rgba(" + e[0] + "," + e[1] + "," + e[2] + ",0.4)";
+	ctx.lineWidth = 8;
+	strokeSegs(segs);
+	ctx.strokeStyle = "rgb(" + e[0] + "," + e[1] + "," + e[2] + ")";
+	ctx.lineWidth = 3;
+	strokeSegs(segs);
+	ctx.strokeStyle = pal.additive ? "rgba(255,255,255,0.9)" : pal.point;
+	ctx.lineWidth = 1.4;
+	strokeSegs(segs);
+	ctx.globalCompositeOperation = "source-over";
+}
+
 function renderCells() {
 	const pal = themePalette();
 	ctx.fillStyle = pal.bgCss;
@@ -162,6 +227,8 @@ function renderCells() {
 	drawGrid(pal);
 	const segs = computeSegs();
 	if (segs.length) strokeWalls(segs, pal);
+	const hov = hoverCellSegs();
+	if (hov) strokeHoverSegs(hov, pal);
 }
 // #endregion
 
@@ -425,6 +492,8 @@ function renderGrow(now) {
 		donePulse *= 0.95;
 		if (asciiField) drawGlyphField(pal, growR, now);
 		if (segs.length) strokeWalls(segs, pal);
+		const hovDone = hoverCellSegs();
+		if (hovDone) strokeHoverSegs(hovDone, pal);
 		return;
 	}
 
@@ -444,6 +513,13 @@ function renderGrow(now) {
 
 	const built = revealedSubSegs(segs, growR);
 	if (built.segs.length) strokeWalls(built.segs, pal);
+
+	// hover highlight only on wall portions the flood has already welded
+	const hov = hoverCellSegs();
+	if (hov) {
+		const rev = revealedSubSegs(hov, growR).segs;
+		if (rev.length) strokeHoverSegs(rev, pal);
+	}
 
 	drawFronts(pal, growR);
 	if (built.sparks.length) drawSparks(pal, built.sparks);
@@ -474,6 +550,10 @@ function renderAsciiFlood(now) {
 	ensureGlyphLUT(pal);
 	ensureEmberLUT(pal);
 	const n = sites.length;
+
+	// hovered cell: its wall glyphs render at full point-color heat
+	let hoverI = -1;
+	if (n >= 2 && mouseX >= 0 && mouseX <= canvasWidth && mouseY >= 0 && mouseY <= canvasHeight) hoverI = nearestSite(mouseX, mouseY).i;
 
 	if (n > 0 && growing) {
 		advanceAsciiGrow(computeSegs());
@@ -516,7 +596,7 @@ function renderAsciiFlood(now) {
 		fOutA[i] = (st.gr + band) * (st.gr + band);
 	}
 
-	const wallCells = []; // x, y, ember-bucket triples
+	const wallCells = []; // x, y, ember-bucket, hover-flag quads
 	const frontEmits = []; // x, y, style-bucket triples for the persistence trail
 	let iy = 0;
 	for (let gy = gs * 0.5; gy < canvasHeight; gy += gs, iy++) {
@@ -567,7 +647,7 @@ function renderAsciiFlood(now) {
 				}
 			}
 			if (isWall) {
-				wallCells.push(gx, gy, ember);
+				wallCells.push(gx, gy, ember, own === hoverI || sec === hoverI ? 1 : 0);
 			} else if (fI >= 0 && (own === -1 || own === fI)) {
 				// wavefront ring, brightest at the exact radius; hidden where a
 				// closer site already owns the cell (fronts annihilate there)
@@ -604,9 +684,9 @@ function renderAsciiFlood(now) {
 
 	// walls in a bold pass so they read above the field; freshly welded
 	// cells strobe as white-hot asterisks, then cool into # embers
-	for (let i = 0; i < wallCells.length; i += 3) {
+	for (let i = 0; i < wallCells.length; i += 4) {
 		const em = wallCells[i + 2];
-		atlasStamp(ctx, em === 0 ? "*" : "#", emberLUT[em], true, wallCells[i], wallCells[i + 1], ATLAS_SLOT);
+		atlasStamp(ctx, em === 0 ? "*" : "#", wallCells[i + 3] ? pal.point : emberLUT[em], true, wallCells[i], wallCells[i + 1], ATLAS_SLOT);
 	}
 
 	// site markers: each site's letter, snapped onto the lattice
@@ -650,7 +730,7 @@ function renderAsciiFlood(now) {
 			atlasStamp(trailBCtx, "+", frontStyles[frontEmits[i + 2]], false, frontEmits[i] * 0.5, frontEmits[i + 1] * 0.5, 8);
 		}
 		trailBCtx.globalAlpha = 0.55;
-		for (let i = 0; i < wallCells.length; i += 3) {
+		for (let i = 0; i < wallCells.length; i += 4) {
 			if (wallCells[i + 2] > 1) continue;
 			atlasStamp(trailBCtx, "#", emberLUT[wallCells[i + 2]], true, wallCells[i] * 0.5, wallCells[i + 1] * 0.5, 8);
 		}
