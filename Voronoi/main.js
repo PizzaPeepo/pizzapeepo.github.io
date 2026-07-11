@@ -18,6 +18,8 @@ var growR = 0;        // current flood-fill front radius
 var growing = false;
 var growSpeed = 1;    // px per frame
 var growFill = 1;     // territory tint fade (1 -> 0 after completion)
+var donePulse = 0;    // wall flash when growth completes (1 -> 0)
+var asciiField = true; // render flooded territory as an ASCII glyph field
 
 var sites = [];        // {x, y, vx, vy}
 
@@ -38,10 +40,28 @@ function applyCanvasSize() {
 // #endregion
 
 // Theme palette (mirrors CSS tokens in CSS/theme.css: --bg, --gold, --coral, --tx)
+// additive: emissive effects may use "lighter" compositing (dark backgrounds only)
 function themePalette() {
-	if (isViper) return { bgCss: "#030806", edge: [40, 255, 69], mesh: "rgba(107,255,40,", point: "#e8ffe0" };
-	if (isLight) return { bgCss: "#faf5ee", edge: [192, 120, 0], mesh: "rgba(200,56,32,", point: "#1a1008" };
-	return { bgCss: "#181210", edge: [245, 166, 35], mesh: "rgba(255,107,71,", point: "#f5e8d4" };
+	if (isViper) return { bgCss: "#030806", edge: [40, 255, 69], coral: [107, 255, 40], point: "#e8ffe0", additive: true };
+	if (isLight) return { bgCss: "#faf5ee", edge: [192, 120, 0], coral: [200, 56, 32], point: "#1a1008", additive: false };
+	return { bgCss: "#181210", edge: [245, 166, 35], coral: [255, 107, 71], point: "#f5e8d4", additive: true };
+}
+
+// Faint graph-paper dot grid under everything (cached pattern per theme)
+var gridPatternKey = "";
+var gridPattern = null;
+function drawGrid(pal) {
+	if (gridPatternKey !== pal.bgCss) {
+		const tile = document.createElement("canvas");
+		tile.width = tile.height = 28;
+		const tctx = tile.getContext("2d");
+		tctx.fillStyle = "rgba(" + pal.edge[0] + "," + pal.edge[1] + "," + pal.edge[2] + ",0.13)";
+		tctx.fillRect(13, 13, 2, 2);
+		gridPattern = ctx.createPattern(tile, "repeat");
+		gridPatternKey = pal.bgCss;
+	}
+	ctx.fillStyle = gridPattern;
+	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 }
 
 function makeSite() {
@@ -103,9 +123,10 @@ function computeSegs() {
 
 function strokeWalls(segs, pal) {
 	ctx.lineCap = "round";
-	// soft halo pass under a crisp core line
-	ctx.strokeStyle = "rgba(" + pal.edge[0] + "," + pal.edge[1] + "," + pal.edge[2] + ",0.28)";
-	ctx.lineWidth = 3.5;
+	// soft halo pass under a crisp core line; the halo flares with donePulse
+	const haloA = Math.min(1, 0.28 + 0.34 * donePulse);
+	ctx.strokeStyle = "rgba(" + pal.edge[0] + "," + pal.edge[1] + "," + pal.edge[2] + "," + haloA.toFixed(3) + ")";
+	ctx.lineWidth = 3.5 + 9 * donePulse;
 	strokeSegs(segs);
 	ctx.strokeStyle = "rgb(" + pal.edge[0] + "," + pal.edge[1] + "," + pal.edge[2] + ")";
 	ctx.lineWidth = 1.25;
@@ -116,6 +137,7 @@ function renderCells() {
 	const pal = themePalette();
 	ctx.fillStyle = pal.bgCss;
 	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+	drawGrid(pal);
 	const segs = computeSegs();
 	if (segs.length) strokeWalls(segs, pal);
 }
@@ -130,8 +152,11 @@ function startGrow() {
 
 // Portion of each Voronoi edge already reached by both fronts: points p on the
 // segment with |p - site| <= R (both generating sites are equidistant there).
+// Unclamped roots inside (0,1) are the live collision points where two fronts
+// are welding the wall right now — returned as spark positions.
 function revealedSubSegs(segs, R) {
 	const out = [];
+	const sparks = [];
 	for (const s of segs) {
 		const ax = s.x1 - s.px, ay = s.y1 - s.py;
 		const dx = s.x2 - s.x1, dy = s.y2 - s.y1;
@@ -143,12 +168,84 @@ function revealedSubSegs(segs, R) {
 		if (disc <= 0) continue;
 		const sq = Math.sqrt(disc);
 		let t0 = (-b - sq) / (2 * a), t1 = (-b + sq) / (2 * a);
+		if (t0 > 0 && t0 < 1) sparks.push([s.x1 + dx * t0, s.y1 + dy * t0]);
+		if (t1 > 0 && t1 < 1) sparks.push([s.x1 + dx * t1, s.y1 + dy * t1]);
 		if (t0 < 0) t0 = 0;
 		if (t1 > 1) t1 = 1;
 		if (t1 - t0 <= 0) continue;
 		out.push({ x1: s.x1 + dx * t0, y1: s.y1 + dy * t0, x2: s.x1 + dx * t1, y2: s.y1 + dy * t1 });
 	}
-	return out;
+	return { segs: out, sparks: sparks };
+}
+
+function drawSparks(pal, sparks) {
+	if (pal.additive) ctx.globalCompositeOperation = "lighter";
+	const e = pal.edge;
+	const halo = "rgba(" + e[0] + "," + e[1] + "," + e[2] + ",0.14)";
+	const mid = "rgba(" + e[0] + "," + e[1] + "," + e[2] + ",0.4)";
+	const core = pal.additive ? "rgba(255,255,255,0.95)" : pal.point;
+	for (const [x, y] of sparks) {
+		const flick = 0.8 + Math.random() * 0.5;
+		ctx.fillStyle = halo;
+		ctx.beginPath(); ctx.arc(x, y, 9 * flick, 0, Math.PI * 2); ctx.fill();
+		ctx.fillStyle = mid;
+		ctx.beginPath(); ctx.arc(x, y, 3.8 * flick, 0, Math.PI * 2); ctx.fill();
+		ctx.fillStyle = core;
+		ctx.beginPath(); ctx.arc(x, y, 1.7, 0, Math.PI * 2); ctx.fill();
+	}
+	ctx.globalCompositeOperation = "source-over";
+}
+
+// Flooded territory as a living ASCII glyph lattice (nod to the index page):
+// brightness ripples inward from the wavefront, cells keep their owner's
+// accent (gold/coral alternating), and glyphs near finished walls stay dense.
+var GLYPH_RAMP = [" ", ".", "·", ":", "-", "=", "+", "*", "#", "@"];
+var glyphLUTKey = "";
+var glyphLUT = null; // [2 colors][10 levels] fill styles
+function drawGlyphField(pal, R, now) {
+	if (glyphLUTKey !== pal.bgCss) {
+		glyphLUT = [[], []];
+		const cols = [pal.edge, pal.coral];
+		for (let ci = 0; ci < 2; ci++) {
+			for (let l = 0; l < 10; l++) {
+				const al = (0.05 + 0.075 * l).toFixed(3);
+				glyphLUT[ci].push("rgba(" + cols[ci][0] + "," + cols[ci][1] + "," + cols[ci][2] + "," + al + ")");
+			}
+		}
+		glyphLUTKey = pal.bgCss;
+	}
+	ctx.font = "12px 'IBM Plex Mono', monospace";
+	ctx.textAlign = "center";
+	ctx.textBaseline = "middle";
+	const gs = 15;
+	const n = sites.length;
+	const boost = 1 + donePulse * 0.8;
+	for (let gy = gs * 0.5; gy < canvasHeight; gy += gs) {
+		for (let gx = gs * 0.5; gx < canvasWidth; gx += gs) {
+			let d1 = Infinity, d2 = Infinity, own = 0;
+			for (let s = 0; s < n; s++) {
+				const dx = gx - sites[s].x, dy = gy - sites[s].y;
+				const d = dx * dx + dy * dy;
+				if (d < d1) { d2 = d1; own = s; d1 = d; }
+				else if (d < d2) { d2 = d; }
+			}
+			const r1 = Math.sqrt(d1);
+			if (r1 > R) continue;
+			const age = R - r1;
+			const base = Math.max(0.24, 1 - age / 1000);
+			const rip = 0.55 + 0.45 * Math.sin(age * 0.045 - now * 0.002);
+			let lvl = Math.round(base * rip * boost * 9);
+			// wall glow: both fronts arrived and the border is close by
+			if (d2 !== Infinity) {
+				const r2 = Math.sqrt(d2);
+				if (r2 <= R && r2 - r1 < 12 && lvl < 6) lvl = 6;
+			}
+			if (lvl < 1) continue;
+			if (lvl > 9) lvl = 9;
+			ctx.fillStyle = glyphLUT[own % 2][lvl];
+			ctx.fillText(GLYPH_RAMP[lvl], gx, gy);
+		}
+	}
 }
 
 // Expanding wavefronts: each site's circle of radius R, minus the angular
@@ -157,9 +254,6 @@ function revealedSubSegs(segs, R) {
 function drawFronts(pal, R) {
 	const TAU = Math.PI * 2;
 	const n = sites.length;
-	ctx.globalAlpha = 0.8;
-	ctx.strokeStyle = pal.point;
-	ctx.lineWidth = 1;
 	ctx.beginPath();
 	for (let i = 0; i < n; i++) {
 		const s = sites[i];
@@ -198,20 +292,33 @@ function drawFronts(pal, R) {
 			ctx.arc(s.x, s.y, R, a0, a1);
 		}
 	}
+	// three strokes of the same path: wide soft glow under a crisp leading edge
+	ctx.strokeStyle = pal.point;
+	ctx.globalAlpha = 0.1;
+	ctx.lineWidth = 7;
+	ctx.stroke();
+	ctx.globalAlpha = 0.28;
+	ctx.lineWidth = 3;
+	ctx.stroke();
+	ctx.globalAlpha = 0.9;
+	ctx.lineWidth = 1.1;
 	ctx.stroke();
 	ctx.globalAlpha = 1;
 }
 
-function renderGrow() {
+function renderGrow(now) {
 	const pal = themePalette();
 	ctx.fillStyle = pal.bgCss;
 	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+	drawGrid(pal);
 	const n = sites.length;
 	if (n === 0) return;
 	const segs = computeSegs();
 
-	// growth finished and tint faded out: just the completed diagram
+	// growth finished and tint faded out: completed diagram over the glyph field
 	if (!growing && growR > 0 && growFill <= 0.005) {
+		donePulse *= 0.95;
+		if (asciiField) drawGlyphField(pal, growR, now);
 		if (segs.length) strokeWalls(segs, pal);
 		return;
 	}
@@ -233,23 +340,27 @@ function renderGrow() {
 
 	if (growing && !paused) {
 		growR += growSpeed;
-		if (growR >= need + 12) { growR = need + 12; growing = false; }
+		if (growR >= need + 12) { growR = need + 12; growing = false; donePulse = 1; }
 	}
 	if (growR <= 0) return;
 
 	// flooded territory: the union of discs equals the union of claimed cells
 	if (growFill > 0.005) {
-		ctx.fillStyle = "rgba(" + pal.edge[0] + "," + pal.edge[1] + "," + pal.edge[2] + "," + (0.09 * growFill).toFixed(3) + ")";
+		ctx.fillStyle = "rgba(" + pal.edge[0] + "," + pal.edge[1] + "," + pal.edge[2] + "," + (0.05 * growFill).toFixed(3) + ")";
 		ctx.beginPath();
 		for (const s of sites) { ctx.moveTo(s.x + growR, s.y); ctx.arc(s.x, s.y, growR, 0, Math.PI * 2); }
 		ctx.fill();
 	}
 	if (!growing && !paused) growFill = Math.max(0, growFill - 0.015);
+	donePulse *= 0.95;
+
+	if (asciiField) drawGlyphField(pal, growR, now);
 
 	const built = revealedSubSegs(segs, growR);
-	if (built.length) strokeWalls(built, pal);
+	if (built.segs.length) strokeWalls(built.segs, pal);
 
 	drawFronts(pal, growR);
+	if (built.sparks.length) drawSparks(pal, built.sparks);
 }
 // #endregion
 
@@ -259,11 +370,12 @@ function renderDelaunay(overlay) {
 	if (!overlay) {
 		ctx.fillStyle = pal.bgCss;
 		ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+		drawGrid(pal);
 	}
 	if (sites.length < 3) return;
 	const tris = triangulate(sites);
 	ctx.lineWidth = 1;
-	ctx.strokeStyle = pal.mesh + (overlay ? "0.45)" : "0.7)");
+	ctx.strokeStyle = "rgba(" + pal.coral[0] + "," + pal.coral[1] + "," + pal.coral[2] + "," + (overlay ? "0.45)" : "0.7)");
 	ctx.beginPath();
 	for (const tr of tris) {
 		const a = sites[tr.a], b = sites[tr.b], c = sites[tr.c];
@@ -284,9 +396,9 @@ function drawPoints() {
 	}
 }
 
-function render() {
+function render(now) {
 	if (mode === "grow") {
-		renderGrow();
+		renderGrow(now);
 	} else if (view === "cells") {
 		renderCells();
 	} else if (view === "delaunay") {
@@ -376,6 +488,10 @@ var pointsCheckbox = document.getElementById("pointsCheckbox");
 pointsCheckbox.checked = showPoints;
 pointsCheckbox.onclick = function () { showPoints = this.checked; };
 
+var asciiCheckbox = document.getElementById("asciiCheckbox");
+asciiCheckbox.checked = asciiField;
+asciiCheckbox.onclick = function () { asciiField = this.checked; };
+
 var pauseButton = document.getElementById("pauseButton");
 pauseButton.onclick = togglePause;
 function togglePause() {
@@ -421,13 +537,17 @@ backgroundCanvas.addEventListener("mousedown", function (e) {
 backgroundCanvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 // #endregion
 
-// debug boot param: ?grow=1 jumps straight into flood-fill growth
-if (new URLSearchParams(location.search).get("grow") === "1") {
+// debug boot params: ?grow=1 jumps straight into flood-fill growth,
+// &gspd=N overrides growth speed (headless verification)
+var bootParams = new URLSearchParams(location.search);
+if (bootParams.get("grow") === "1") {
 	const radio = document.querySelector('input[name="mode"][value="grow"]');
 	radio.checked = true;
 	radio.dispatchEvent(new Event("change"));
 	startGrow();
 }
+var bootGspd = parseFloat(bootParams.get("gspd"));
+if (bootGspd > 0) growSpeed = bootGspd;
 
 // #region loop
 var fpsBadge = document.getElementById("fpsBadge");
@@ -439,7 +559,7 @@ function draw(now) {
 	if (document.hidden) return;
 
 	if (!paused && mode === "drift") moveSites();
-	render();
+	render(now);
 
 	frameCount++;
 	if (now - lastFpsUpdate >= 500) {
