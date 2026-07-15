@@ -11,7 +11,6 @@ import { createDyeReadback } from './dye-readback.js';
 import { createHeroText } from './hero-text.js';
 import { readPalette, onPalette } from './theme-palette.js';
 
-const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const isMobile = window.innerWidth <= 700;
 
 const old = document.getElementById('asciibgCanvas');
@@ -163,7 +162,7 @@ if (!fluid) {
 	}
 
 	// Fast-forward so the page opens with a developed field, not a black slate.
-	const WARMUP = reducedMotion ? 300 : 180;
+	const WARMUP = 180;
 	for (let i = 0; i < WARMUP; i++) {
 		ambient.apply(1 / 60, palette, ambientOn);
 		fluid.step(1 / 60);
@@ -172,7 +171,7 @@ if (!fluid) {
 	present();
 	setTimeout(() => { canvas.style.opacity = '1'; }, 300);
 
-	if (!reducedMotion) {
+	{
 		// Mouse-move splats — window-level (canvas is pointer-events:none).
 		let lastX = -1, lastY = -1;
 		window.addEventListener('pointermove', e => {
@@ -226,11 +225,5 @@ if (!fluid) {
 		document.addEventListener('visibilitychange', () => {
 			if (!document.hidden) { last = performance.now(); requestAnimationFrame(tick); }
 		});
-	} else {
-		// Reduced motion: developed field rendered once, re-presented on theme change.
-		// Toggles are pointless on a static frame — hide them.
-		if (flowBtn) flowBtn.style.display = 'none';
-		if (gimbalBtn) gimbalBtn.style.display = 'none';
-		onPalette(() => present());
 	}
 }

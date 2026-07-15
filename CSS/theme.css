@@ -152,9 +152,6 @@ body { animation: pageArrive 0.32s ease-out; }
 #backgroundCanvas { animation: pageArrive  0.5s  ease-out 0.2s backwards; }
 @keyframes arriveDrop  { from { opacity: 0; transform: translateY(-8px); } }
 @keyframes arriveSlide { from { opacity: 0; transform: translateX(16px); } }
-@media (prefers-reduced-motion: reduce) {
-  .back-link, .hud-panel, #backgroundCanvas { animation: none; }
-}
 
 /* Cross-document view transition (Chrome 126+): browser crossfades the old
    page's last frame (the landing iris) into this page. Progressive — browsers

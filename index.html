@@ -881,13 +881,11 @@
     }
     html.viper ::-webkit-scrollbar-thumb:hover { background: #21d977; }
 
-    @media (prefers-reduced-motion: no-preference) {
-      html.viper .card::before,
-      html.viper .hdr-title em,
-      html.viper .hdr-eyebrow .pip,
-      html.viper .card:hover .card-title .ttl-ch,
-      html.viper .card.card-pill-hover .card-title .ttl-ch { animation: none; }
-    }
+    html.viper .card::before,
+    html.viper .hdr-title em,
+    html.viper .hdr-eyebrow .pip,
+    html.viper .card:hover .card-title .ttl-ch,
+    html.viper .card.card-pill-hover .card-title .ttl-ch { animation: none; }
 
     /* ─── FOCUS — keyboard path mirrors the hover path ─── */
     .card:focus-visible {
@@ -978,7 +976,7 @@
 
   <!-- Ascii/flow/gimbal toggles — asciibg controls, ASCII first, laid out
        horizontally. Flow/gimbal hidden when the background is static
-       (no WebGL2 / reduced motion, or classic-mode fallback) -->
+       (no WebGL2, or classic-mode fallback) -->
   <div class="left-toggles">
     <button class="theme-toggle fluid-toggle" id="fluidToggle" aria-pressed="true" aria-label="Toggle fluid simulation">
       <span class="toggle-icon">≈</span>
@@ -1336,7 +1334,7 @@
         ['asciiToggle', 'flowToggle', 'gimbalToggle', 'colsSliderWrap', 'blobSliderWrap'].forEach(hide);
         // Hero RGB prism bands — additive ribbons behind the title, white
         // knot follows the cursor. Hero-contained + scroll-faded; no-fluid
-        // mode only. Self-guards WebGL2 + reduced-motion.
+        // mode only. Self-guards WebGL2.
         load('herobands.js');
         load('wavegrid.js');
         load('streaks.js');
@@ -1644,8 +1642,7 @@
          animation-fill backwards (not both) so the repel transform regains
          control of the chars once the spring finishes. */
       var em = title.querySelector('em');
-      var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      if (em && !reduced) {
+      if (em) {
         var WORDS = ['interactive.', 'chaotic.', 'emergent.', 'oscillate.', 'flow.'];
         var wi = 0;
         var heroVisible = true;
@@ -1777,7 +1774,6 @@
       var committedFilter = 'all';
       var animating = false;
       var timers = [];
-      var REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
       function visibleUnder(filter, card) {
         return filter === 'all' || (card.dataset.cat || '') === filter;
@@ -1827,8 +1823,6 @@
         settle(prevFilter);           // cancel any in-flight anim, snap to settled prev layout
         grid.classList.toggle('filtered', newFilter !== 'all');
         committedFilter = newFilter;
-
-        if (REDUCE) { settle(newFilter); return; }
 
         var isSwitch = prevFilter !== 'all';   // filter → filter (vs. All → filter)
         var staying = [], entering = [], leaving = [];
@@ -2039,7 +2033,7 @@
   <script>
     /* Page iris — clicking a card grows it into a full-screen title card, then the
        demo loads behind it: a match cut instead of a hard navigation. Modified
-       clicks (new tab) and reduced-motion users get the plain navigation. */
+       clicks (new tab) get the plain navigation. */
     (function () {
       var live = null;
       var liveRaf = 0;

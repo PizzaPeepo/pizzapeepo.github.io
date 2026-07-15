@@ -19,11 +19,10 @@
    Self-mounting fixed full-window canvas, pointer-events:none, z-index 0
    (above the background canvases, below the .wrap content at z-index 1).
    Mirrors wavegrid.js: WebGL2, theme read from documentElement.classList each
-   frame, self-guards no-WebGL2 + reduced-motion. */
+   frame, self-guards no-WebGL2. */
 (function () {
   'use strict';
 
-  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var knotDemo = new URLSearchParams(location.search).get('knot') === '1';   // headless: force the convergence knot
 
   var canvas = document.createElement('canvas');
@@ -295,7 +294,7 @@
     gl.viewport(0, 0, canvas.width, canvas.height);
   }
   resize();
-  window.addEventListener('resize', function () { resize(); measureCenter(); if (reduced) render(); });
+  window.addEventListener('resize', function () { resize(); measureCenter(); });
 
   /* Band centre sits just below the hero title, as a fraction of the
      viewport height. Measured at rest (top of page); the layer fades on scroll,
@@ -320,7 +319,7 @@
   var gx = mxTgt, gy = myTgt, gxCur = gx, gyCur = gy, dragCur = 0, dragTgt = 0;
   var gxV = 0, gyV = 0;                   // grab-point spring velocity (px/s)
   if (knotDemo) { focusTgt = 1; dragTgt = 1; gx = window.innerWidth * 0.5; gy = window.innerHeight * (centerFrac - 0.12); }
-  if (!reduced) {
+  {   // pointer-drag: grab the wire
     window.addEventListener('pointerdown', function (e) {
       if (e.button !== 0) return;
       gx = mxTgt = e.clientX; gy = myTgt = e.clientY; gxCur = gx; focusTgt = 1; dragTgt = 1;
@@ -371,7 +370,7 @@
     focusCur += (focusTgt - focusCur) * 0.06;
     dragCur += (dragTgt - dragCur) * 0.1;
 
-    if (!reduced && dt > 0) simWire(dt);
+    if (dt > 0) simWire(dt);
 
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -380,20 +379,13 @@
     gl.bindTexture(gl.TEXTURE_2D, wireTex);
     gl.uniform1i(LOC.uWire, 0);
     gl.uniform2f(LOC.uRes, canvas.width, canvas.height);
-    gl.uniform1f(LOC.uTime, reduced ? 3.0 : t);
+    gl.uniform1f(LOC.uTime, t);
     gl.uniform2f(LOC.uMouse, mxCur * pr, myCur * pr);
     gl.uniform1f(LOC.uFocus, focusCur);
     gl.uniform1f(LOC.uCenter, centerFrac);
     gl.uniform1f(LOC.uFade, fade);
     gl.uniform1f(LOC.uOpacity, cls.contains('light') ? 0.65 : 1.0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-  }
-
-  if (reduced) {
-    // Static developed frame; re-render on theme swap only.
-    render();
-    document.addEventListener('themechange', function () { render(); });
-    return;
   }
 
   function frame(now) {
