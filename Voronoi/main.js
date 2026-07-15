@@ -1,5 +1,5 @@
 import { triangulate, voronoiEdges } from "./Delaunay.js";
-import { createAsciiGL } from "./asciiGL.js";
+import { createAsciiGL, MAX_SITES } from "./asciiGL.js";
 
 // Voronoi edges as crisp vector lines (dual of the Delaunay triangulation),
 // Delaunay mesh via Bowyer-Watson. Sites drift and bounce.
@@ -25,6 +25,18 @@ var runners = [];      // data packets riding finished walls (ASCII mode)
 var asciiSegs = null;  // cached in-canvas wall geometry for the runners
 
 var sites = [];        // {x, y, vx, vy}
+// Bumped whenever a site is added, removed or moved. Everything derived from the
+// site positions (Delaunay tris, Voronoi segs, site adjacency) is cached against
+// it — in grow/ascii modes the sites never move, so the whole geometry pipeline
+// runs once instead of two full Bowyer-Watson passes per frame.
+var siteVersion = 0;
+var WAVE_MAXR = 900;   // interior-wave period, in px of geodesic distance (mirrors maxR in asciiGL.js)
+var WAVE_HOVER_PERIOD = 4000;  // ms between successive hover-ring launches — the one knob to tune
+var WAVE_HOVER_SPD = 0.5;      // hover-ring speed, px per ms (mirrors the *0.5 in asciiGL.js glyphFrag)
+var WAVE_HOVER_SPACING = WAVE_HOVER_PERIOD * WAVE_HOVER_SPD; // geodesic px between rings (fed to GL as uWaveS)
+var WAVE_HOVER_MAXR = 2 * WAVE_HOVER_SPACING; // death radius: amplitude 1−R/maxR reaches 0 exactly when the ring's 2nd successor launches
+var waveT0 = -1;       // timestamp of the last hovered-cell change; hover rings launch from it
+var lastHoverI = -1;
 
 var isLight = document.documentElement.classList.contains("light");
 var isViper = document.documentElement.classList.contains("viper");
@@ -66,6 +78,12 @@ function applyCanvasSize() {
 	glCanvas.style.width = canvasWidth + "px";
 	glCanvas.style.height = canvasHeight + "px";
 	if (asciiGLReady) asciiGLR.resize(canvasWidth, canvasHeight);
+}
+
+// CPU-fallback counterpart of asciiGL's clearTrail()
+function clearTrail2D() {
+	trailACtx.clearRect(0, 0, trailA.width, trailA.height);
+	trailBCtx.clearRect(0, 0, trailB.width, trailB.height);
 }
 // #endregion
 
@@ -136,6 +154,7 @@ function buildSites() {
 	growing = false;
 	asciiSegs = null;
 	runners.length = 0;
+	siteVersion++;
 }
 
 applyCanvasSize();
@@ -152,6 +171,43 @@ function moveSites() {
 		if (s.y < 0) { s.y = 0; s.vy = Math.abs(s.vy); }
 		else if (s.y > canvasHeight) { s.y = canvasHeight; s.vy = -Math.abs(s.vy); }
 	}
+	siteVersion++;
+}
+
+// Site-derived geometry, memoized on siteVersion. In drift mode the version bumps
+// every frame (so these recompute as before); in grow/ascii mode the sites are
+// static and every consumer shares one triangulation.
+var _trisCache = null, _trisVer = -1;
+function cachedTris() {
+	if (_trisVer !== siteVersion) { _trisCache = triangulate(sites); _trisVer = siteVersion; }
+	return _trisCache;
+}
+var _segsCache = null, _segsVer = -1;
+function cachedSegs() {
+	if (_segsVer !== siteVersion) { _segsCache = computeSegs(); _segsVer = siteVersion; }
+	return _segsCache;
+}
+// Site-to-site adjacency (Delaunay edges) as flat [neighbor, weight, ...] arrays.
+var _adjCache = null, _adjVer = -1;
+function cachedAdj() {
+	if (_adjVer === siteVersion && _adjCache) return _adjCache;
+	const n = sites.length;
+	const adj = [];
+	for (let i = 0; i < n; i++) adj.push([]);
+	const seen = new Set();
+	function edge(a, b) {
+		if (a >= n || b >= n) return;
+		if (a > b) { const t = a; a = b; b = t; }
+		const k = a * 1000000 + b;
+		if (seen.has(k)) return;
+		seen.add(k);
+		const w = Math.hypot(sites[a].x - sites[b].x, sites[a].y - sites[b].y);
+		adj[a].push(b, w); adj[b].push(a, w);
+	}
+	for (const tr of cachedTris()) { edge(tr.a, tr.b); edge(tr.b, tr.c); edge(tr.c, tr.a); }
+	_adjCache = adj;
+	_adjVer = siteVersion;
+	return adj;
 }
 // #endregion
 
@@ -175,7 +231,7 @@ function computeSegs() {
 		dx = dx / len * rayLength; dy = dy / len * rayLength;
 		return [{ x1: mx - dx, y1: my - dy, x2: mx + dx, y2: my + dy, px: a.x, py: a.y }];
 	}
-	return voronoiEdges(sites, triangulate(sites), rayLength);
+	return voronoiEdges(sites, cachedTris(), rayLength);
 }
 
 function strokeWalls(segs, pal) {
@@ -260,7 +316,7 @@ function renderCells() {
 	ctx.fillStyle = pal.bgCss;
 	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 	drawGrid(pal);
-	const segs = computeSegs();
+	const segs = cachedSegs();
 	if (segs.length) strokeWalls(segs, pal);
 	const hov = hoverCellSegs();
 	if (hov) strokeHoverSegs(hov, pal);
@@ -283,6 +339,22 @@ function segInCanvas(s) {
 		&& s.x2 > -pad && s.x2 < canvasWidth + pad && s.y2 > -pad && s.y2 < canvasHeight + pad;
 }
 
+// Liang-Barsky half-plane step: shrink [_lbT0, _lbT1] so p·t <= q holds;
+// false when the segment misses the half-plane entirely.
+var _lbT0 = 0, _lbT1 = 1;
+function lbClip(p, q) {
+	if (p === 0) return q >= 0;
+	const r = q / p;
+	if (p < 0) {
+		if (r > _lbT1) return false;
+		if (r > _lbT0) _lbT0 = r;
+	} else {
+		if (r < _lbT0) return false;
+		if (r < _lbT1) _lbT1 = r;
+	}
+	return true;
+}
+
 // Radius at which every canvas corner is claimed and every in-view Voronoi
 // vertex is reached -> growth is visually complete.
 function needRadius(segs) {
@@ -295,8 +367,18 @@ function needRadius(segs) {
 		need = Math.max(need, d1);
 	}
 	for (const s of segs) {
-		if (s.x1 < -pad || s.x1 > canvasWidth + pad || s.y1 < -pad || s.y1 > canvasHeight + pad) continue;
-		need = Math.max(need, Math.hypot(s.x1 - s.px, s.y1 - s.py));
+		// clip each wall to the padded canvas and measure both clip endpoints:
+		// a Voronoi vertex can appear only as (x2,y2) (a triangle whose shared-
+		// edge partners all precede it is never t1 in voronoiEdges), and a wall
+		// can cross the canvas with both raw endpoints outside the pad — either
+		// undershoots `need` and freezes the flood before the walls close
+		const dx = s.x2 - s.x1, dy = s.y2 - s.y1;
+		_lbT0 = 0; _lbT1 = 1;
+		if (!lbClip(-dx, s.x1 + pad) || !lbClip(dx, canvasWidth + pad - s.x1)
+			|| !lbClip(-dy, s.y1 + pad) || !lbClip(dy, canvasHeight + pad - s.y1)) continue;
+		need = Math.max(need,
+			Math.hypot(s.x1 + dx * _lbT0 - s.px, s.y1 + dy * _lbT0 - s.py),
+			Math.hypot(s.x1 + dx * _lbT1 - s.px, s.y1 + dy * _lbT1 - s.py));
 	}
 	return need;
 }
@@ -520,7 +602,7 @@ function renderGrow(now) {
 	drawGrid(pal);
 	const n = sites.length;
 	if (n === 0) return;
-	const segs = computeSegs();
+	const segs = cachedSegs();
 
 	// growth finished and tint faded out: completed diagram over the glyph field
 	if (!growing && growR > 0 && growFill <= 0.005) {
@@ -598,15 +680,93 @@ function hideAsciiCanvas() {
 	backgroundCanvas.style.visibility = "";
 }
 
+// Wave-phase offset per site, feeding the interior ripple (see the glyph shader).
+// Hovering: Dijkstra over the Delaunay (Voronoi) adjacency seeded at the hovered
+// site (dist = 0 there, not cursor distance — anchoring at the site keeps the
+// whole field stable while the cursor roams inside one cell), so the ripple
+// propagates cell-to-cell across shared borders instead of as a raw Euclidean
+// circle. Not hovering: each site gets a fixed golden-angle phase spread
+// over the wave period, so the field keeps breathing (out of step, never in
+// unison) instead of freezing into a still image.
+// Returns a reused Float64Array. Cheap: n ≤ a few hundred, O(n²) Dijkstra.
+var _geoDist = new Float64Array(0);
+var _geoDone = new Uint8Array(0);
+function computeGeoDist(mSite) {
+	const n = sites.length;
+	if (_geoDist.length < n) { _geoDist = new Float64Array(n); _geoDone = new Uint8Array(n); }
+	const dist = _geoDist;
+	if (mSite < 0 || mSite >= n) {
+		for (let i = 0; i < n; i++) dist[i] = (i * 137.508) % WAVE_MAXR;
+		return dist;
+	}
+	for (let i = 0; i < n; i++) dist[i] = Infinity;
+	if (n < 3) { // no triangulation possible — fall back to straight site distances
+		for (let i = 0; i < n; i++) dist[i] = Math.hypot(sites[i].x - sites[mSite].x, sites[i].y - sites[mSite].y);
+		dist[mSite] = 0;
+		return dist;
+	}
+	const adj = cachedAdj();
+	dist[mSite] = 0;
+	const done = _geoDone;
+	done.fill(0, 0, n);
+	for (let it = 0; it < n; it++) {
+		let u = -1, best = Infinity;
+		for (let i = 0; i < n; i++) if (!done[i] && dist[i] < best) { best = dist[i]; u = i; }
+		if (u < 0) break;
+		done[u] = 1;
+		const a = adj[u];
+		for (let e = 0; e < a.length; e += 2) {
+			const nd = dist[u] + a[e + 1];
+			if (nd < dist[a[e]]) dist[a[e]] = nd;
+		}
+	}
+	return dist;
+}
+
+// Hover rings are launched, not free-running: entering a cell stamps waveT0 and
+// the ring expands from radius 0 at the hovered site, so the wave is visibly
+// born at the cursor's cell instead of appearing mid-flight.
+function trackHoverWave(hoverI, now) {
+	if (hoverI !== lastHoverI) { lastHoverI = hoverI; waveT0 = now; }
+	return hoverI >= 0 ? waveT0 : -1;
+}
+
+// Comet-crest sample at geodesic distance W (mirrors the GL glyph shader):
+// razor leading edge, long trailing tail. Sets _crest (brightness drive) and
+// _hot (color temperature — cools as the ring expands and its amplitude dies).
+// Callers guard on hoverI >= 0.
+var _crest = 0, _hot = 0;
+function crestAt(W, now) {
+	_crest = 0; _hot = 0;
+	const t = (now - waveT0) * WAVE_HOVER_SPD, S = WAVE_HOVER_SPACING;
+	const Ra = t % S, xa = W - Ra;
+	const pa = xa > 0 ? Math.exp(-xa * xa / 128) : Math.exp(-xa * xa / 1250);
+	const wa = xa < 0 ? Math.exp(xa / 200) : 0;
+	const aa = 1 - Ra / WAVE_HOVER_MAXR;
+	_crest = (pa + 0.25 * wa) * aa; _hot = pa * aa * aa;
+	if (t >= S) {
+		const Rb = Ra + S, xb = W - Rb;
+		const pb = xb > 0 ? Math.exp(-xb * xb / 128) : Math.exp(-xb * xb / 1250);
+		const wb = xb < 0 ? Math.exp(xb / 200) : 0;
+		const ab = 1 - Rb / WAVE_HOVER_MAXR;
+		_crest += (pb + 0.25 * wb) * ab;
+		const hb = pb * ab * ab;
+		if (hb > _hot) _hot = hb;
+	}
+}
+
 function renderAsciiFloodGL(now) {
 	const n = sites.length;
 	let hoverI = -1;
 	if (n >= 2 && mouseX >= 0 && mouseX <= canvasWidth && mouseY >= 0 && mouseY <= canvasHeight) hoverI = nearestSite(mouseX, mouseY).i;
-	// growth + wall geometry stay on the CPU: cheap (O(n log n), growth only)
-	if (n > 0 && growing) advanceAsciiGrow(computeSegs());
+	const geo = computeGeoDist(hoverI);
+	const wT0 = trackHoverWave(hoverI, now);
+	// growth + wall geometry stay on the CPU; the triangulation is memoized on
+	// siteVersion, and ASCII-mode sites never move, so this is a no-op per frame
+	if (n > 0 && growing) advanceAsciiGrow(cachedSegs());
 	else donePulse *= 0.95;
 	asciiGLR.render({
-		sites: sites, n: n, now: now, hoverI: hoverI,
+		sites: sites, n: n, now: now, hoverI: hoverI, waveT0: wT0, geo: geo, waveS: WAVE_HOVER_SPACING,
 		donePulse: donePulse, mouseX: mouseX, mouseY: mouseY,
 		showPoints: showPoints, paused: paused, theme: glTheme(),
 	});
@@ -623,9 +783,11 @@ function renderAsciiFlood(now) {
 	// hovered cell: its wall glyphs render at full point-color heat
 	let hoverI = -1;
 	if (n >= 2 && mouseX >= 0 && mouseX <= canvasWidth && mouseY >= 0 && mouseY <= canvasHeight) hoverI = nearestSite(mouseX, mouseY).i;
+	const geo = computeGeoDist(hoverI);
+	trackHoverWave(hoverI, now);
 
 	if (n > 0 && growing) {
-		advanceAsciiGrow(computeSegs());
+		advanceAsciiGrow(cachedSegs());
 	} else {
 		donePulse *= 0.95;
 	}
@@ -633,7 +795,7 @@ function renderAsciiFlood(now) {
 	const gs = 15;
 	const e = pal.edge;
 	const paperStyle = "rgba(" + e[0] + "," + e[1] + "," + e[2] + ",0.07)";
-	const band = gs * 0.7;
+	const band = gs * 0.42;   // wavefront-ring half-width (thinner = crisper front)
 	const boost = 1 + donePulse * 0.8;
 	const pr = pal.pointRgb;
 	// quantized styles so every draw goes through the glyph atlas
@@ -675,9 +837,11 @@ function renderAsciiFlood(now) {
 			// plus the wavefront ring passing closest to it
 			let own = -1, sec = -1, D1 = Infinity, D2 = Infinity;
 			let fI = -1, fDd = 0, fRel = Infinity;
+			let wBest = Infinity;
 			for (let s = 0; s < n; s++) {
 				const dx = gx - sxA[s], dy = gy - syA[s];
 				const d = dx * dx + dy * dy;
+				if (hoverI >= 0) { const w = geo[s] + Math.sqrt(d); if (w < wBest) wBest = w; }
 				if (d <= sg2A[s]) {
 					if (d < D1) { D2 = D1; sec = own; D1 = d; own = s; }
 					else if (d < D2) { D2 = d; sec = s; }
@@ -716,24 +880,39 @@ function renderAsciiFlood(now) {
 				}
 			}
 			if (isWall) {
-				wallCells.push(gx, gy, ember, own === hoverI || sec === hoverI ? 1 : 0);
+				wallCells.push(gx, gy, ember, own === hoverI || sec === hoverI ? 1 : 0, wBest);
 			} else if (fI >= 0 && (own === -1 || own === fI)) {
 				// wavefront ring, brightest at the exact radius; hidden where a
 				// closer site already owns the cell (fronts annihilate there)
 				const fT = 1 - Math.abs(Math.sqrt(fDd) - sgA[fI]) / band;
-				if (fT > 0) {
+				if (fT > 0.3) {   // drop the dim outer skirt → thin crest
 					const fb = Math.min(3, (fT * 4) | 0);
 					atlasStamp(ctx, FRONT_RAMP[fb], frontStyles[fb], false, gx, gy, ATLAS_SLOT);
 					if (fT > 0.55) frontEmits.push(gx, gy, fb);
 				}
 			} else if (own >= 0) {
-				// interior: claim-age ripple + a heartbeat radiating from the
-				// owner site forever; bright cells spell the owner's letter
+				// interior: a resting density ramp (time-independent, so cells
+				// don't pulse in unison) plus a travelling wave; letters are
+				// reserved for the site marker so cell borders stay legible
 				const age = sgA[own] - d1;
 				const base = Math.max(0.24, 1 - age / 1000);
-				const rip = 0.5 + 0.3 * Math.sin(age * 0.045 - now * 0.002 + heat * 3)
-					+ 0.2 * Math.sin(d1 * 0.06 - now * 0.004);
-				let lvl = Math.round(base * rip * boost * 6.5 + heat * 3);
+				const shade = 0.7 + 0.3 * Math.sin(age * 0.05 + d1 * 0.03);
+				// geodesic wave phase while hovering: earliest arrival over ANY relay
+				// site, min_i(geo[i] + |p - site_i|) (wBest, from the scan above) —
+				// continuous everywhere, no corner seams. Idle keeps per-site phases.
+				const W = hoverI >= 0 ? wBest : geo[own] + d1;
+				let ring = 0;
+				if (hoverI >= 0) {
+					// launched comet crest, born at the hovered site (see crestAt)
+					crestAt(W, now);
+					ring = _crest;
+				} else {
+					const maxR = WAVE_MAXR, t = now * 0.22, sig = 15;
+					const R1 = t % maxR, R2 = (t + maxR * 0.5) % maxR;
+					ring = Math.exp(-(W - R1) * (W - R1) / (2 * sig * sig)) * (1 - R1 / maxR)
+						+ Math.exp(-(W - R2) * (W - R2) / (2 * sig * sig)) * (1 - R2 / maxR);
+				}
+				let lvl = Math.round(base * shade * boost * 6.5 + ring * 6 + heat * 2);
 				// completion shockwave: one bright ring sweeps out of every site
 				if (donePulse > 0.02) {
 					const ring = (1 - donePulse) * 1400;
@@ -742,7 +921,16 @@ function renderAsciiFlood(now) {
 				}
 				if (lvl < 1) continue;
 				if (lvl > 9) lvl = 9;
-				atlasStamp(ctx, lvl >= 4 ? SITE_LETTERS[own % 26] : GLYPH_RAMP[lvl], glyphLUT[own % 2][lvl], false, gx, gy, ATLAS_SLOT);
+				// energized crest band: point-color styles + sparse letter scramble
+				// (quantized approximation of the GL tint/overbright/scramble)
+				if (hoverI >= 0 && _hot > 0.3) {
+					const h = ((ix * 73 + iy * 151) % 97) / 97;
+					const fs = frontStyles[Math.min(3, (_hot * 5) | 0)];
+					if (_crest > 0.6 && h < 0.16) atlasStamp(ctx, SITE_LETTERS[(((now / 90) | 0) + ((h * 26) | 0)) % 26], fs, false, gx, gy, ATLAS_SLOT);
+					else atlasStamp(ctx, GLYPH_RAMP[lvl], fs, false, gx, gy, ATLAS_SLOT);
+				} else {
+					atlasStamp(ctx, GLYPH_RAMP[lvl], glyphLUT[own % 2][lvl], false, gx, gy, ATLAS_SLOT);
+				}
 			} else if (n > 0 && ((ix + iy) & 1) === 0) {
 				// unclaimed: sparse dotted paper, warming under the cursor
 				const ps = heat > 0.02 ? paperHotStyles[Math.min(3, (heat * 4) | 0)] : paperStyle;
@@ -753,15 +941,39 @@ function renderAsciiFlood(now) {
 
 	// walls in a bold pass so they read above the field; freshly welded
 	// cells strobe as white-hot asterisks, then cool into # embers
-	for (let i = 0; i < wallCells.length; i += 4) {
+	for (let i = 0; i < wallCells.length; i += 5) {
 		const em = wallCells[i + 2];
-		atlasStamp(ctx, em === 0 ? "*" : "#", wallCells[i + 3] ? pal.point : emberLUT[em], true, wallCells[i], wallCells[i + 1], ATLAS_SLOT);
+		let ch = em === 0 ? "*" : "#";
+		let style = wallCells[i + 3] ? pal.point : emberLUT[em];
+		if (!wallCells[i + 3] && hoverI >= 0) {
+			// crest ignition: the border flashes white-hot as the wave crosses,
+			// then cools back into its ember shade behind the front
+			crestAt(wallCells[i + 4], now);
+			if (_hot > 0.55) { style = emberLUT[0]; ch = "@"; }
+			else if (_hot > 0.25) style = emberLUT[1];
+		}
+		atlasStamp(ctx, ch, style, true, wallCells[i], wallCells[i + 1], ATLAS_SLOT);
 	}
 
 	// site markers: each site's letter, snapped onto the lattice
 	if (showPoints) {
 		for (let i = 0; i < n; i++) {
-			atlasStamp(ctx, SITE_LETTERS[i % 26], pal.point, true, (Math.floor(sites[i].x / gs) + 0.5) * gs, (Math.floor(sites[i].y / gs) + 0.5) * gs, ATLAS_SLOT);
+			let mStyle = pal.point, lift = 0;
+			if (hoverI >= 0) {
+				// beacon: the letter flares as the crest sweeps its site, so
+				// letters fire in geodesic order (W at the site itself = geo[i]);
+				// the shockwave also lifts it — damped-sine pop, fall, settle
+				crestAt(geo[i], now);
+				if (_hot > 0.3) mStyle = pal.additive ? "#ffffff" : emberLUT[0];
+				const t = (now - waveT0) * WAVE_HOVER_SPD, S = WAVE_HOVER_SPACING;
+				const Ra = t % S;
+				let u = Ra - geo[i];
+				if (u < 0 && t >= S) u = Ra + S - geo[i];
+				if (u >= 0) lift = Math.sin(u * 0.01256) * Math.exp(-u * 0.004) * Math.max(0, 1 - geo[i] / WAVE_HOVER_MAXR);
+			}
+			// airborne letters also swell (scaled blit around the lifted center)
+			const mSc = 1 + Math.max(lift, 0) * 0.9;
+			atlasStamp(ctx, SITE_LETTERS[i % 26], mStyle, true, (Math.floor(sites[i].x / gs) + 0.5) * gs, (Math.floor(sites[i].y / gs) + 0.5) * gs - lift * gs, ATLAS_SLOT * mSc);
 		}
 	}
 
@@ -799,7 +1011,7 @@ function renderAsciiFlood(now) {
 			atlasStamp(trailBCtx, "+", frontStyles[frontEmits[i + 2]], false, frontEmits[i] * 0.5, frontEmits[i + 1] * 0.5, 8);
 		}
 		trailBCtx.globalAlpha = 0.55;
-		for (let i = 0; i < wallCells.length; i += 4) {
+		for (let i = 0; i < wallCells.length; i += 5) {
 			if (wallCells[i + 2] > 1) continue;
 			atlasStamp(trailBCtx, "#", emberLUT[wallCells[i + 2]], true, wallCells[i] * 0.5, wallCells[i + 1] * 0.5, 8);
 		}
@@ -876,7 +1088,7 @@ function renderDelaunay(overlay) {
 		drawGrid(pal);
 	}
 	if (sites.length < 3) return;
-	const tris = triangulate(sites);
+	const tris = cachedTris();
 	ctx.lineWidth = 1;
 	ctx.strokeStyle = "rgba(" + pal.coral[0] + "," + pal.coral[1] + "," + pal.coral[2] + "," + (overlay ? "0.45)" : "0.7)");
 	ctx.beginPath();
@@ -930,7 +1142,9 @@ function render(now) {
 document.addEventListener("themechange", function (e) {
 	isLight = e.detail.isLight;
 	isViper = e.detail.theme === "viper";
-	if (asciiGLReady) asciiGLR.clearTrail(); // drop phosphor in the old palette
+	// drop phosphor in the old palette (both the GL trail and the 2D fallback's)
+	if (asciiGLReady) asciiGLR.clearTrail();
+	clearTrail2D();
 });
 // #endregion
 
@@ -938,8 +1152,10 @@ document.addEventListener("themechange", function (e) {
 window.addEventListener("resize", function () {
 	canvasWidth = window.getCanvasWidth();
 	canvasHeight = window.innerHeight;
-	if (window._hudToggling) return;
+	// resize even on a HUD toggle — the panel opening/closing changes canvasWidth,
+	// and leaving the canvases at the old size strips 280px off the render
 	applyCanvasSize();
+	if (window._hudToggling) return;
 	buildSites();
 });
 // #endregion
@@ -970,6 +1186,15 @@ bindSlider("growSlider", "growValue", parseFloat, Object.assign(function (v) {
 	growSpeed = v;
 }, { initial: growSpeed }), (v) => v.toFixed(2));
 
+// Keep the slider thumb, its label and siteCount in step after clicks/clear —
+// they all read back as the site count, so R and resize rebuild what the HUD shows.
+var countSlider = document.getElementById("countSlider");
+var countValue = document.getElementById("countValue");
+function syncCountUI() {
+	countSlider.value = Math.min(parseInt(countSlider.max, 10), siteCount);
+	countValue.textContent = siteCount;
+}
+
 var growButton = document.getElementById("growButton");
 growButton.onclick = startGrow;
 growButton.style.display = "none"; // drift mode at boot
@@ -996,12 +1221,16 @@ document.querySelectorAll('input[name="mode"]').forEach(function (radio) {
 document.getElementById("clearButton").onclick = function () {
 	sites = [];
 	siteCount = 0;
+	siteVersion++;
 	growR = 0;
 	growing = false;
+	growFill = 1;
+	donePulse = 0;
 	asciiSegs = null;
 	runners.length = 0;
 	if (asciiGLReady) asciiGLR.clearTrail();
-	document.getElementById("countValue").textContent = 0;
+	clearTrail2D();
+	syncCountUI();
 };
 
 document.querySelectorAll('input[name="view"]').forEach(function (radio) {
@@ -1060,18 +1289,22 @@ function nearestSite(x, y) {
 	return { i: best, d: Math.sqrt(bestD) };
 }
 onBoth("mousedown", function (e) {
+	if (e.button !== 0 && e.button !== 2) return; // ignore middle/back/forward
 	const rect = backgroundCanvas.getBoundingClientRect();
 	const x = e.clientX - rect.left, y = e.clientY - rect.top;
 	if (e.button === 2) {
 		const n = nearestSite(x, y);
 		if (n.i >= 0 && n.d < 40) sites.splice(n.i, 1);
 	} else {
+		// the ASCII sites texture holds MAX_SITES texels; past that the GL path
+		// would silently drop the extras while hover/hit-testing still saw them
+		if (sites.length >= MAX_SITES) return;
 		const a = Math.random() * Math.PI * 2;
 		sites.push({ x, y, vx: Math.cos(a), vy: Math.sin(a), gr: 0 });
 	}
 	siteCount = sites.length;
-	document.getElementById("countSlider").value = Math.min(120, siteCount);
-	document.getElementById("countValue").textContent = siteCount;
+	siteVersion++;
+	syncCountUI();
 	if (mode === "grow" && (growing || growR > 0)) {
 		// editing sites mid/post-growth replays the flood with the new layout
 		startGrow();

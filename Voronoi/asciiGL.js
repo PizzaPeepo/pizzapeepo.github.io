@@ -24,7 +24,7 @@ import { baseVertex } from '../FluidSimulation/glsl.js';
 import { Program, compileShader } from '../FluidSimulation/gl-program.js';
 import { createFBO, createDoubleFBO, createBlit } from '../FluidSimulation/framebuffers.js';
 
-const MAX_SITES = 256;       // sites-texture width; clicks past the slider cap clamp here
+export const MAX_SITES = 256; // sites-texture width; main.js caps site creation here
 const GP = 12;               // glyph cell size in bitmap texels
 const GS_TARGET = 15;        // desired cell pitch in canvas px (matches the CPU path)
 
@@ -53,12 +53,14 @@ void main(){
 	float ownX = 0.0, ownY = 0.0, secX = 0.0, secY = 0.0;
 	float ownGr = 0.0, secGr = 0.0;
 	float fI = -1.0, fRel = 1e20, fDd = 0.0, fGr = 0.0;
-	float markerOwn = -1.0;
+	float markerOwn = -1.0, markerUp = -1.0;
+	float wBest = 1e20;
 	for (int i = 0; i < MAX_SITES; i++){
 		if (i >= uN) break;
 		vec4 s = site(float(i));
 		float dx = center.x - s.x, dy = center.y - s.y;
 		float d = dx * dx + dy * dy;
+		wBest = min(wBest, s.w + sqrt(d));
 		float gr = s.z, g2 = gr * gr;
 		if (d <= g2){
 			if (d < D1){ D2 = D1; sec = own; secX = ownX; secY = ownY; secGr = ownGr;
@@ -71,8 +73,12 @@ void main(){
 			float rel = d > g2 ? d - g2 : g2 - d;
 			if (rel < fRel){ fRel = rel; fI = float(i); fDd = d; fGr = gr; }
 		}
-		if (uShowPoints > 0.5){
-			if (floor(s.x / uGs.x) == cellId.x && floor(s.y / uGs.y) == cellId.y) markerOwn = float(i);
+		if (uShowPoints > 0.5 && floor(s.x / uGs.x) == cellId.x){
+			// the cell directly above a marker is tagged too (code 31) so the
+			// letter's top can spill into it during the shockwave lift
+			float my = floor(s.y / uGs.y);
+			if (my == cellId.y) markerOwn = float(i);
+			else if (my == cellId.y - 1.0) markerUp = float(i);
 		}
 	}
 	float code = -1.0, d1 = 0.0, frontT = 0.0;
@@ -97,8 +103,19 @@ void main(){
 		float fT = 1.0 - abs(sqrt(fDd) - fGr) / uBand;
 		if (fT > 0.0) frontT = fT;
 	}
+	// interior wave phase while hovering: earliest arrival over ANY relay site,
+	// min_i(geo[i] + |p - site_i|) (wBest, from the loop above) — continuous
+	// everywhere; truncating the min to own/sec leaves corner-shaped seams where
+	// a third site is the faster relay. Idle keeps the per-site ambient phase.
+	// Packed into alpha as a negative value; positive alpha = wavefront ring.
+	float wphase = 0.0;
+	if (own >= 0.0){
+		wphase = uHoverI >= 0 ? wBest : site(own).w + d1;
+		wphase = min(wphase, 60000.0);  // keep the unreachable sentinel finite in half-float
+	}
 	if (markerOwn >= 0.0){ code = 30.0; own = markerOwn; }
-	gl_FragColor = vec4(own, d1, code, frontT);
+	else if (markerUp >= 0.0 && code < 0.0 && frontT <= 0.0){ code = 31.0; own = markerUp; }
+	gl_FragColor = vec4(own, d1, code, frontT > 0.0 ? frontT : -wphase);
 }
 `;
 
@@ -112,6 +129,8 @@ uniform float uSitesTexW;
 uniform vec2 uGrid;
 uniform vec2 uCanvasSize;
 uniform int uN;
+uniform float uWaveT0;
+uniform float uWaveS;
 uniform float uAtlasCount;
 uniform float uNow;
 uniform vec2 uMouse;
@@ -130,15 +149,69 @@ void main(){
 	vec2 cellId = floor(cellF);
 	vec2 intra = fract(cellF);
 	vec4 f = texture2D(uField, (cellId + 0.5) / uGrid);
-	float own = f.r, d1 = f.g, code = f.b, frontT = f.a;
+	float own = f.r, d1 = f.g, code = f.b, frontT = max(f.a, 0.0), Wgeo = max(-f.a, 0.0);
 	vec2 center = (cellId + 0.5) / uGrid * uCanvasSize;
 	float heat = 0.0;
 	vec2 hd = center - uMouse; float hd2 = dot(hd, hd);
 	if (hd2 < 22500.0) heat = 1.0 - sqrt(hd2) / 150.0;
 
+	// hover crest, hoisted so walls and site letters react too: comet profile
+	// (razor leading edge, long trailing tail) sweeping outward from the hovered
+	// site. crest = glyph-brightness drive; hot = color temperature — cools from
+	// white-hot to the theme color as the ring expands and its amplitude dies.
+	// pa = the bright band itself (razor front σ≈8, short back σ≈25); wa = long
+	// faint comet wake trailing it. hot stays confined to the band (and cools by
+	// amp² as the ring ages) so the tint never floods into a white blob.
+	float crest = 0.0, hot = 0.0, passU = -1.0, passAmp = 0.0;
+	if (uWaveT0 >= 0.0){
+		float t = (uNow - uWaveT0) * 0.5, S = uWaveS, maxR = 2.0 * S;
+		float Ra = mod(t, S), xa = Wgeo - Ra;
+		float pa = xa > 0.0 ? exp(-xa * xa / 128.0) : exp(-xa * xa / 1250.0);
+		float wa = xa < 0.0 ? exp(xa / 200.0) : 0.0;
+		float aa = 1.0 - Ra / maxR;
+		crest = (pa + 0.25 * wa) * aa; hot = pa * aa * aa;
+		if (t >= S){
+			float Rb = Ra + S, xb = Wgeo - Rb;
+			float pb = xb > 0.0 ? exp(-xb * xb / 128.0) : exp(-xb * xb / 1250.0);
+			float wb = xb < 0.0 ? exp(xb / 200.0) : 0.0;
+			float ab = 1.0 - Rb / maxR;
+			crest += (pb + 0.25 * wb) * ab; hot = max(hot, pb * ab * ab);
+		}
+		// px travelled since the most recent ring crossed this cell (−1 = none
+		// yet) + that ring's strength at the crossing — drives the letter lift
+		if (Ra >= Wgeo) passU = Ra - Wgeo;
+		else if (t >= S && Ra + S >= Wgeo) passU = Ra + S - Wgeo;
+		passAmp = max(0.0, 1.0 - Wgeo / maxR);
+	}
+	vec3 hotCol = mix(uColPoint, vec3(1.0), 0.35);
+	// shockwave letter lift: damped-sine impulse — pop up (~0.6 cell at full
+	// strength), fall back, slight undershoot dip, settle. In cell units.
+	float lift = passU >= 0.0 ? sin(passU * 0.01256) * exp(-passU * 0.004) * passAmp : 0.0;
+
+	if (code >= 31.0){                                // cell above a marker
+		if (lift > 0.02){
+			// the lifted (and scaled) letter's top spills up into this cell —
+			// same transform as the marker branch, shifted one cell down
+			float g = 10.0 + mod(own, 26.0);
+			vec3 c = mix(uColPoint, hotCol, min(hot * 1.5, 1.0)) * (1.0 + 2.5 * hot);
+			float mScale = 1.0 + max(lift, 0.0) * 0.9;
+			float a = cover(g, (vec2(intra.x, intra.y + 1.0) - vec2(0.5, 0.5 + lift)) / mScale + 0.5);
+			gl_FragColor = vec4(c * a, a);
+			return;
+		}
+		code = -1.0;                                  // at rest: plain territory
+	}
+
 	float glyph = -1.0; vec3 col = vec3(0.0); float alpha = 0.0;
 	if (code >= 30.0){                                // site marker letter
-		glyph = 10.0 + mod(own, 26.0); col = uColPoint; alpha = 1.0;
+		// beacon: the letter flares overbright (HDR trail → bloom) as the crest
+		// sweeps its site, so letters fire in geodesic order — and rides the
+		// shockwave: raised by lift and scaled up around its lifted center while
+		// airborne, shrinking back as it lands
+		glyph = 10.0 + mod(own, 26.0); alpha = 1.0;
+		col = mix(uColPoint, hotCol, min(hot * 1.5, 1.0)) * (1.0 + 2.5 * hot);
+		float mScale = 1.0 + max(lift, 0.0) * 0.9;
+		intra = (intra - vec2(0.5, 0.5 + lift)) / mScale + 0.5;
 	} else if (code >= 0.0){                          // wall
 		float hov = code >= 10.0 ? 1.0 : 0.0;
 		float bucket = code - hov * 10.0;
@@ -147,17 +220,41 @@ void main(){
 		glyph = hov > 0.5 ? 9.0 : (bucket < 0.5 ? 7.0 : 8.0);
 		col = hov > 0.5 ? mix(ember(bucket), uColPoint, 0.25) : ember(bucket);
 		alpha = hov > 0.5 ? 1.0 : 0.92;
+		if (hov < 0.5 && crest > 0.01){
+			// crest ignition: the border flashes white-hot as the wave crosses,
+			// then cools back into its ember shade behind the front
+			if (hot > 0.5) glyph = 9.0;
+			col = mix(col, hotCol, min(hot * 1.3, 1.0) * 0.9) * (1.0 + 2.0 * hot);
+			alpha = min(1.0, alpha + 0.08 * crest);
+		}
 	} else if (frontT > 0.0){                         // wavefront ring
+		if (frontT <= 0.3) discard;                   // drop the dim outer skirt → thin crest
 		float fb = min(3.0, floor(frontT * 4.0));
 		glyph = fb < 0.5 ? 3.0 : fb < 1.5 ? 6.0 : fb < 2.5 ? 7.0 : 9.0;  // ":+*@"
-		col = uColPoint; alpha = 0.5 + 0.15 * fb;
+		// clamped: the premultiplied output below needs alpha in [0,1], else col*a
+		// and a saturate independently and the crest stops compositing correctly
+		col = uColPoint; alpha = min(1.0, (0.4 + 0.5 * fb) * frontT);
 	} else if (own >= 0.0){                           // interior territory
-		float grOwn = texture2D(uSites, vec2((own + 0.5) / uSitesTexW, 0.5)).z;
+		vec4 so = texture2D(uSites, vec2((own + 0.5) / uSitesTexW, 0.5));
+		float grOwn = so.z;
 		float age = grOwn - d1;
 		float base = max(0.24, 1.0 - age / 1000.0);
-		float rip = 0.5 + 0.3 * sin(age * 0.045 - uNow * 0.002 + heat * 3.0)
-			+ 0.2 * sin(d1 * 0.06 - uNow * 0.004);
-		float lvl = floor(base * rip * uBoost * 6.5 + heat * 3.0 + 0.5);
+		// resting field is time-independent so cells stop pulsing in unison. Wgeo
+		// (baked in the field pass) is a continuous geodesic distance over the
+		// Voronoi graph. Hovering (uWaveT0 >= 0): rings are born at the hovered
+		// site the moment the cursor enters the cell and expand outward with a
+		// slight dispersion — the wave visibly launches instead of appearing
+		// mid-flight. Idle: Wgeo carries a fixed per-site phase (see
+		// computeGeoDist) and two free-running ring trains keep the field breathing.
+		float shade = 0.7 + 0.3 * sin(age * 0.05 + d1 * 0.03);
+		float ring = crest;
+		if (uWaveT0 < 0.0){
+			float maxR = 900.0, t = uNow * 0.22, sig = 15.0;
+			float R1 = mod(t, maxR), R2 = mod(t + maxR * 0.5, maxR);
+			ring = exp(-(Wgeo - R1) * (Wgeo - R1) / (2.0 * sig * sig)) * (1.0 - R1 / maxR)
+				+ exp(-(Wgeo - R2) * (Wgeo - R2) / (2.0 * sig * sig)) * (1.0 - R2 / maxR);
+		}
+		float lvl = floor(base * shade * uBoost * 6.5 + ring * 6.0 + heat * 2.0 + 0.5);
 		if (uDonePulse > 0.02){
 			float ring = (1.0 - uDonePulse) * 1400.0;
 			float rw = 1.0 - abs(d1 - ring) / 50.0;
@@ -165,9 +262,19 @@ void main(){
 		}
 		if (lvl < 1.0) discard;
 		lvl = min(lvl, 9.0);
-		glyph = lvl >= 4.0 ? (10.0 + mod(own, 26.0)) : lvl;
+		glyph = lvl;
 		col = mod(own, 2.0) < 0.5 ? uColEdge : uColCoral;
 		alpha = 0.05 + 0.075 * lvl;
+		if (crest > 0.01){
+			// energized band: tint toward the crest color + overbright for bloom;
+			// sparse cells riding the crest line scramble into flickering letters
+			col = mix(col, hotCol, min(hot * 1.1, 1.0)) * (1.0 + 1.2 * hot);
+			float h = fract(sin(dot(cellId, vec2(12.9898, 78.233))) * 43758.5453);
+			if (crest > 0.6 && h < 0.16){
+				glyph = 10.0 + mod(floor(uNow / 90.0) + floor(h * 26.0), 26.0);
+				alpha = min(1.0, 0.35 + 0.6 * crest);
+			}
+		}
 	} else {                                          // unclaimed paper
 		if (uN == 0) discard;                         // blank canvas when cleared
 		if (mod(cellId.x + cellId.y, 2.0) >= 0.5) discard;
@@ -222,20 +329,29 @@ function buildAtlas(gl) {
 	const c = document.createElement('canvas');
 	c.width = n * ATLAS_CELL; c.height = ATLAS_CELL;
 	const cx = c.getContext('2d');
-	cx.fillStyle = '#000'; cx.fillRect(0, 0, c.width, c.height);
-	cx.fillStyle = '#fff';
-	cx.font = Math.round(ATLAS_CELL * 0.82) + "px 'IBM Plex Mono', monospace";
-	cx.textAlign = 'center'; cx.textBaseline = 'middle';
-	for (let i = 0; i < n; i++) cx.fillText(RAMP[i], i * ATLAS_CELL + ATLAS_CELL * 0.5, ATLAS_CELL * 0.54);
 	const tex = gl.createTexture();
 	gl.bindTexture(gl.TEXTURE_2D, tex);
-	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
-	gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+	function bake() {
+		cx.fillStyle = '#000'; cx.fillRect(0, 0, c.width, c.height);
+		cx.fillStyle = '#fff';
+		cx.font = Math.round(ATLAS_CELL * 0.82) + "px 'IBM Plex Mono', monospace";
+		cx.textAlign = 'center'; cx.textBaseline = 'middle';
+		for (let i = 0; i < n; i++) cx.fillText(RAMP[i], i * ATLAS_CELL + ATLAS_CELL * 0.5, ATLAS_CELL * 0.54);
+		gl.bindTexture(gl.TEXTURE_2D, tex);
+		gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+		gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+	}
+	bake();
+	// the first bake can land before the webfont arrives (?ascii=1 boots straight
+	// into GL) — re-bake once it does, or the glyphs stay in the fallback face
+	if (document.fonts && document.fonts.ready) document.fonts.ready.then(bake);
+
 	return {
 		texture: tex, count: n,
 		attach(id) { gl.activeTexture(gl.TEXTURE0 + id); gl.bindTexture(gl.TEXTURE_2D, tex); return id; },
@@ -281,7 +397,10 @@ export function createAsciiGL(canvas) {
 		cols = c; rows = r;
 		field = createFBO(gl, cols, rows, gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT, gl.NEAREST);
 		bitmap = createFBO(gl, cols * GP, rows * GP, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR);
-		trail = createDoubleFBO(gl, cols * GP, rows * GP, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR);
+		// half-float, not RGBA8: an 8-bit trail can never decay to zero — round(1 *
+		// 0.68) is 1, so every glyph ever drawn leaves a permanent 1/255 residue
+		// (the fade-rounding trap in CLAUDE.md). Floats decay cleanly to black.
+		trail = createDoubleFBO(gl, cols * GP, rows * GP, gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT, gl.LINEAR);
 	}
 
 	function clearTrail() {
@@ -292,7 +411,7 @@ export function createAsciiGL(canvas) {
 		});
 	}
 
-	// state: { sites, n, now, hoverI, donePulse, mouseX, mouseY, showPoints, paused, theme }
+	// state: { sites, n, now, hoverI, waveT0, waveS, geo, donePulse, mouseX, mouseY, showPoints, paused, theme }
 	function render(st) {
 		const theme = st.theme;
 		gl.disable(gl.BLEND);
@@ -304,7 +423,11 @@ export function createAsciiGL(canvas) {
 			// field renders upright and cursor/hover math lands on the right cell.
 			for (let i = 0; i < n; i++) {
 				const s = st.sites[i];
-				siteBuf[i * 4] = s.x; siteBuf[i * 4 + 1] = H - s.y; siteBuf[i * 4 + 2] = s.gr; siteBuf[i * 4 + 3] = 0;
+				// .w = the site's wave phase: geodesic distance from the hovered site
+				// (0 there), or a fixed ambient phase when idle (see computeGeoDist)
+				const g = st.geo ? st.geo[i] : 0;
+				siteBuf[i * 4] = s.x; siteBuf[i * 4 + 1] = H - s.y; siteBuf[i * 4 + 2] = s.gr;
+				siteBuf[i * 4 + 3] = g < 1e18 ? g : 1e9;    // unreachable → huge (never lights)
 			}
 			gl.activeTexture(gl.TEXTURE0);
 			gl.bindTexture(gl.TEXTURE_2D, sitesTex);
@@ -312,7 +435,7 @@ export function createAsciiGL(canvas) {
 		}
 
 		const gsX = W / cols, gsY = H / rows;
-		const band = GS_TARGET * 0.7;
+		const band = GS_TARGET * 0.42;   // wavefront-ring half-width (thinner = crisper front)
 		const boost = 1 + st.donePulse * 0.8;
 
 		// pass 1 — field at cell resolution
@@ -346,6 +469,8 @@ export function createAsciiGL(canvas) {
 		gl.uniform2f(U.uGrid, cols, rows);
 		gl.uniform2f(U.uCanvasSize, W, H);
 		gl.uniform1i(U.uN, n);
+		gl.uniform1f(U.uWaveT0, st.waveT0 == null ? -1 : st.waveT0);
+		gl.uniform1f(U.uWaveS, st.waveS);
 		gl.uniform1f(U.uAtlasCount, atlas.count);
 		gl.uniform1f(U.uNow, st.now);
 		gl.uniform2f(U.uMouse, st.mouseX, H - st.mouseY);
@@ -366,7 +491,7 @@ export function createAsciiGL(canvas) {
 		U = fadeProgram.uniforms;
 		gl.uniform1i(U.uNew, bitmap.attach(0));
 		gl.uniform1i(U.uPrev, trail.read.attach(1));
-		gl.uniform1f(U.uKeep, st.paused ? 1.0 : 0.82);
+		gl.uniform1f(U.uKeep, st.paused ? 1.0 : 0.68);   // shorter phosphor → moving fronts don't smear into fat rings
 		blit(trail.write);
 		trail.swap();
 
